@@ -199,23 +199,26 @@ class _NNPageState extends State<NNPage> {
                       child: widget.leading,
                     ),
                   ),
+                  // The small title is a label, not a control: taps go through to the content.
                   Expanded(
-                    child: ExcludeSemantics(
-                      excluding: !_collapsed || !_settled,
-                      child: AnimatedOpacity(
-                        opacity: _collapsed ? 1 : 0,
-                        duration: duration,
-                        child: AnimatedSlide(
-                          offset: _collapsed || still
-                              ? Offset.zero
-                              : const Offset(0, 0.15),
+                    child: IgnorePointer(
+                      child: ExcludeSemantics(
+                        excluding: !_collapsed || !_settled,
+                        child: AnimatedOpacity(
+                          opacity: _collapsed ? 1 : 0,
                           duration: duration,
-                          child: Text(
-                            widget.title,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: NNType.headline.copyWith(color: p.text),
+                          child: AnimatedSlide(
+                            offset: _collapsed || still
+                                ? Offset.zero
+                                : const Offset(0, 0.15),
+                            duration: duration,
+                            child: Text(
+                              widget.title,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: NNType.headline.copyWith(color: p.text),
+                            ),
                           ),
                         ),
                       ),

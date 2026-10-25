@@ -52,8 +52,22 @@ Future<void> tapIt(WidgetTester tester, Finder f) async {
   await reveal(tester, f);
   await tester.ensureVisible(f);
   await tester.pumpAndSettle();
+  // ensureVisible lines the target up with the top of its list, which on a long page is under
+  // the top bar; if a tap there would not reach it, bring it to the middle first.
+  if (!_reachable(tester, f)) {
+    await Scrollable.ensureVisible(tester.element(f), alignment: 0.5);
+    await tester.pumpAndSettle();
+  }
+  expect(_reachable(tester, f), isTrue, reason: 'nothing covers $f');
   await tester.tap(f);
   await tester.pumpAndSettle();
+}
+
+/// Whether a tap at the centre of [f] lands on it (not on a bar floating over it).
+bool _reachable(WidgetTester tester, Finder f) {
+  final target = tester.renderObject(f);
+  final hit = tester.hitTestOnBinding(tester.getCenter(f));
+  return hit.path.any((e) => e.target == target);
 }
 
 /// Lists build lazily: scrolls the front-most list down, then up, until [f] is built.
