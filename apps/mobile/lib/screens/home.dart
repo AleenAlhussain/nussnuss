@@ -67,28 +67,31 @@ class _HomeShellState extends State<HomeShell> {
           bottom: pad.bottom + 12,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GlassTabBar(
-                compact: _compact,
-                index: _tab,
-                onChanged: (i) => setState(() {
-                  _tab = i;
-                  _compact = false;
-                }),
-                items: [
-                  TabItem(
-                    label: s.groups,
-                    icon: Icons.group_outlined,
-                    selectedIcon: Icons.group_rounded,
-                  ),
-                  TabItem(
-                    label: s.settings,
-                    icon: Icons.settings_outlined,
-                    selectedIcon: Icons.settings_rounded,
-                  ),
-                ],
+              Flexible(
+                child: GlassTabBar(
+                  compact: _compact,
+                  index: _tab,
+                  onChanged: (i) => setState(() {
+                    _tab = i;
+                    _compact = false;
+                  }),
+                  items: [
+                    TabItem(
+                      label: s.groups,
+                      icon: Icons.group_outlined,
+                      selectedIcon: Icons.group_rounded,
+                    ),
+                    TabItem(
+                      label: s.settings,
+                      icon: Icons.settings_outlined,
+                      selectedIcon: Icons.settings_rounded,
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
               AnimatedSwitcher(
                 duration: NNMotion.fade,
                 child: _tab == 0

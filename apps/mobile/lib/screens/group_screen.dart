@@ -522,55 +522,71 @@ class _TransferCard extends StatelessWidget {
           CustomSemanticsAction(label: s.markPaid): onPaid,
         },
         child: NNCard(
-          child: Row(
+          // The button sits under the words, so long names, Arabic and large text never squeeze it.
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Avatar(name: group.nameOf(t.from)),
-              const SizedBox(width: NNSpace.xs),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text.rich(
-                        TextSpan(
-                          children: [
+              Row(
+                children: [
+                  Avatar(name: group.nameOf(t.from)),
+                  const SizedBox(width: NNSpace.sm),
+                  Expanded(
+                    child: ExcludeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
                             TextSpan(
-                              text: from,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                              children: [
+                                TextSpan(
+                                  text: from,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' ${s.pays} ',
+                                  style: TextStyle(color: p.text2),
+                                ),
+                                TextSpan(
+                                  text: to,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            style: NNType.callout.copyWith(color: p.text),
+                          ),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(
+                              amount,
+                              style: NNType.title3.copyWith(
+                                color: p.text,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
-                            TextSpan(
-                              text: ' ${s.pays} ',
-                              style: TextStyle(color: p.text2),
-                            ),
-                            TextSpan(
-                              text: to,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        style: NNType.callout.copyWith(color: p.text),
+                          ),
+                        ],
                       ),
-                      Text(
-                        amount,
-                        style: NNType.title3.copyWith(
-                          color: p.text,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-              NNButton(
-                key: const ValueKey('mark-paid'),
-                label: s.markPaid,
-                kind: ButtonKind.tinted,
-                expand: false,
-                onTap: onPaid,
+              const SizedBox(height: NNSpace.sm),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: NNButton(
+                  key: const ValueKey('mark-paid'),
+                  label: s.markPaid,
+                  kind: ButtonKind.tinted,
+                  expand: false,
+                  onTap: onPaid,
+                ),
               ),
             ],
           ),
@@ -595,27 +611,35 @@ class _BalanceRow extends StatelessWidget {
         : b < 0
         ? s.fill(s.owes, {'amount': money(-b, group.currency, s.lang)})
         : s.even;
+    // Name and balance share the row; either wraps rather than overflowing at large text sizes.
     return MergeSemantics(
-      child: SizedBox(
-        height: 56,
-        child: Row(
-          children: [
-            Avatar(name: m.name, size: 32),
-            const SizedBox(width: NNSpace.sm),
-            Expanded(
-              child: Text(
-                m.isMe ? s.you : m.name,
-                style: NNType.body.copyWith(color: p.text),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: NNSpace.xs),
+          child: Row(
+            children: [
+              Avatar(name: m.name, size: 32),
+              const SizedBox(width: NNSpace.sm),
+              Expanded(
+                child: Text(
+                  m.isMe ? s.you : m.name,
+                  style: NNType.body.copyWith(color: p.text),
+                ),
               ),
-            ),
-            Text(
-              text,
-              style: NNType.subhead.copyWith(
-                color: b > 0 ? p.success : (b < 0 ? p.danger : p.text2),
-                fontWeight: FontWeight.w600,
+              const SizedBox(width: NNSpace.xs),
+              Flexible(
+                child: Text(
+                  text,
+                  textAlign: TextAlign.end,
+                  style: NNType.subhead.copyWith(
+                    color: b > 0 ? p.success : (b < 0 ? p.danger : p.text2),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

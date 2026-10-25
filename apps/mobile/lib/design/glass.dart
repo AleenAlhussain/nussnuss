@@ -412,13 +412,52 @@ class GlassTabBar extends StatelessWidget {
   final ValueChanged<int> onChanged;
   final bool compact;
 
+  static TextStyle _labelStyle(Color color) =>
+      NNType.subhead.copyWith(fontWeight: FontWeight.w600, color: color);
+
+  /// Width the bar needs with every label showing, at the person's text size.
+  double _fullWidth(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    var w = 12.0;
+    for (final item in items) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: item.label,
+          style: _labelStyle(const Color(0xFF000000)),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      w += 32 + 22 + 8 + tp.width;
+      tp.dispose();
+    }
+    return w;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // With large text or long labels, the unselected labels tuck away (as when scrolling), and as a last
+    // resort the whole capsule scales down, so the bar never overflows the screen.
+    return LayoutBuilder(
+      builder: (context, box) {
+        final squeezed =
+            box.hasBoundedWidth && _fullWidth(context) > box.maxWidth;
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.bottomStart,
+          child: _bar(context, compact || squeezed),
+        );
+      },
+    );
+  }
+
+  Widget _bar(BuildContext context, bool compact) {
     final p = NNTheme.of(context).palette;
     final still = reduceMotion(context);
     final duration = still ? NNMotion.fade : NNMotion.standardDuration;
     return AnimatedScale(
-      scale: compact && !still ? 0.9 : 1,
+      scale: this.compact && !still ? 0.9 : 1,
       alignment: AlignmentDirectional.bottomStart.resolve(
         Directionality.of(context),
       ),
