@@ -10,9 +10,35 @@ import { GroupsService } from '../groups/groups.service.js';
 const name = z.string().trim().min(1).max(40);
 const locale = z.enum(['en', 'ar']);
 const AnonymousBody = z.object({ name, locale: locale.default('en'), device: z.string().max(80).optional() });
-const PatchMe = z.object({ name: name.optional(), locale: locale.optional() }).refine((v) => v.name !== undefined || v.locale !== undefined, 'Nothing to change.');
 
-const meView = (u: { id: string; displayName: string; locale: string }) => ({ id: u.id, name: u.displayName, locale: u.locale });
+const LINK_KINDS = new Set(['link', 'paypal', 'wise']);
+/** One way to get paid. Links must be https; IBANs and phone numbers are checked for shape only. */
+export const PayToItem = z
+  .object({
+    kind: z.enum(['iban', 'instapay', 'stcpay', 'phone', 'paypal', 'wise', 'link']),
+    value: z.string().trim().min(3).max(120),
+    label: z.string().trim().max(40).optional(),
+  })
+  .transform((v) => {
+    let value = v.value;
+    if (v.kind === 'iban') value = value.replace(/\s+/g, '').toUpperCase();
+    if (LINK_KINDS.has(v.kind) && !/^https?:\/\//i.test(value)) value = `https://${value}`;
+    if (v.kind === 'instapay' && /^ipn\.eg\//i.test(value)) value = `https://${value}`;
+    return { ...v, value };
+  })
+  .superRefine((v, ctx) => {
+    const bad = (message: string) => ctx.addIssue({ code: 'custom', path: ['value'], message });
+    if (v.kind === 'iban' && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(v.value)) bad('That IBAN does not look right.');
+    if ((v.kind === 'phone' || v.kind === 'stcpay') && !/^\+?[0-9][0-9 ]{6,19}$/.test(v.value)) bad('Enter the phone number with digits only.');
+    if (LINK_KINDS.has(v.kind) && !/^https:\/\/[^\s]+\.[^\s]+/i.test(v.value)) bad('Links must start with https://');
+    if (v.kind === 'instapay' && !/^(https:\/\/[^\s]+|[^\s@]+@[^\s@]+)$/i.test(v.value)) bad('Use your InstaPay address (name@instapay) or link.');
+  });
+
+const PatchMe = z
+  .object({ name: name.optional(), locale: locale.optional(), payTo: z.array(PayToItem).max(5).optional() })
+  .refine((v) => v.name !== undefined || v.locale !== undefined || v.payTo !== undefined, 'Nothing to change.');
+
+const meView = (u: { id: string; displayName: string; locale: string; payTo?: unknown }) => ({ id: u.id, name: u.displayName, locale: u.locale, payTo: u.payTo ?? [] });
 
 @Controller()
 export class AuthController {
@@ -36,15 +62,20 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@CurrentUser() user: AuthUser) {
-    return meView(user);
+  async me(@CurrentUser() user: AuthUser) {
+    const [u] = await this.db.select().from(users).where(eq(users.id, user.id));
+    return meView(u);
   }
 
   @Patch('me')
   async patchMe(@CurrentUser() user: AuthUser, @Body(new Zod(PatchMe)) body: z.infer<typeof PatchMe>) {
     const [u] = await this.db
       .update(users)
-      .set({ ...(body.name ? { displayName: body.name } : {}), ...(body.locale ? { locale: body.locale } : {}) })
+      .set({
+        ...(body.name ? { displayName: body.name } : {}),
+        ...(body.locale ? { locale: body.locale } : {}),
+        ...(body.payTo ? { payTo: body.payTo } : {}),
+      })
       .where(eq(users.id, user.id))
       .returning();
     return meView(u);

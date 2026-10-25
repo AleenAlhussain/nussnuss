@@ -6,6 +6,7 @@ import {
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -22,7 +23,71 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   displayName: text('display_name').notNull(),
   locale: text('locale').notNull().default('en'),
+  /** SHA-256 of the recovery code the person saved, if they made one. */
+  recoveryHash: text('recovery_hash'),
+  recoveryCreatedAt: timestamp('recovery_created_at', { withTimezone: true }),
+  /** How friends can pay this person: IBAN, InstaPay, a payment link and so on. */
+  payTo: jsonb('pay_to').$type<PayTo[]>().notNull().default([]),
   createdAt: created(),
+});
+
+export type PayToKind = 'iban' | 'instapay' | 'stcpay' | 'phone' | 'paypal' | 'wise' | 'link';
+export interface PayTo {
+  kind: PayToKind;
+  value: string;
+  label?: string;
+}
+
+/** Sign in with Apple or Google, linked to an account. */
+export const identities = pgTable(
+  'identities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    subject: text('subject').notNull(),
+    email: text('email'),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('identities_provider_subject_key').on(t.provider, t.subject), check('identities_provider', sql`${t.provider} in ('apple','google')`)],
+);
+
+/** Short-lived codes that sign the same account in on another device. */
+export const linkCodes = pgTable(
+  'link_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('link_codes_hash_key').on(t.codeHash)],
+);
+
+/** Passkeys (WebAuthn credentials). */
+export const passkeys = pgTable(
+  'passkeys',
+  {
+    id: text('id').primaryKey(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    publicKey: text('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    transports: jsonb('transports').$type<string[]>().notNull().default([]),
+    createdAt: created(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  },
+  (t) => [index('passkeys_user_idx').on(t.userId)],
+);
+
+/** Pending WebAuthn challenges, kept a few minutes. */
+export const challenges = pgTable('webauthn_challenges', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  challenge: text('challenge').notNull(),
+  kind: text('kind').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
 
 /** One per device. Only the SHA-256 of the token is stored. */
@@ -49,10 +114,17 @@ export const groups = pgTable(
     /** Increases on every change to the group or anything in it; the sync cursor. */
     version: integer('version').notNull().default(1),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    /** Automatic weekly reminders to people who owe (Plus). */
+    remindEvery: text('remind_every').notNull().default('off'),
+    lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
     createdAt: created(),
     updatedAt: updated(),
   },
-  (t) => [check('groups_currency_len', sql`char_length(${t.currency}) = 3`), check('groups_name_len', sql`char_length(${t.name}) between 1 and 60`)],
+  (t) => [
+    check('groups_currency_len', sql`char_length(${t.currency}) = 3`),
+    check('groups_name_len', sql`char_length(${t.name}) between 1 and 60`),
+    check('groups_remind_every', sql`${t.remindEvery} in ('off','week')`),
+  ],
 );
 
 /** A name in a group. `userId` is set once someone claims the name (or for the creator). */
@@ -161,4 +233,141 @@ export const changes = pgTable(
   (t) => [index('changes_group_version_idx').on(t.groupId, t.version)],
 );
 
-export const schema = { users, sessions, groups, members, expenses, expenseShares, payments, invites, changes };
+/** Plus, Trip Pass and Looks. One row per store transaction. */
+export const entitlements = pgTable(
+  'entitlements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    productId: text('product_id').notNull(),
+    /** Trip Pass only: the group it unlocks. */
+    groupId: uuid('group_id').references(() => groups.id, { onDelete: 'cascade' }),
+    platform: text('platform').notNull(),
+    transactionId: text('transaction_id').notNull(),
+    /** Null for things bought for good, such as a look. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('entitlements_tx_key').on(t.platform, t.transactionId),
+    index('entitlements_user_idx').on(t.userId),
+    index('entitlements_group_idx').on(t.groupId),
+    check('entitlements_kind', sql`${t.kind} in ('plus','trip_pass','look')`),
+    check('entitlements_platform', sql`${t.platform} in ('apple','google','dev')`),
+  ],
+);
+
+/** A bill that comes back: rent, internet, a weekly cleaner (Plus). */
+export const recurring = pgTable(
+  'recurring',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    paidBy: uuid('paid_by').notNull().references(() => members.id, { onDelete: 'no action' }),
+    splitMode: text('split_mode').notNull(),
+    items: jsonb('items').$type<{ memberId: string; value: number }[]>().notNull(),
+    category: text('category').notNull().default('bills'),
+    every: text('every').notNull(),
+    /** Day of the month a monthly bill falls on (1-31, clamped to short months). */
+    anchorDay: integer('anchor_day').notNull(),
+    nextAt: timestamp('next_at', { withTimezone: true }).notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: created(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('recurring_due_idx').on(t.nextAt),
+    check('recurring_every', sql`${t.every} in ('week','month')`),
+    check('recurring_amount_positive', sql`${t.amountMinor} > 0`),
+  ],
+);
+
+/** A money circle (جمعية): everyone pays in each round and one person takes the pot, in turn. */
+export const circles = pgTable(
+  'circles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    every: text('every').notNull(),
+    startOn: text('start_on').notNull(),
+    /** Member ids in the order they take the pot. */
+    turns: jsonb('turns').$type<string[]>().notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: created(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('circles_group_idx').on(t.groupId),
+    check('circles_every', sql`${t.every} in ('week','month')`),
+    check('circles_amount_positive', sql`${t.amountMinor} > 0`),
+  ],
+);
+
+export const circlePayments = pgTable(
+  'circle_payments',
+  {
+    circleId: uuid('circle_id').notNull().references(() => circles.id, { onDelete: 'cascade' }),
+    round: integer('round').notNull(),
+    memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'no action' }),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull().defaultNow(),
+    markedBy: uuid('marked_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => [primaryKey({ columns: [t.circleId, t.round, t.memberId] })],
+);
+
+/** Phones and browsers that accept push notifications. */
+export const devices = pgTable(
+  'devices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    platform: text('platform').notNull(),
+    token: text('token').notNull(),
+    createdAt: created(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('devices_token_key').on(t.token), check('devices_platform', sql`${t.platform} in ('ios','android','web')`)],
+);
+
+/** In-app notices, such as a weekly reminder of what someone owes. */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id').references(() => groups.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: created(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    pushedAt: timestamp('pushed_at', { withTimezone: true }),
+  },
+  (t) => [index('notifications_user_idx').on(t.userId, t.createdAt)],
+);
+
+export const schema = {
+  users,
+  sessions,
+  identities,
+  linkCodes,
+  passkeys,
+  challenges,
+  groups,
+  members,
+  expenses,
+  expenseShares,
+  payments,
+  invites,
+  changes,
+  entitlements,
+  recurring,
+  circles,
+  circlePayments,
+  devices,
+  notifications,
+};

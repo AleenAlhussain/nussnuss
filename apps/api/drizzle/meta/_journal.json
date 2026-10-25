@@ -8,6 +8,13 @@
       "when": 1792927986503,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792932693259,
+      "tag": "0001_accounts_plus_circles",
+      "breakpoints": true
     }
   ]
 }

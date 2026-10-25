@@ -29,6 +29,21 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-nussnuss}:${POSTGRES_PASSWORD:-nussnuss}@db:5432/${POSTGRES_DB:-nussnuss}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       RUN_MIGRATIONS: 'true'
+      APPLE_CLIENT_IDS: ${APPLE_CLIENT_IDS:-}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:3000}
+      APPLE_ROOT_CA: ${APPLE_ROOT_CA:-}
+      APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-}
+      GOOGLE_PLAY_SERVICE_ACCOUNT: ${GOOGLE_PLAY_SERVICE_ACCOUNT:-}
+      ANDROID_PACKAGE_NAME: ${ANDROID_PACKAGE_NAME:-app.nussnuss.nussnuss}
+      ALLOW_DEV_PURCHASES: ${ALLOW_DEV_PURCHASES:-false}
+      FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-}
+      APNS_KEY: ${APNS_KEY:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_TOPIC: ${APNS_TOPIC:-}
+      RATES_URL: ${RATES_URL:-https://open.er-api.com/v6/latest/{base}}
     ports:
       - '4000:4000'
 
@@ -39,10 +54,39 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
     restart: unless-stopped
+    environment:
+      APPLE_APP_ID: ${APPLE_APP_ID:-}
+      ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
+      ANDROID_PACKAGE_NAME: ${ANDROID_PACKAGE_NAME:-app.nussnuss.nussnuss}
     depends_on:
       - api
     ports:
       - '3000:3000'
 
+  # A daily dump of the database, kept for 14 days (restore: gunzip -c file | psql).
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-nussnuss}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-nussnuss}
+      PGDATABASE: ${POSTGRES_DB:-nussnuss}
+    volumes:
+      - backups:/backups
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        while true; do
+          f=/backups/nussnuss-$$(date +%Y%m%d-%H%M).sql.gz
+          pg_dump --no-owner | gzip > "$$f.tmp" && mv "$$f.tmp" "$$f" && echo "backup $$f"
+          find /backups -name 'nussnuss-*.sql.gz' -mtime +14 -delete
+          sleep 86400
+        done
+
 volumes:
   db-data:
+  backups:
