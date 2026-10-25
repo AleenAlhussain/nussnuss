@@ -71,6 +71,8 @@ Future<void> reveal(WidgetTester tester, Finder f) async {
         scrollable: lists.last,
         maxScrolls: 40,
       );
+      // Let the top bar finish handing the title over before anything is checked.
+      await tester.pumpAndSettle();
       return;
     } on StateError {
       // Not that way: try the other.

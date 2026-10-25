@@ -38,6 +38,10 @@ class NNPage extends StatefulWidget {
 class _NNPageState extends State<NNPage> {
   final _scroll = ScrollController();
   bool _collapsed = false;
+
+  /// False while the titles are fading between the large and the small one. Neither is in the
+  /// semantics tree until it has fully appeared, so nothing half-transparent is ever read or checked.
+  bool _settled = true;
   double _last = 0;
 
   @override
@@ -49,7 +53,12 @@ class _NNPageState extends State<NNPage> {
   void _onScroll() {
     final y = _scroll.offset;
     final collapsed = y > 44;
-    if (collapsed != _collapsed) setState(() => _collapsed = collapsed);
+    if (collapsed != _collapsed) {
+      setState(() {
+        _collapsed = collapsed;
+        _settled = false;
+      });
+    }
     if ((y - _last).abs() > 6) {
       widget.onScrollDirection?.call(y > _last && y > 80);
       _last = y;
@@ -91,6 +100,9 @@ class _NNPageState extends State<NNPage> {
             child: AnimatedOpacity(
               opacity: _collapsed ? 0 : 1,
               duration: duration,
+              onEnd: () {
+                if (mounted && !_settled) setState(() => _settled = true);
+              },
               child: AnimatedScale(
                 scale: _collapsed && !still ? 0.96 : 1,
                 duration: duration,
@@ -99,14 +111,17 @@ class _NNPageState extends State<NNPage> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: NNSpace.md),
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      widget.title,
-                      key: widget.titleKey,
-                      style: NNType.largeTitle.copyWith(color: p.text),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  child: ExcludeSemantics(
+                    excluding: _collapsed || !_settled,
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        widget.title,
+                        key: widget.titleKey,
+                        style: NNType.largeTitle.copyWith(color: p.text),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ),
@@ -186,7 +201,7 @@ class _NNPageState extends State<NNPage> {
                   ),
                   Expanded(
                     child: ExcludeSemantics(
-                      excluding: !_collapsed,
+                      excluding: !_collapsed || !_settled,
                       child: AnimatedOpacity(
                         opacity: _collapsed ? 1 : 0,
                         duration: duration,
