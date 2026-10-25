@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 
 import '../core/extras.dart';
 import '../core/types.dart';
@@ -276,7 +275,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
         : s.raw('pay_${p.kind}');
     final action = payAction(p, t.amount, g.currency);
     Future<void> copy(String text) async {
-      await Clipboard.setData(ClipboardData(text: text));
+      await _session.device.copy(text);
       haptic(Haptic.success);
       if (mounted) {
         _toast('${s.fill(s.payCopied, {'method': method})} ${s.payThenMark}');

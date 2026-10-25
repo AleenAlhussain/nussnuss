@@ -154,6 +154,7 @@ export default function GroupPage() {
   const paywall = usePaywall();
   const [g, setG] = useState<GroupDetail | null>(null);
   const [missing, setMissing] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
   const [tab, setTab] = useState<'expenses' | 'settle'>('expenses');
   const [sheet, setSheet] = useState<{ open: boolean; editing: Expense | null }>({ open: false, editing: null });
   const [panel, setPanel] = useState<null | 'share' | 'options' | 'new-circle' | { circle: Circle }>(null);
@@ -170,8 +171,11 @@ export default function GroupPage() {
       const d = await api.group(id);
       await cacheGroup(d);
       apply(withPending(d));
+      setUnreachable(false);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setMissing(true);
+      // Offline with no copy on this device yet: say so instead of loading forever.
+      else if (isOffline(e)) setUnreachable(true);
     }
   }, [id, apply]);
 
@@ -187,11 +191,18 @@ export default function GroupPage() {
 
   useLiveVersion(g ? id : null, version.current, () => load());
 
-  // Back online: send what waited, then show the server's copy.
+  // Back online, or back on a page the browser kept in memory: send what waited, then show the server's copy.
   useEffect(() => {
     const on = () => flush(undefined, apply).finally(load);
+    const shown = (e: PageTransitionEvent) => {
+      if (e.persisted) on();
+    };
     window.addEventListener('online', on);
-    return () => window.removeEventListener('online', on);
+    window.addEventListener('pageshow', shown);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('pageshow', shown);
+    };
   }, [load, apply]);
 
   const after = (queued: boolean) => {
@@ -274,9 +285,16 @@ export default function GroupPage() {
       </Screen>
     );
   }
+  if (!g && unreachable) {
+    return (
+      <Screen title="" back="/" testId="group-offline">
+        <Empty icon={<CloudArrowUp size={36} />} title={t('offline')} body="" />
+      </Screen>
+    );
+  }
   if (!g) {
     return (
-      <Screen title="" back="/" testId="group">
+      <Screen title="" back="/" testId="group-loading">
         <GroupSkeleton />
       </Screen>
     );

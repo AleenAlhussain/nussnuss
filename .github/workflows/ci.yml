@@ -168,7 +168,15 @@ jobs:
       - name: Run the tests
         run: |
           set -o pipefail
-          flutter test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/flutter-test.log"
+          flutter test --exclude-tags golden --reporter expanded 2>&1 | tee "$RUNNER_TEMP/flutter-test.log"
+      - name: Compare the screens with the committed images
+        run: |
+          set -o pipefail
+          if ls test/goldens/*.png >/dev/null 2>&1; then
+            flutter test --tags golden --reporter expanded 2>&1 | tee -a "$RUNNER_TEMP/flutter-test.log"
+          else
+            echo "No committed screen images yet: the next step publishes the first set for review."
+          fi
       - name: Show test failures as annotations
         if: failure()
         shell: python3 {0}
@@ -182,6 +190,21 @@ jobs:
               for b in blocks[:10]:
                   b = b[:20000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
                   print("::error title=flutter test::" + b)
+      - name: Publish the screens for review (v2 branch)
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/v2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fresh images of every screen in light, dark and Arabic, plus any differences from the committed
+          # ones, so the design can be checked without a phone. Not a release: a pre-release with a zip.
+          flutter test --tags golden --update-goldens --reporter expanded || true
+          (cd test && zip -qr "$RUNNER_TEMP/flutter-screens.zip" goldens failures 2>/dev/null) || true
+          if [ -f "$RUNNER_TEMP/flutter-screens.zip" ]; then
+            gh release delete v2-screens --yes --cleanup-tag 2>/dev/null || true
+            gh release create v2-screens "$RUNNER_TEMP/flutter-screens.zip" --prerelease --target "$GITHUB_SHA" \
+              --title "Flutter screens (build ${{ github.run_number }})" \
+              --notes "Golden images of the Flutter app from commit ${GITHUB_SHA::7}: light, dark and Arabic. Commit them to apps/mobile/test/goldens to make them the reference."
+          fi
       - name: Build the APK
         run: |
           flutter build apk --release \

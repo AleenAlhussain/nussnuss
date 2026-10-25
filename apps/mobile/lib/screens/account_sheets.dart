@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../core/extras.dart';
 import '../data/api.dart';
@@ -178,7 +177,7 @@ class _CodeBodyState extends State<_CodeBody> {
           onTap: r == null
               ? null
               : () async {
-                  await Clipboard.setData(ClipboardData(text: r.code));
+                  await SessionScope.read(context).device.copy(r.code);
                   haptic(Haptic.success);
                   if (!context.mounted) return;
                   ScaffoldMessenger.maybeOf(

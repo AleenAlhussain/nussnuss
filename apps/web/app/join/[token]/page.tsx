@@ -7,6 +7,7 @@ import { Coin } from '@/components/coin';
 import { Avatar, Button, Empty, Field } from '@/components/ui';
 import { api, type InvitePreview } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { cacheGroup } from '@/lib/sync';
 
 /** What a friend sees from a WhatsApp link: the group, the names, "which one are you?". No app, no sign-up form. */
 export default function JoinPage() {
@@ -33,6 +34,7 @@ export default function JoinPage() {
     try {
       if (!me) await start(chosen);
       const d = await api.join(token, pick === 'new' ? { name: chosen } : { memberId: pick });
+      await cacheGroup(d);
       router.replace(`/g/${d.id}`);
     } catch (e) {
       setError((e as Error).message);

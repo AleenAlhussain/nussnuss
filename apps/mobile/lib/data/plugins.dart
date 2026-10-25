@@ -2,8 +2,8 @@
 // Nothing here runs in widget tests, which use QuietDevice, NoStore and MemoryStore.
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -69,6 +69,10 @@ class PluginDevice implements Device {
       return false;
     }
   }
+
+  @override
+  Future<void> copy(String text) =>
+      Clipboard.setData(ClipboardData(text: text));
 
   @override
   Stream<Offset> tilt() {

@@ -1,0 +1,3 @@
+# Golden image tests (test/golden_test.dart) run on their own in CI: see the flutter job.
+tags:
+  golden:

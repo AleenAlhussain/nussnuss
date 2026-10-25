@@ -49,10 +49,33 @@ Finder byKey(String k) => find.byKey(ValueKey(k));
 Future<void> tapKey(WidgetTester tester, String k) => tapIt(tester, byKey(k));
 
 Future<void> tapIt(WidgetTester tester, Finder f) async {
+  await reveal(tester, f);
   await tester.ensureVisible(f);
   await tester.pumpAndSettle();
   await tester.tap(f);
   await tester.pumpAndSettle();
+}
+
+/// Lists build lazily: scrolls the front-most list down, then up, until [f] is built.
+Future<void> reveal(WidgetTester tester, Finder f) async {
+  if (f.evaluate().isNotEmpty) return;
+  final lists = find.byWidgetPredicate(
+    (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+  );
+  if (lists.evaluate().isEmpty) return;
+  for (final step in [250.0, -250.0]) {
+    try {
+      await tester.scrollUntilVisible(
+        f,
+        step,
+        scrollable: lists.last,
+        maxScrolls: 40,
+      );
+      return;
+    } on StateError {
+      // Not that way: try the other.
+    }
+  }
 }
 
 Future<void> typeAmount(WidgetTester tester, String keys) async {
@@ -268,6 +291,7 @@ void main() {
       'https://paypal.me/sara/25.00AED',
     );
     await tapKey(tester, 'pay-with-1');
+    expect(app.device.copied.single, 'AE070331234567890123456');
     expect(find.textContaining('Bank (IBAN) copied'), findsOneWidget);
     expect(byKey('share-summary'), findsOneWidget);
     await leave(tester);
@@ -354,8 +378,9 @@ void main() {
     final app = await pumpApp(tester);
     await startWithGroup(tester);
     await goBack(tester);
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
+    // With narrow space the other tab shows only its icon, so tap it by key.
+    await tapKey(tester, 'tab-1');
+    expect(byKey('settings'), findsOneWidget);
     for (final k in [
       'account-status',
       'recovery',
@@ -365,7 +390,7 @@ void main() {
       'look-night',
       'privacy',
     ]) {
-      await tester.ensureVisible(byKey(k));
+      await reveal(tester, byKey(k));
       expect(byKey(k), findsOneWidget);
     }
     expect(
@@ -377,6 +402,7 @@ void main() {
     await tapKey(tester, 'recovery');
     expect(byKey('shown-code'), findsOneWidget);
     await tapKey(tester, 'sheet-close');
+    await reveal(tester, byKey('account-status'));
     expect(find.text('Your account is saved'), findsOneWidget);
 
     await tapKey(tester, 'add-pay-to');
@@ -456,8 +482,8 @@ void main() {
       await tapKey(tester, 'more');
       await tapIt(tester, byKey('sheet-close').last);
       await goBack(tester);
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
+      await tapKey(tester, 'tab-1');
+      expect(byKey('settings'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await leave(tester);
     });

@@ -15,7 +15,7 @@ import { spring } from '@/lib/feel';
 import { money } from '@/lib/format';
 import type { Lang } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
-import { cachedGroups, cacheGroups } from '@/lib/sync';
+import { cacheGroup, cachedGroups, cacheGroups } from '@/lib/sync';
 
 function Welcome() {
   const { t, prefs, setPrefs, start } = useSession();
@@ -221,7 +221,7 @@ function Groups() {
           ))}
         </ul>
       )}
-      <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreated={(g) => router.push(`/g/${g.id}`)} />
+      <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreated={(g) => cacheGroup(g).finally(() => router.push(`/g/${g.id}`))} />
       <Notices open={showInbox} onClose={() => setShowInbox(false)} items={inbox} />
     </Screen>
   );

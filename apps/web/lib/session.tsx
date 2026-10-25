@@ -110,6 +110,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true));
   }, [refreshPlan]);
 
+  // Coming back to a page the browser kept in memory (the back button): the plan may have changed meanwhile.
+  useEffect(() => {
+    const on = (e: PageTransitionEvent) => {
+      if (e.persisted && getToken()) refreshPlan();
+    };
+    window.addEventListener('pageshow', on);
+    return () => window.removeEventListener('pageshow', on);
+  }, [refreshPlan]);
+
   useEffect(() => {
     try {
       if (me) localStorage.setItem('nn:me', JSON.stringify(me));

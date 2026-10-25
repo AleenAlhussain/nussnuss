@@ -232,8 +232,9 @@ test('Plus: recurring bills, items, spending, CSV, reminders, looks', async ({ p
   await page.getByTestId('tpl-flat').click();
   await expect(page.getByTestId('group-name')).toHaveValue('Our flat');
   await group(page, 'Our flat', ['Mona', 'Huda']);
+  const here = page.url();
   await plus(page);
-  await page.goBack();
+  await page.goto(here);
   await expect(page.getByTestId('group')).toBeVisible();
 
   await page.getByTestId('add').click();

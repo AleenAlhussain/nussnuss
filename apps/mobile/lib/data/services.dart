@@ -22,6 +22,9 @@ abstract class Device {
   /// Opens a link in the app that handles it (WhatsApp, a bank, the browser). False if nothing could.
   Future<bool> open(Uri url);
 
+  /// Puts text on the clipboard.
+  Future<void> copy(String text);
+
   /// The phone's tilt from the accelerometer, roughly -1…1 on each axis. Empty where there is none.
   Stream<Offset> tilt();
 }
@@ -30,6 +33,7 @@ abstract class Device {
 class QuietDevice implements Device {
   final shared = <({String? text, List<SharedFile> files})>[];
   final opened = <Uri>[];
+  final copied = <String>[];
 
   /// What [open] answers; tests flip it to check the fallbacks.
   bool canOpen = true;
@@ -46,6 +50,9 @@ class QuietDevice implements Device {
     opened.add(url);
     return canOpen;
   }
+
+  @override
+  Future<void> copy(String text) async => copied.add(text);
 
   @override
   Stream<Offset> tilt() => const Stream.empty();

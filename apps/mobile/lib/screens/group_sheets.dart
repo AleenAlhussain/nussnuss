@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../core/money.dart';
 import '../data/api.dart';
@@ -440,7 +439,7 @@ class _ShareBodyState extends State<_ShareBody> {
           onTap: _link == null
               ? null
               : () async {
-                  await Clipboard.setData(ClipboardData(text: _message(s)));
+                  await SessionScope.read(context).device.copy(_message(s));
                   haptic(Haptic.success);
                   if (!mounted) return;
                   setState(() => _copied = true);
