@@ -48,8 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _snack(String text) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  void _snack(String text) => showToast(context, text);
 
   Future<void> _delete() async {
     final session = SessionScope.read(context);
@@ -353,7 +352,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               key: const ValueKey('settings-glass'),
               values: GlassPref.values,
               selected: session.glass,
-              label: (g) => g == GlassPref.clear ? s.glassAuto : s.glassFrosted,
+              label: (g) => switch (g) {
+                GlassPref.clear => s.glassAuto,
+                GlassPref.tinted => s.glassTinted,
+                GlassPref.solid => s.glassSolid,
+              },
               onChanged: session.setGlass,
             ),
             _Hint(s.glassHint),

@@ -10,11 +10,13 @@ import '../data/models.dart';
 import '../data/services.dart';
 import '../data/session.dart';
 import '../design/glass.dart';
+import '../design/motion.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
 import 'paywall.dart';
+import 'pickers.dart';
 import 'summary_card.dart';
 
 String _day(BuildContext context, DateTime d) =>
@@ -533,7 +535,10 @@ class _Spending extends StatelessWidget {
 }
 
 /// A money circle at a glance: this round, who gets the pot, how many have paid, who is late.
-class CircleCard extends StatelessWidget {
+/// A money circle on the group: the round, who gets the pot, who has paid in, and who is late.
+/// The late pill pulses once when it appears; if more people become late while the group is open,
+/// it pulses again with the warning haptic.
+class CircleCard extends StatefulWidget {
   const CircleCard({
     super.key,
     required this.group,
@@ -545,10 +550,27 @@ class CircleCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<CircleCard> createState() => _CircleCardState();
+}
+
+int _lateCount(Circle c) => c.currentRound?.late.length ?? 0;
+
+class _CircleCardState extends State<CircleCard> {
+  @override
+  void didUpdateWidget(CircleCard old) {
+    super.didUpdateWidget(old);
+    if (_lateCount(widget.circle) > _lateCount(old.circle)) {
+      haptic(Haptic.warning);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = context.s;
     final p = NNTheme.of(context).palette;
-    final c = circle;
+    final group = widget.group;
+    final onTap = widget.onTap;
+    final c = widget.circle;
     final r = c.currentRound;
     final status = switch (c.status) {
       'upcoming' => s.fill(s.circleUpcoming, {
@@ -608,14 +630,47 @@ class CircleCard extends StatelessWidget {
             for (final l in lines)
               Text(l, style: NNType.footnote.copyWith(color: p.text)),
             if (late.isNotEmpty)
-              Text(
-                '${s.late}: ${late.join(s.isRtl ? '، ' : ', ')}',
-                style: NNType.footnote.copyWith(
-                  color: p.danger,
-                  fontWeight: FontWeight.w600,
+              Padding(
+                padding: const EdgeInsets.only(top: NNSpace.xs),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: PulseOnce(
+                    // A new pulse each time more people are late.
+                    key: ValueKey('late-${late.length}'),
+                    color: p.danger,
+                    child: LatePill(
+                      key: ValueKey('late-pill-${c.id}'),
+                      text: '${s.late}: ${late.join(s.isRtl ? '، ' : ', ')}',
+                    ),
+                  ),
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Late: red words on a soft red capsule.
+class LatePill extends StatelessWidget {
+  const LatePill({super.key, required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: ShapeDecoration(
+        shape: const StadiumBorder(),
+        color: p.dangerSoft,
+      ),
+      child: Text(
+        text,
+        style: NNType.footnote.copyWith(
+          color: p.danger,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -762,7 +817,9 @@ class _CircleBodyState extends State<_CircleBody> {
   }
 }
 
-class _PaidToggle extends StatelessWidget {
+/// Whether someone has paid in this round. When they are marked paid the check draws itself
+/// (300 ms) with the success haptic.
+class _PaidToggle extends StatefulWidget {
   const _PaidToggle({
     super.key,
     required this.label,
@@ -778,11 +835,48 @@ class _PaidToggle extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
 
   @override
+  State<_PaidToggle> createState() => _PaidToggleState();
+}
+
+class _PaidToggleState extends State<_PaidToggle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _draw = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+    value: widget.paid ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(_PaidToggle old) {
+    super.didUpdateWidget(old);
+    if (widget.paid && !old.paid) {
+      haptic(Haptic.success);
+      if (reduceMotion(context)) {
+        _draw.value = 1;
+      } else {
+        _draw.forward(from: 0);
+      }
+    } else if (!widget.paid) {
+      _draw.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _draw.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = context.s;
     final p = NNTheme.of(context).palette;
+    final label = widget.label;
+    final late = widget.late;
+    final paid = widget.paid;
+    final onChanged = widget.onChanged;
     return Pressable(
-      onTap: onChanged == null ? null : () => onChanged!(!paid),
+      onTap: onChanged == null ? null : () => onChanged(!paid),
       checked: paid,
       semanticLabel: [
         s.fill(s.markMemberPaid, {'name': label}),
@@ -795,7 +889,7 @@ class _PaidToggle extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 52),
         child: Row(
           children: [
-            Avatar(name: avatarName, size: 28),
+            Avatar(name: widget.avatarName, size: 28),
             const SizedBox(width: NNSpace.sm),
             Expanded(
               child: Text(label, style: NNType.body.copyWith(color: p.text)),
@@ -803,21 +897,37 @@ class _PaidToggle extends StatelessWidget {
             if (late && !paid)
               Padding(
                 padding: const EdgeInsetsDirectional.only(end: NNSpace.xs),
-                child: Text(
-                  s.late,
-                  style: NNType.footnote.copyWith(
-                    color: p.danger,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: PulseOnce(
+                  color: p.danger,
+                  child: LatePill(text: s.late),
                 ),
               ),
-            Icon(
-              paid
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: paid ? p.success : p.text3,
-              size: 26,
-            ),
+            if (paid)
+              Container(
+                width: 24,
+                height: 24,
+                margin: const EdgeInsets.all(1),
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  shape: const CircleBorder(),
+                  color: p.success,
+                ),
+                child: AnimatedBuilder(
+                  animation: _draw,
+                  builder: (context, _) => DrawnCheck(
+                    progress: Curves.easeOutCubic.transform(_draw.value),
+                    color: p.surface,
+                    size: 18,
+                    stroke: 2.4,
+                  ),
+                ),
+              )
+            else
+              Icon(
+                Icons.radio_button_unchecked_rounded,
+                color: p.text3,
+                size: 26,
+              ),
           ],
         ),
       ),
@@ -854,6 +964,14 @@ class _NewCircleState extends State<_NewCircle> {
   DateTime _start = DateTime.now();
   final _order = <String>[];
   String? _error;
+
+  /// Goes up with every error: the field or message shakes, with the error haptic.
+  int _shakes = 0;
+
+  void _fail(String message) => setState(() {
+    _error = message;
+    _shakes++;
+  });
   bool _busy = false;
 
   @override
@@ -864,13 +982,14 @@ class _NewCircleState extends State<_NewCircle> {
   }
 
   Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _start,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+    final d = await showDateSheet(
+      context,
+      title: context.s.circleStart,
+      initial: _start,
+      first: DateTime.now().subtract(const Duration(days: 365)),
+      last: DateTime.now().add(const Duration(days: 730)),
     );
-    if (d != null) setState(() => _start = d);
+    if (d != null && mounted) setState(() => _start = d);
   }
 
   Future<void> _create() async {
@@ -879,11 +998,11 @@ class _NewCircleState extends State<_NewCircle> {
     final amount = parseAmount(_amount.text, g.currency);
     final name = _name.text.trim().isEmpty ? s.circleNamePh : _name.text.trim();
     if (amount == null) {
-      setState(() => _error = s.errAmount);
+      _fail(s.errAmount);
       return;
     }
     if (_order.length < 2) {
-      setState(() => _error = s.circleNeedTwo);
+      _fail(s.circleNeedTwo);
       return;
     }
     setState(() {
@@ -903,7 +1022,7 @@ class _NewCircleState extends State<_NewCircle> {
       );
       if (mounted) Navigator.of(context).pop(d);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.offline ? s.offline : e.message);
+      if (mounted) _fail(e.offline ? s.offline : e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -980,13 +1099,7 @@ class _NewCircleState extends State<_NewCircle> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: NNSpace.sm),
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                _error!,
-                style: NNType.subhead.copyWith(color: p.danger),
-              ),
-            ),
+            child: ErrorText(_error!, shake: _shakes),
           ),
         const SizedBox(height: NNSpace.md),
         Text(s.circleHint, style: NNType.footnote.copyWith(color: p.text2)),

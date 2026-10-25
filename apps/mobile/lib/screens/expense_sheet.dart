@@ -9,12 +9,14 @@ import '../data/api.dart';
 import '../data/models.dart';
 import '../data/session.dart';
 import '../design/glass.dart';
+import '../design/motion.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
 import 'keypad.dart';
 import 'paywall.dart';
+import 'pickers.dart';
 
 class ExpenseResult {
   const ExpenseResult(this.detail, {this.deletedId, this.queued = false});
@@ -116,6 +118,10 @@ class _ExpenseFormState extends State<ExpenseForm> {
   String _repeat = 'none';
   bool _details = false;
   String? _error;
+
+  /// Goes up with every failed save: the message (and a missing amount) shakes.
+  int _shakes = 0;
+  int _amountShakes = 0;
   bool _busy = false;
   List<Suggestion>? _suggestions;
 
@@ -332,11 +338,12 @@ class _ExpenseFormState extends State<ExpenseForm> {
     if (err != null) {
       setState(() {
         _error = err;
+        _shakes++;
+        if (total == null) _amountShakes++;
         if (err == s.errRate || err == s.errSplit || err == s.itemsOver) {
           _details = true;
         }
       });
-      haptic(Haptic.light);
       return;
     }
     setState(() {
@@ -375,7 +382,12 @@ class _ExpenseFormState extends State<ExpenseForm> {
             ),
           );
         } on ApiException catch (e) {
-          if (mounted) setState(() => _error = e.message);
+          if (mounted) {
+            setState(() {
+              _error = e.message;
+              _shakes++;
+            });
+          }
         }
       }
       session.click();
@@ -384,7 +396,12 @@ class _ExpenseFormState extends State<ExpenseForm> {
         Navigator.of(context).pop(ExpenseResult(detail, queued: r.queued));
       }
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _shakes++;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -461,6 +478,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
         Keypad(
           value: _amount,
+          shake: _amountShakes,
           onChanged: (v) => setState(() => _amount = v),
           currency: _currency,
           lang: s.lang,
@@ -528,12 +546,15 @@ class _ExpenseFormState extends State<ExpenseForm> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: NNSpace.md),
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                _error!,
-                key: const ValueKey('expense-error'),
-                style: NNType.subhead.copyWith(color: p.danger),
+            child: Shake(
+              trigger: _shakes,
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _error!,
+                  key: const ValueKey('expense-error'),
+                  style: NNType.subhead.copyWith(color: p.danger),
+                ),
               ),
             ),
           ),
@@ -664,25 +685,17 @@ class _ExpenseFormState extends State<ExpenseForm> {
             ),
           ),
         SectionLabel(s.paidIn),
-        DropdownButtonFormField<String>(
+        PickerField(
           key: const ValueKey('currency'),
-          initialValue: _currency,
-          isExpanded: true,
-          borderRadius: BorderRadius.circular(NNRadius.row),
-          dropdownColor: p.surface,
-          menuMaxHeight: 420,
-          items: [
-            for (final c in currencies)
-              DropdownMenuItem(
-                value: c.code,
-                child: Text(
-                  '${c.code} · ${c.name(s.lang)}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: (v) {
-            if (v != null && v != _currency) _pickCurrency(v);
+          label: s.paidIn,
+          value: currencyLabel(_currency, s.lang),
+          onTap: () async {
+            final v = await showCurrencyPicker(
+              context,
+              selected: _currency,
+              title: s.paidIn,
+            );
+            if (v != null && v != _currency && mounted) await _pickCurrency(v);
           },
         ),
         if (_foreign) ...[
@@ -1156,7 +1169,6 @@ class _StepButton extends StatelessWidget {
       semanticLabel: label,
       excludeChildSemantics: true,
       haptic: Haptic.selection,
-      scale: 0.9,
       child: Opacity(
         opacity: onTap == null ? 0.35 : 1,
         child: Container(

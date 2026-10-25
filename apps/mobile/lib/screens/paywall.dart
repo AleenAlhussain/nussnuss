@@ -97,10 +97,9 @@ class _PaywallState extends State<_Paywall> {
   }
 
   void _done() {
-    final s = context.s;
-    final messenger = ScaffoldMessenger.maybeOf(context);
+    // The toast floats above everything, so it stays after the paywall closes.
+    showToast(context, context.s.plusThanks);
     Navigator.of(context).maybePop();
-    messenger?.showSnackBar(SnackBar(content: Text(s.plusThanks)));
   }
 
   String _name(String id) {

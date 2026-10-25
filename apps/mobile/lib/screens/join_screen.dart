@@ -6,6 +6,7 @@ import '../data/session.dart';
 import '../design/coin.dart';
 import '../design/glass.dart';
 import '../design/motion.dart';
+import '../design/page.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
@@ -26,6 +27,14 @@ class _JoinScreenState extends State<JoinScreen> {
   String? _pick;
   final _name = TextEditingController();
   String? _error;
+
+  /// Goes up with every error: the field or message shakes, with the error haptic.
+  int _shakes = 0;
+
+  void _fail(String message) => setState(() {
+    _error = message;
+    _shakes++;
+  });
   bool _busy = false;
 
   @override
@@ -64,7 +73,7 @@ class _JoinScreenState extends State<JoinScreen> {
         ? _name.text.trim()
         : preview.members.firstWhere((m) => m.id == _pick).name;
     if (chosen.isEmpty) {
-      setState(() => _error = s.yourNameHint);
+      _fail(s.yourNameHint);
       return;
     }
     setState(() {
@@ -89,6 +98,7 @@ class _JoinScreenState extends State<JoinScreen> {
       if (mounted) {
         setState(() {
           _error = e.offline ? s.offline : e.message;
+          _shakes++;
           _busy = false;
         });
       }
@@ -191,10 +201,7 @@ class _JoinScreenState extends State<JoinScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: NNSpace.md),
-              child: Text(
-                _error!,
-                style: NNType.subhead.copyWith(color: p.danger),
-              ),
+              child: ErrorText(_error!, shake: _shakes),
             ),
           const SizedBox(height: NNSpace.xl),
           NNButton(
@@ -210,16 +217,20 @@ class _JoinScreenState extends State<JoinScreen> {
         ],
       );
     }
-    return Scaffold(
-      key: const ValueKey('join-screen'),
-      backgroundColor: p.bg,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: ListView(
-              padding: const EdgeInsets.all(NNSpace.xl),
-              children: [body],
+    return StepBack(
+      child: Scaffold(
+        key: const ValueKey('join-screen'),
+        backgroundColor: p.bg,
+        body: Ambient.behind(
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: ListView(
+                  padding: const EdgeInsets.all(NNSpace.xl),
+                  children: [body],
+                ),
+              ),
             ),
           ),
         ),

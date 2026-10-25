@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../data/session.dart';
 import 'glass.dart';
+import 'motion.dart';
 import 'theme.dart';
 import 'tokens.g.dart';
 
@@ -45,35 +49,42 @@ class NNButton extends StatelessWidget {
       onTap: enabled ? onTap : null,
       semanticLabel: label,
       excludeChildSemantics: true,
-      haptic: kind == ButtonKind.filled ? Haptic.light : Haptic.none,
+      // Solid buttons give no tap haptic; what they do answers (success or error).
       child: AnimatedOpacity(
         opacity: enabled || busy ? 1 : 0.45,
         duration: NNMotion.fade,
-        child: Container(
-          height: 50,
-          width: expand ? double.infinity : null,
-          padding: const EdgeInsets.symmetric(horizontal: NNSpace.lg),
-          decoration: ShapeDecoration(shape: const StadiumBorder(), color: bg),
-          // A compact button may sit in a row that gives it unbounded width, where Flexible
-          // would throw; where the width is bounded the label shortens instead of overflowing.
-          child: LayoutBuilder(
-            builder: (context, c) => Row(
-              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (busy)
-                  SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator.adaptive(
-                      strokeWidth: 2.4,
-                      valueColor: AlwaysStoppedAnimation(fg),
-                    ),
-                  )
-                else if (icon != null)
-                  Icon(icon, size: 20, color: fg),
-                if (busy || icon != null) const SizedBox(width: NNSpace.xs),
-                if (c.hasBoundedWidth) Flexible(child: text) else text,
-              ],
+        // Pressed, it brightens a little as it shrinks.
+        child: PressGlow(
+          shape: const StadiumBorder(),
+          child: Container(
+            height: 50,
+            width: expand ? double.infinity : null,
+            padding: const EdgeInsets.symmetric(horizontal: NNSpace.lg),
+            decoration: ShapeDecoration(
+              shape: const StadiumBorder(),
+              color: bg,
+            ),
+            // A compact button may sit in a row that gives it unbounded width, where Flexible
+            // would throw; where the width is bounded the label shortens instead of overflowing.
+            child: LayoutBuilder(
+              builder: (context, c) => Row(
+                mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (busy)
+                    SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator.adaptive(
+                        strokeWidth: 2.4,
+                        valueColor: AlwaysStoppedAnimation(fg),
+                      ),
+                    )
+                  else if (icon != null)
+                    Icon(icon, size: 20, color: fg),
+                  if (busy || icon != null) const SizedBox(width: NNSpace.xs),
+                  if (c.hasBoundedWidth) Flexible(child: text) else text,
+                ],
+              ),
             ),
           ),
         ),
@@ -118,7 +129,7 @@ class Segmented<T> extends StatelessWidget {
               duration: reduceMotion(context)
                   ? Duration.zero
                   : NNMotion.standardDuration,
-              curve: Curves.easeOutBack,
+              curve: SpringCurve(NNMotion.standard, NNMotion.standardDuration),
               child: FractionallySizedBox(
                 widthFactor: 1 / n,
                 heightFactor: 1,
@@ -251,43 +262,49 @@ class NNChip extends StatelessWidget {
       semanticLabel: label,
       excludeChildSemantics: true,
       haptic: Haptic.selection,
-      child: AnimatedContainer(
-        duration: NNMotion.fade,
-        constraints: BoxConstraints(minHeight: touchTarget(context)),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: ShapeDecoration(
-          shape: StadiumBorder(
-            side: BorderSide(
-              color: selected ? p.accent : p.separator,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          color: selected ? p.accentSoft : p.surface,
-        ),
-        // In a wrap (bounded) a long label wraps onto a second line; in a scrolling row it doesn't need to.
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final text = Text(
-              label,
-              maxLines: c.hasBoundedWidth ? 2 : 1,
-              overflow: TextOverflow.ellipsis,
-              style: NNType.subhead.copyWith(
-                color: fg,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      child: PressGlow(
+        shape: const StadiumBorder(),
+        child: AnimatedContainer(
+          duration: NNMotion.fade,
+          constraints: BoxConstraints(minHeight: touchTarget(context)),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: ShapeDecoration(
+            shape: StadiumBorder(
+              side: BorderSide(
+                color: selected ? p.accent : p.separator,
+                width: selected ? 1.5 : 1,
               ),
-            );
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 18, color: fg),
-                  const SizedBox(width: 6),
+            ),
+            color: selected ? p.accentSoft : p.surface,
+          ),
+          // In a wrap (bounded) a long label wraps onto a second line; in a scrolling row it doesn't need to.
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final text = Text(
+                label,
+                maxLines: c.hasBoundedWidth ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: NNType.subhead.copyWith(
+                  color: fg,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              );
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 18, color: fg),
+                    const SizedBox(width: 6),
+                  ],
+                  if (c.hasBoundedWidth) Flexible(child: text) else text,
+                  if (trailing != null) ...[
+                    const SizedBox(width: 6),
+                    trailing!,
+                  ],
                 ],
-                if (c.hasBoundedWidth) Flexible(child: text) else text,
-                if (trailing != null) ...[const SizedBox(width: 6), trailing!],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -400,8 +417,11 @@ class NNField extends StatelessWidget {
     this.textInputAction,
     this.maxLength = 60,
     this.fieldKey,
+    this.shake = 0,
   });
 
+  /// Goes up with each error: the field shakes (see [Shake]).
+  final int shake;
   final String label;
   final TextEditingController controller;
   final String? hint;
@@ -417,43 +437,180 @@ class NNField extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = NNTheme.of(context).palette;
     // MergeSemantics: the visible label above is the field's name for VoiceOver and TalkBack too.
-    return MergeSemantics(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsetsDirectional.only(
-              start: NNSpace.xxs,
-              bottom: 6,
-            ),
-            child: Text(
-              label,
-              style: NNType.footnote.copyWith(
-                color: p.text2,
-                fontWeight: FontWeight.w600,
+    return Shake(
+      trigger: shake,
+      child: MergeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.only(
+                start: NNSpace.xxs,
+                bottom: 6,
+              ),
+              child: Text(
+                label,
+                style: NNType.footnote.copyWith(
+                  color: p.text2,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          TextField(
-            key: fieldKey,
-            controller: controller,
-            autofocus: autofocus,
-            onSubmitted: onSubmitted,
-            textInputAction: textInputAction,
-            maxLength: maxLength,
-            textCapitalization: TextCapitalization.sentences,
-            style: NNType.body.copyWith(color: p.text),
-            decoration: InputDecoration(
-              hintText: hint,
-              counterText: '',
-              errorText: error,
-              helperText: help,
-              helperStyle: NNType.footnote.copyWith(color: p.text3),
-              helperMaxLines: 3,
-              errorMaxLines: 3,
+            TextField(
+              key: fieldKey,
+              controller: controller,
+              autofocus: autofocus,
+              onSubmitted: onSubmitted,
+              textInputAction: textInputAction,
+              maxLength: maxLength,
+              textCapitalization: TextCapitalization.sentences,
+              style: NNType.body.copyWith(color: p.text),
+              decoration: InputDecoration(
+                hintText: hint,
+                counterText: '',
+                errorText: error,
+                helperText: help,
+                helperStyle: NNType.footnote.copyWith(color: p.text3),
+                helperMaxLines: 3,
+                errorMaxLines: 3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A form's error in words, read out when it appears; it shakes each time [shake] goes up.
+class ErrorText extends StatelessWidget {
+  const ErrorText(this.text, {super.key, required this.shake, this.textKey});
+  final String text;
+  final int shake;
+  final Key? textKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return Shake(
+      trigger: shake,
+      child: Semantics(
+        liveRegion: true,
+        child: Text(
+          text,
+          key: textKey,
+          style: NNType.subhead.copyWith(color: p.danger),
+        ),
+      ),
+    );
+  }
+}
+
+/// Height of a [SearchFieldBody] at the person's text size: at least a touch target.
+double searchFieldHeight(BuildContext context) => math.max(
+  touchTarget(context),
+  28 +
+      MediaQuery.textScalerOf(context).scale(NNType.body.fontSize!) *
+          NNType.body.height!,
+);
+
+/// The inside of a search capsule: a magnifier, the field (named "Search" for screen readers) and a
+/// clear button once something is typed. A focus ring goes round the capsule while it has focus.
+/// The capsule itself (glass or a plain fill) comes from the caller.
+class SearchFieldBody extends StatelessWidget {
+  const SearchFieldBody({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.hint,
+    required this.onChanged,
+    required this.ring,
+    this.onSubmitted,
+    this.semibold = false,
+    this.fieldKey,
+    this.clearKey,
+  });
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String hint;
+  final VoidCallback onChanged;
+  final VoidCallback? onSubmitted;
+  final Color ring;
+
+  /// On glass, typed text is semibold.
+  final bool semibold;
+  final Key? fieldKey;
+  final Key? clearKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.s;
+    final p = NNTheme.of(context).palette;
+    return ListenableBuilder(
+      listenable: Listenable.merge([focusNode, controller]),
+      builder: (context, _) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: ShapeDecoration(
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: focusNode.hasFocus ? ring : ring.withValues(alpha: 0),
+              width: 2,
             ),
           ),
-        ],
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 14),
+            ExcludeSemantics(
+              child: Icon(Icons.search_rounded, size: 20, color: p.text2),
+            ),
+            const SizedBox(width: NNSpace.xs),
+            Expanded(
+              child: MergeSemantics(
+                child: Semantics(
+                  label: s.search,
+                  child: TextField(
+                    key: fieldKey,
+                    controller: controller,
+                    focusNode: focusNode,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (_) => onChanged(),
+                    onSubmitted: (_) => onSubmitted?.call(),
+                    style: NNType.body.copyWith(
+                      color: p.text,
+                      fontWeight: semibold ? FontWeight.w600 : null,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      hintStyle: NNType.body.copyWith(color: p.text2),
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (controller.text.isNotEmpty)
+              Pressable(
+                key: clearKey,
+                onTap: () {
+                  controller.clear();
+                  onChanged();
+                },
+                semanticLabel: s.close,
+                excludeChildSemantics: true,
+                child: SizedBox.square(
+                  dimension: touchTarget(context),
+                  child: Icon(Icons.close_rounded, size: 18, color: p.text2),
+                ),
+              )
+            else
+              const SizedBox(width: 14),
+          ],
+        ),
       ),
     );
   }

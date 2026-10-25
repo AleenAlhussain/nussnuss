@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import 'motion.dart';
 import 'theme.dart';
 import 'tokens.g.dart';
 
@@ -26,6 +29,38 @@ extension SpringTo on AnimationController {
   /// Animate to [target] with a token spring, keeping the current velocity so interrupted motion stays smooth.
   TickerFuture springTo(double target, SpringDescription spring) =>
       animateWith(SpringSimulation(spring, value, target, velocity));
+}
+
+/// A token spring as a curve, for motion that runs on a fixed duration (routes, implicit
+/// animations, scrolling). [clamp] cuts the overshoot for motion that must not bounce.
+class SpringCurve extends Curve {
+  SpringCurve(this.spring, this.duration, {this.clamp = false})
+    : _sim = SpringSimulation(spring, 0, 1, 0);
+  final SpringDescription spring;
+  final Duration duration;
+  final bool clamp;
+  final SpringSimulation _sim;
+
+  @override
+  double transformInternal(double t) {
+    final x = _sim.x(
+      t * duration.inMicroseconds / Duration.microsecondsPerSecond,
+    );
+    return clamp ? x.clamp(0.0, 1.0) : x;
+  }
+}
+
+/// Glass never sits on glass. Inside a glass surface (a sheet, a toast, the top bar once it has
+/// turned to glass) a [Glass] is drawn as a plain fill instead.
+class GlassLayer extends InheritedWidget {
+  const GlassLayer({super.key, required this.active, required super.child});
+  final bool active;
+
+  static bool on(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GlassLayer>()?.active ?? false;
+
+  @override
+  bool updateShouldNotify(GlassLayer old) => old.active != active;
 }
 
 /// Saturation matrix with Rec. 709 luma weights, the same maths as CSS `saturate()`.
@@ -50,10 +85,12 @@ ui.ImageFilter _filterFor(NNGlassStyle s) => _filters.putIfAbsent(
   ),
 );
 
-/// The navigation layer material: a blurred, saturated, lightly tinted pane with a rim of light along
-/// the top edge. Use it only for things that float above content (bars, the add button, sheets) and never
-/// put glass inside glass. With Frosted (chosen, or forced by Increase Contrast) it becomes a solid pane
-/// with a hairline border, so text on it always meets contrast.
+/// The navigation layer material: a blurred, saturated, tinted pane with a 1 px edge of light that is
+/// brightest at the top-start corner. Use it only for things that float above content (the tab bar,
+/// bar buttons, the add button, the pinned search field, sheets, toasts) and never put glass inside
+/// glass: controls inside a sheet use solid fills. The level comes from Settings > Glass: Clear,
+/// Tinted (the default) or Solid; Solid (also forced by Increase Contrast) is an opaque pane with a
+/// separator hairline, so text on it always meets contrast.
 class Glass extends StatelessWidget {
   const Glass({
     super.key,
@@ -80,22 +117,73 @@ class Glass extends StatelessWidget {
     final s = nn.glass;
     final r = borderRadius ?? BorderRadius.circular(radius);
     final tinted = tint != null;
+    final press = PressScope.of(context);
 
-    Widget body = DecoratedBox(
-      decoration: BoxDecoration(
-        color: tint ?? s.fill,
+    // Pressed glass brightens, as if more light came through it.
+    Widget pressed(Widget body) => press == null
+        ? body
+        : Stack(
+            children: [
+              body,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: press,
+                    builder: (_, _) => DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: r,
+                        color: Colors.white.withValues(
+                          alpha:
+                              (nn.isDark ? 0.10 : 0.18) *
+                              press.value.clamp(0.0, 1.0),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+
+    if (!tinted && GlassLayer.on(context)) {
+      // Already on glass: a plain fill, no blur, edge or shadow.
+      return ClipRRect(
         borderRadius: r,
-        border: s.bordered && !tinted
-            ? Border.all(color: nn.palette.separator)
-            : null,
+        child: pressed(
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: nn.palette.text.withValues(alpha: 0.07),
+              borderRadius: r,
+            ),
+            child: Padding(padding: padding, child: child),
+          ),
+        ),
+      );
+    }
+
+    final solid = s.bordered && !tinted;
+    Widget body = pressed(
+      DecoratedBox(
+        decoration: BoxDecoration(
+          color: tint ?? s.fill,
+          borderRadius: r,
+          border: solid ? Border.all(color: nn.palette.separator) : null,
+        ),
+        child: Padding(
+          padding: padding,
+          child: GlassLayer(active: true, child: child),
+        ),
       ),
-      child: Padding(padding: padding, child: child),
     );
-    if (!s.bordered || tinted) {
+    if (!solid) {
       body = CustomPaint(
-        foregroundPainter: _RimPainter(
+        foregroundPainter: _EdgePainter(
           r,
-          tinted ? const Color(0x73FFFFFF) : s.highlight,
+          top: nn.isDark ? NNGlass.edgeTopDark : NNGlass.edgeTopLight,
+          hairline: nn.isDark
+              ? NNGlass.edgeHairlineDark
+              : NNGlass.edgeHairlineLight,
+          direction: Directionality.of(context),
         ),
         child: body,
       );
@@ -115,11 +203,19 @@ class Glass extends StatelessWidget {
   }
 }
 
-/// Light from above: a 1px rim that is bright at the top edge and fades out down the sides.
-class _RimPainter extends CustomPainter {
-  _RimPainter(this.radius, this.color);
+/// The glass edge: a 1 px hairline of white that brightens toward the top-start corner, where the
+/// light comes from (top-left in English, top-right in Arabic).
+class _EdgePainter extends CustomPainter {
+  _EdgePainter(
+    this.radius, {
+    required this.top,
+    required this.hairline,
+    required this.direction,
+  });
   final BorderRadius radius;
-  final Color color;
+  final Color top;
+  final Color hairline;
+  final TextDirection direction;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -128,21 +224,20 @@ class _RimPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
       ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          color,
-          color.withValues(alpha: 0),
-          color.withValues(alpha: color.a * 0.3),
-        ],
-        stops: const [0, 0.5, 1],
+        begin: AlignmentDirectional.topStart.resolve(direction),
+        end: AlignmentDirectional.bottomEnd.resolve(direction),
+        colors: [top, hairline, hairline],
+        stops: const [0, 0.45, 1],
       ).createShader(rect);
     canvas.drawRRect(radius.toRRect(rect).deflate(0.5), paint);
   }
 
   @override
-  bool shouldRepaint(_RimPainter old) =>
-      old.color != color || old.radius != radius;
+  bool shouldRepaint(_EdgePainter old) =>
+      old.top != top ||
+      old.hairline != hairline ||
+      old.radius != radius ||
+      old.direction != direction;
 }
 
 /// A soft drop shadow painted only outside the shape, so it never darkens the glass itself.
@@ -176,9 +271,16 @@ class _OuterShadowPainter extends CustomPainter {
       old.color != color || old.radius != radius;
 }
 
-enum Haptic { none, selection, light, medium, success }
+enum Haptic { none, selection, light, medium, success, warning, error }
+
+/// Where haptics go. Tests swap it for a recorder.
+void Function(Haptic) hapticPlayer = _playHaptic;
 
 void haptic(Haptic h) {
+  if (h != Haptic.none) hapticPlayer(h);
+}
+
+void _playHaptic(Haptic h) {
   switch (h) {
     case Haptic.none:
       return;
@@ -186,22 +288,71 @@ void haptic(Haptic h) {
       HapticFeedback.selectionClick();
     case Haptic.light:
       HapticFeedback.lightImpact();
-    case Haptic.medium:
+    case Haptic.medium || Haptic.success || Haptic.warning:
       HapticFeedback.mediumImpact();
-    case Haptic.success:
+    case Haptic.error:
       HapticFeedback.heavyImpact();
   }
 }
 
-/// Anything tappable: shrinks a little under the finger on a spring and settles back with a small bounce.
-/// With Reduce Motion it dims instead. Exposes itself as a button to VoiceOver and TalkBack.
+/// The press of the nearest [Pressable] (0 at rest, 1 fully pressed), so glass and solid buttons
+/// can brighten under the finger.
+class PressScope extends InheritedWidget {
+  const PressScope({super.key, required this.press, required super.child});
+  final Animation<double> press;
+
+  static Animation<double>? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PressScope>()?.press;
+
+  @override
+  bool updateShouldNotify(PressScope old) => old.press != press;
+}
+
+/// A white wash over a solid button while it is pressed.
+class PressGlow extends StatelessWidget {
+  const PressGlow({super.key, required this.shape, required this.child});
+  final ShapeBorder shape;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final press = PressScope.of(context);
+    if (press == null) return child;
+    final dark = NNTheme.of(context).isDark;
+    return Stack(
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: press,
+              builder: (_, _) => DecoratedBox(
+                decoration: ShapeDecoration(
+                  shape: shape,
+                  color: Colors.white.withValues(
+                    alpha: (dark ? 0.08 : 0.16) * press.value.clamp(0.0, 1.0),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Anything tappable. Pressing takes 100 ms; letting go settles back on the standard spring. Solid
+/// things shrink to [NNMotion.pressScale]; glass controls pass [NNMotion.glassPressScale] and swell.
+/// Both brighten (see [PressScope]). With Reduce Motion nothing moves: it dims instead. Exposes
+/// itself as a button to VoiceOver and TalkBack.
 class Pressable extends StatefulWidget {
   const Pressable({
     super.key,
     required this.child,
     required this.onTap,
     this.semanticLabel,
-    this.scale = 0.96,
+    this.scale = NNMotion.pressScale,
     this.haptic = Haptic.none,
     this.selected,
     this.checked,
@@ -238,10 +389,16 @@ class _PressableState extends State<Pressable>
   bool get _enabled => widget.onTap != null;
 
   void _down() {
-    if (_enabled) _press.springTo(1, NNMotion.standard);
+    if (_enabled) {
+      _press.animateTo(
+        1,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
-  void _up() => _press.springTo(0, NNMotion.bouncy);
+  void _up() => _press.springTo(0, NNMotion.standard);
 
   @override
   void dispose() {
@@ -283,7 +440,7 @@ class _PressableState extends State<Pressable>
             : null,
         child: AnimatedBuilder(
           animation: _press,
-          child: widget.child,
+          child: PressScope(press: _press, child: widget.child),
           builder: (context, child) {
             final t = _press.value;
             if (still) {
@@ -326,7 +483,8 @@ class GlassIconButton extends StatelessWidget {
       onTap: onTap,
       semanticLabel: label,
       excludeChildSemantics: true,
-      scale: 0.9,
+      haptic: Haptic.light,
+      scale: NNMotion.glassPressScale,
       child: Glass(
         child: SizedBox.square(
           dimension: touchTarget(context),
@@ -367,6 +525,8 @@ class _AddButtonState extends State<AddButton> {
   }
 
   void _move(Offset local) {
+    // With Reduce Motion the light stays where it is.
+    if (reduceMotion(context)) return;
     const size = 64.0;
     setState(
       () => _light = Alignment(
@@ -391,7 +551,7 @@ class _AddButtonState extends State<AddButton> {
         semanticLabel: widget.label,
         excludeChildSemantics: true,
         haptic: Haptic.light,
-        scale: 0.92,
+        scale: NNMotion.glassPressScale,
         child: Glass(
           tint: p.accent,
           child: SizedBox.square(
@@ -482,18 +642,20 @@ class GlassTabBar extends StatelessWidget {
         return FittedBox(
           fit: BoxFit.scaleDown,
           alignment: AlignmentDirectional.bottomStart,
-          child: _bar(context, compact || squeezed),
+          child: _bar(context, hideOthers: compact || squeezed),
         );
       },
     );
   }
 
-  Widget _bar(BuildContext context, bool compact) {
+  /// While scrolling down ([compact]) the bar folds to icons only; with narrow space
+  /// ([hideOthers]) only the selected tab keeps its label.
+  Widget _bar(BuildContext context, {required bool hideOthers}) {
     final p = NNTheme.of(context).palette;
     final still = reduceMotion(context);
     final duration = still ? NNMotion.fade : NNMotion.standardDuration;
     return AnimatedScale(
-      scale: this.compact && !still ? 0.9 : 1,
+      scale: compact && !still ? 0.9 : 1,
       alignment: AlignmentDirectional.bottomStart.resolve(
         Directionality.of(context),
       ),
@@ -511,7 +673,8 @@ class GlassTabBar extends StatelessWidget {
                 Pressable(
                   key: ValueKey('tab-$i'),
                   onTap: () => onChanged(i),
-                  haptic: Haptic.selection,
+                  haptic: Haptic.light,
+                  scale: NNMotion.glassPressScale,
                   selected: i == index,
                   semanticLabel: items[i].label,
                   excludeChildSemantics: true,
@@ -519,7 +682,9 @@ class GlassTabBar extends StatelessWidget {
                     duration: duration,
                     curve: Curves.easeOutCubic,
                     height: 48,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 13 : 16,
+                    ),
                     decoration: ShapeDecoration(
                       shape: const StadiumBorder(),
                       color: i == index
@@ -537,7 +702,7 @@ class GlassTabBar extends StatelessWidget {
                         AnimatedSize(
                           duration: duration,
                           curve: Curves.easeOutCubic,
-                          child: compact && i != index
+                          child: (compact || (hideOthers && i != index))
                               ? const SizedBox.shrink()
                               : Padding(
                                   padding: const EdgeInsetsDirectional.only(
@@ -565,10 +730,12 @@ class GlassTabBar extends StatelessWidget {
 }
 
 /// Opens a glass sheet: grabber, a title with a close button, scrollable content and an optional footer
-/// that stays above the keyboard. Contents are solid fills: never glass on glass.
+/// that stays above the keyboard. Contents are plain fills: never glass on glass.
 ///
+/// It slides up on the sheet spring while the screen behind dims and steps back ([StepBack]).
 /// With [origin] (the add button's rectangle) the sheet grows out of that button as one shape and
-/// shrinks back into it on close; Reduce Motion turns that into a fade.
+/// shrinks back into it on close. Reduce Motion turns both into a fade. Sheets open on the root
+/// navigator, above the tab bar.
 Future<T?> showNNSheet<T>(
   BuildContext context, {
   required String title,
@@ -577,37 +744,206 @@ Future<T?> showNNSheet<T>(
   Key? key,
   Rect? origin,
 }) {
+  final nav = Navigator.of(context, rootNavigator: true);
+  final themes = InheritedTheme.capture(from: context, to: nav.context);
+  final label = MaterialLocalizations.of(context).modalBarrierDismissLabel;
+  Widget frame(BuildContext ctx) =>
+      _SheetFrame(key: key, title: title, body: builder, footer: footer);
   if (origin != null && origin != Rect.zero) {
-    return Navigator.of(context).push<T>(
+    return nav.push<T>(
       _MorphSheetRoute<T>(
         origin: origin,
         tint: NNTheme.of(context).palette.accent,
-        barrierLabel: MaterialLocalizations.of(
-          context,
-        ).modalBarrierDismissLabel,
-        capturedThemes: InheritedTheme.capture(
-          from: context,
-          to: Navigator.of(context).context,
-        ),
-        builder: (ctx) =>
-            _SheetFrame(key: key, title: title, body: builder, footer: footer),
+        barrierLabel: label,
+        capturedThemes: themes,
+        builder: frame,
       ),
     );
   }
-  return showModalBottomSheet<T>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    elevation: 0,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.3),
-    sheetAnimationStyle: AnimationStyle(
-      duration: NNMotion.standardDuration,
-      reverseDuration: const Duration(milliseconds: 250),
-    ),
-    builder: (ctx) =>
-        _SheetFrame(key: key, title: title, body: builder, footer: footer),
+  return nav.push<T>(
+    _SheetRoute<T>(barrierLabel: label, capturedThemes: themes, builder: frame),
   );
+}
+
+/// How far the screen behind has stepped back for the open sheets: 0 (none) to 1.
+final ValueNotifier<double> sheetBehind = ValueNotifier(0);
+final _openSheets = <Animation<double>>[];
+
+void _syncBehind() {
+  var v = 0.0;
+  for (final a in _openSheets) {
+    v = math.max(v, a.value.clamp(0.0, 1.0));
+  }
+  sheetBehind.value = v;
+}
+
+/// While a sheet is open the screen behind it steps back: it scales to 0.96 and rounds its
+/// corners, on the sheet's spring (the dimming comes from the sheet's barrier). Not with Reduce
+/// Motion. Nested uses step back once.
+class StepBack extends StatelessWidget {
+  const StepBack({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (context.findAncestorWidgetOfExactType<_SteppedBack>() != null) {
+      return child;
+    }
+    final still = reduceMotion(context);
+    return _SteppedBack(
+      child: ValueListenableBuilder<double>(
+        valueListenable: sheetBehind,
+        child: child,
+        builder: (context, v, child) {
+          final t = still ? 0.0 : v;
+          return Transform.scale(
+            scale: 1 - 0.04 * t,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(NNRadius.sheet * t),
+              clipBehavior: t > 0 ? Clip.antiAlias : Clip.none,
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SteppedBack extends ProxyWidget {
+  const _SteppedBack({required super.child});
+
+  @override
+  Element createElement() => _SteppedBackElement(this);
+}
+
+class _SteppedBackElement extends ProxyElement {
+  _SteppedBackElement(super.widget);
+
+  @override
+  void notifyClients(ProxyWidget oldWidget) {}
+}
+
+/// Sheets report their animation, so the screen behind can step back with them.
+mixin _StepsBack<T> on PopupRoute<T> {
+  CurvedAnimation? _behind;
+
+  @override
+  void install() {
+    super.install();
+    final behind = CurvedAnimation(
+      parent: animation!,
+      curve: SpringCurve(NNMotion.sheet, NNMotion.sheetDuration, clamp: true),
+      reverseCurve: Curves.easeInCubic,
+    );
+    _behind = behind;
+    _openSheets.add(behind);
+    behind.addListener(_syncBehind);
+  }
+
+  @override
+  void dispose() {
+    final behind = _behind;
+    if (behind != null) {
+      behind
+        ..removeListener(_syncBehind)
+        ..dispose();
+      _openSheets.remove(behind);
+      // Not while the tree is being torn down.
+      scheduleMicrotask(_syncBehind);
+    }
+    super.dispose();
+  }
+}
+
+/// The page of a sheet route: bottom-aligned, at most 640 wide, below the status bar, draggable.
+Widget _sheetPage(
+  BuildContext context,
+  CapturedThemes themes,
+  WidgetBuilder builder,
+) {
+  final size = MediaQuery.sizeOf(context);
+  final top = MediaQuery.paddingOf(context).top;
+  return themes.wrap(
+    _DragToClose(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 640,
+            maxHeight: size.height - top,
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: builder(context),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A sheet that slides up from the bottom edge on the sheet spring (a slight bounce).
+class _SheetRoute<T> extends PopupRoute<T> with _StepsBack<T> {
+  _SheetRoute({
+    required this.builder,
+    required this.barrierLabel,
+    required this.capturedThemes,
+  });
+
+  final WidgetBuilder builder;
+  final CapturedThemes capturedThemes;
+
+  @override
+  final String barrierLabel;
+
+  @override
+  Color get barrierColor => Colors.black.withValues(alpha: 0.3);
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Duration get transitionDuration => NNMotion.sheetDuration;
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 250);
+
+  late final CurvedAnimation _slide = CurvedAnimation(
+    parent: animation!,
+    curve: SpringCurve(NNMotion.sheet, NNMotion.sheetDuration),
+    reverseCurve: Curves.easeInCubic,
+  );
+  late final _position = Tween(
+    begin: const Offset(0, 1),
+    end: Offset.zero,
+  ).animate(_slide);
+
+  @override
+  void dispose() {
+    _slide.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) => _sheetPage(context, capturedThemes, builder);
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (reduceMotion(context)) {
+      return FadeTransition(opacity: animation, child: child);
+    }
+    return SlideTransition(position: _position, child: child);
+  }
 }
 
 class _SheetFrame extends StatelessWidget {
@@ -675,18 +1011,20 @@ class _SheetFrame extends StatelessWidget {
                     onTap: () => Navigator.of(context).maybePop(),
                     semanticLabel: close,
                     excludeChildSemantics: true,
-                    scale: 0.9,
-                    child: Container(
-                      width: touchTarget(context),
-                      height: touchTarget(context),
-                      decoration: ShapeDecoration(
-                        shape: const CircleBorder(),
-                        color: p.surface2,
-                      ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 20,
-                        color: p.text2,
+                    child: PressGlow(
+                      shape: const CircleBorder(),
+                      child: Container(
+                        width: touchTarget(context),
+                        height: touchTarget(context),
+                        decoration: ShapeDecoration(
+                          shape: const CircleBorder(),
+                          color: p.surface2,
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 20,
+                          color: p.text2,
+                        ),
                       ),
                     ),
                   ),
@@ -726,7 +1064,7 @@ class _SheetFrame extends StatelessWidget {
 /// A sheet that grows out of the button that opened it: a circle from the button's centre widens
 /// until it uncovers the whole sheet, tinted with the button's colour at first. Drag the top down
 /// or tap outside to close; it shrinks back into the button.
-class _MorphSheetRoute<T> extends PopupRoute<T> {
+class _MorphSheetRoute<T> extends PopupRoute<T> with _StepsBack<T> {
   _MorphSheetRoute({
     required this.origin,
     required this.tint,
@@ -750,37 +1088,29 @@ class _MorphSheetRoute<T> extends PopupRoute<T> {
   bool get barrierDismissible => true;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 420);
+  Duration get transitionDuration => NNMotion.sheetDuration;
 
   @override
   Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
+
+  late final CurvedAnimation _grow = CurvedAnimation(
+    parent: animation!,
+    curve: SpringCurve(NNMotion.sheet, NNMotion.sheetDuration),
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  @override
+  void dispose() {
+    _grow.dispose();
+    super.dispose();
+  }
 
   @override
   Widget buildPage(
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
-  ) {
-    final size = MediaQuery.sizeOf(context);
-    final top = MediaQuery.paddingOf(context).top;
-    return capturedThemes.wrap(
-      _DragToClose(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 640,
-              maxHeight: size.height - top,
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: builder(context),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  ) => _sheetPage(context, capturedThemes, builder);
 
   @override
   Widget buildTransitions(
@@ -792,11 +1122,7 @@ class _MorphSheetRoute<T> extends PopupRoute<T> {
     if (reduceMotion(context)) {
       return FadeTransition(opacity: animation, child: child);
     }
-    final curve = CurvedAnimation(
-      parent: animation,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
+    final curve = _grow;
     return AnimatedBuilder(
       animation: curve,
       child: child,
@@ -893,6 +1219,277 @@ class _DragToCloseState extends State<_DragToClose> {
         }
       },
       child: Transform.translate(offset: Offset(0, _dy), child: widget.child),
+    );
+  }
+}
+
+/// The toast on screen, if any.
+_ToastEntry? _toast;
+
+class _ToastEntry {
+  _ToastEntry(this.entry);
+  final OverlayEntry entry;
+
+  /// Taken off the overlay, or gone with it.
+  bool gone = false;
+
+  void remove() {
+    if (gone) return;
+    gone = true;
+    entry
+      ..remove()
+      ..dispose();
+  }
+}
+
+/// A toast: a glass capsule that floats above everything (sheets too) just over the tab bar for a
+/// few seconds, with an optional action (Undo). A new toast replaces the current one. Text on it is
+/// semibold, as on all glass; while a sheet is open it turns solid, because glass never sits on
+/// glass. With a screen reader on, a toast with an action stays until it is used or replaced.
+void showToast(
+  BuildContext context,
+  String message, {
+  String? actionLabel,
+  VoidCallback? onAction,
+  Duration duration = const Duration(seconds: 4),
+  Key? key,
+  bool check = false,
+}) {
+  final overlay =
+      Navigator.maybeOf(context, rootNavigator: true)?.overlay ??
+      Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+  _toast?.remove();
+  late final _ToastEntry toast;
+  toast = _ToastEntry(
+    OverlayEntry(
+      builder: (_) => _Toast(
+        key: key,
+        message: message,
+        check: check,
+        actionLabel: actionLabel,
+        onAction: onAction,
+        duration: duration,
+        onGone: () {
+          if (_toast == toast) _toast = null;
+          toast.remove();
+        },
+        onDispose: () {
+          if (_toast == toast) _toast = null;
+          toast.gone = true;
+        },
+      ),
+    ),
+  );
+  _toast = toast;
+  overlay.insert(toast.entry);
+}
+
+class _Toast extends StatefulWidget {
+  const _Toast({
+    super.key,
+    required this.message,
+    required this.duration,
+    required this.onGone,
+    required this.onDispose,
+    this.actionLabel,
+    this.onAction,
+    this.check = false,
+  });
+  final String message;
+
+  /// Something got done: a check draws itself at the start.
+  final bool check;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final Duration duration;
+  final VoidCallback onGone;
+  final VoidCallback onDispose;
+
+  @override
+  State<_Toast> createState() => _ToastState();
+}
+
+class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
+  late final AnimationController _in = AnimationController.unbounded(
+    vsync: this,
+  );
+  Timer? _timer;
+  bool _leaving = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_timer == null && !_leaving) {
+      if (reduceMotion(context)) {
+        _in.animateTo(1, duration: NNMotion.fade);
+      } else {
+        _in.springTo(1, NNMotion.standard);
+      }
+      final waits =
+          MediaQuery.accessibleNavigationOf(context) && widget.onAction != null;
+      _timer = Timer(
+        waits ? const Duration(minutes: 10) : widget.duration,
+        _leave,
+      );
+    }
+  }
+
+  Future<void> _leave() async {
+    if (_leaving || !mounted) return;
+    _leaving = true;
+    _timer?.cancel();
+    await _in.animateTo(0, duration: NNMotion.fade);
+    if (mounted) widget.onGone();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _in.dispose();
+    widget.onDispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nn = NNTheme.of(context);
+    final p = nn.palette;
+    final pad = MediaQuery.paddingOf(context);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final still = reduceMotion(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final side = ((width - NNLayout.maxContent) / 2).clamp(
+      NNSpace.md,
+      double.infinity,
+    );
+    final action = widget.actionLabel;
+    final onAction = widget.onAction;
+    final content = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: touchTarget(context) + 8),
+      child: Row(
+        children: [
+          if (widget.check) ...[
+            Container(
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: ShapeDecoration(
+                shape: const CircleBorder(),
+                color: p.success,
+              ),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: still
+                    ? Duration.zero
+                    : const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                builder: (context, t, _) => DrawnCheck(
+                  progress: t,
+                  color: p.surface,
+                  size: 18,
+                  stroke: 2.4,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                widget.message,
+                style: NNType.subhead.copyWith(
+                  color: p.text,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          if (action != null && onAction != null)
+            Pressable(
+              key: const ValueKey('toast-action'),
+              onTap: () {
+                _leave();
+                onAction();
+              },
+              semanticLabel: action,
+              excludeChildSemantics: true,
+              haptic: Haptic.light,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: touchTarget(context),
+                  minWidth: touchTarget(context),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Center(
+                    child: Text(
+                      action,
+                      style: NNType.subhead.copyWith(
+                        color: p.accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 14),
+        ],
+      ),
+    );
+    return Positioned(
+      left: side,
+      right: side,
+      bottom: math.max(
+        pad.bottom + NNLayout.tabBar + 24,
+        keyboard + NNSpace.sm,
+      ),
+      child: AnimatedBuilder(
+        animation: _in,
+        builder: (context, child) {
+          final t = _in.value;
+          return Opacity(
+            opacity: t.clamp(0.0, 1.0),
+            child: Transform.translate(
+              offset: Offset(0, still ? 0 : (1 - t) * 16),
+              child: child,
+            ),
+          );
+        },
+        child: Semantics(
+          container: true,
+          liveRegion: true,
+          child: ValueListenableBuilder<double>(
+            valueListenable: sheetBehind,
+            builder: (context, behind, _) => behind > 0
+                ? DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: p.surface,
+                      shape: StadiumBorder(
+                        side: BorderSide(color: p.separator),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(
+                        start: 20,
+                        end: 6,
+                      ),
+                      child: content,
+                    ),
+                  )
+                : Glass(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 20,
+                      end: 6,
+                    ),
+                    child: content,
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }

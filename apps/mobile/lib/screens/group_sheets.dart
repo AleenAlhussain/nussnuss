@@ -6,10 +6,11 @@ import '../data/models.dart';
 import '../data/session.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
-import '../design/tokens.g.dart';
 import '../design/motion.dart';
+import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../l10n/strings.g.dart';
+import 'pickers.dart';
 import 'summary_card.dart';
 
 const _emojis = [
@@ -85,6 +86,14 @@ class _NewGroupFormState extends State<NewGroupForm> {
   String _currency = guessCurrency();
   String? _template;
   String? _error;
+
+  /// Goes up with every error: the field or message shakes, with the error haptic.
+  int _shakes = 0;
+
+  void _fail(String message) => setState(() {
+    _error = message;
+    _shakes++;
+  });
   bool _busy = false;
 
   void _pickTemplate(String key, String emoji) {
@@ -114,7 +123,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
     final me = SessionScope.read(context).me?.name ?? '';
     final taken = {me.toLowerCase(), ..._people.map((x) => x.toLowerCase())};
     if (taken.contains(n.toLowerCase())) {
-      setState(() => _error = context.s.errDup);
+      _fail(context.s.errDup);
       return;
     }
     setState(() {
@@ -128,11 +137,11 @@ class _NewGroupFormState extends State<NewGroupForm> {
     final s = context.s;
     if (_person.text.trim().isNotEmpty) _addPerson();
     if (_name.text.trim().isEmpty) {
-      setState(() => _error = s.errName);
+      _fail(s.errName);
       return;
     }
     if (_people.isEmpty) {
-      setState(() => _error = s.errPeople);
+      _fail(s.errPeople);
       return;
     }
     setState(() {
@@ -149,11 +158,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
       if (mounted) Navigator.of(context).pop(g);
     } on ApiException catch (e) {
       if (mounted) {
-        setState(
-          () => _error = e.offline
-              ? s.offline
-              : (e.status == 409 ? s.errDup : e.message),
-        );
+        _fail(e.offline ? s.offline : (e.status == 409 ? s.errDup : e.message));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -241,24 +246,18 @@ class _NewGroupFormState extends State<NewGroupForm> {
           ),
         ),
         SectionLabel(s.currency),
-        DropdownButtonFormField<String>(
+        PickerField(
           key: const ValueKey('group-currency'),
-          initialValue: _currency,
-          isExpanded: true,
-          borderRadius: BorderRadius.circular(NNRadius.row),
-          dropdownColor: p.surface,
-          menuMaxHeight: 420,
-          items: [
-            for (final c in currencies)
-              DropdownMenuItem(
-                value: c.code,
-                child: Text(
-                  '${c.code} · ${c.name(s.lang)}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: (v) => setState(() => _currency = v ?? _currency),
+          label: s.currency,
+          value: currencyLabel(_currency, s.lang),
+          onTap: () async {
+            final v = await showCurrencyPicker(
+              context,
+              selected: _currency,
+              title: s.currency,
+            );
+            if (v != null && mounted) setState(() => _currency = v);
+          },
         ),
         SectionLabel(s.people),
         Wrap(
@@ -306,13 +305,7 @@ class _NewGroupFormState extends State<NewGroupForm> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: NNSpace.md),
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                _error!,
-                style: NNType.subhead.copyWith(color: p.danger),
-              ),
-            ),
+            child: ErrorText(_error!, shake: _shakes),
           ),
         const SizedBox(height: NNSpace.xl),
         NNButton(

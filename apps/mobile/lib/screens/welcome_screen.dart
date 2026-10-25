@@ -4,6 +4,7 @@ import '../data/api.dart';
 import '../data/session.dart';
 import '../design/coin.dart';
 import '../design/glass.dart';
+import '../design/page.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
@@ -27,6 +28,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   bool _asking = false;
   bool _busy = false;
   String? _error;
+
+  /// Goes up with every error: the field or message shakes, with the error haptic.
+  int _shakes = 0;
+
+  void _fail(String message) => setState(() {
+    _error = message;
+    _shakes++;
+  });
 
   @override
   void initState() {
@@ -56,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       return;
     }
     if (_name.text.trim().isEmpty) {
-      setState(() => _error = s.yourNameHint);
+      _fail(s.yourNameHint);
       return;
     }
     setState(() {
@@ -66,7 +75,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     try {
       await session.start(_name.text);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.offline ? s.offline : e.message);
+      if (mounted) _fail(e.offline ? s.offline : e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -77,92 +86,100 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     final session = context.session;
     final s = session.s;
     final p = NNTheme.of(context).palette;
-    return Scaffold(
-      key: const ValueKey('welcome'),
-      backgroundColor: p.bg,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            // Every part is built at once (not lazily), so with very large text the button is
-            // still there to scroll to, for people and for screen readers.
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(NNSpace.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: TextButton(
-                      onPressed: () => session.setLang(s.isRtl ? 'en' : 'ar'),
-                      child: Text(
-                        s.isRtl ? 'English' : 'العربية',
-                        style: NNType.subhead.copyWith(
-                          color: p.accent,
-                          fontWeight: FontWeight.w600,
+    return StepBack(
+      child: Scaffold(
+        key: const ValueKey('welcome'),
+        backgroundColor: p.bg,
+        body: Ambient.behind(
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                // Every part is built at once (not lazily), so with very large text the button is
+                // still there to scroll to, for people and for screen readers.
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(NNSpace.xl),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: TextButton(
+                          onPressed: () =>
+                              session.setLang(s.isRtl ? 'en' : 'ar'),
+                          child: Text(
+                            s.isRtl ? 'English' : 'العربية',
+                            style: NNType.subhead.copyWith(
+                              color: p.accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: NNSpace.xl),
+                      Center(
+                        child: AnimatedBuilder(
+                          animation: _coin,
+                          builder: (_, _) => Coin(size: 120, join: _coin.value),
+                        ),
+                      ),
+                      const SizedBox(height: NNSpace.xl),
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          s.welcomeTitle,
+                          textAlign: TextAlign.center,
+                          style: NNType.largeTitle.copyWith(color: p.text),
+                        ),
+                      ),
+                      const SizedBox(height: NNSpace.sm),
+                      Text(
+                        s.welcomeBody,
+                        textAlign: TextAlign.center,
+                        style: NNType.callout.copyWith(color: p.text2),
+                      ),
+                      const SizedBox(height: NNSpace.xxl),
+                      AnimatedSize(
+                        duration: reduceMotion(context)
+                            ? Duration.zero
+                            : NNMotion.standardDuration,
+                        curve: Curves.easeOutCubic,
+                        child: _asking
+                            ? Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: NNSpace.lg,
+                                ),
+                                child: NNField(
+                                  label: s.yourName,
+                                  help: s.yourNameHint,
+                                  error: _error,
+                                  shake: _shakes,
+                                  controller: _name,
+                                  autofocus: true,
+                                  maxLength: 40,
+                                  fieldKey: const ValueKey('name'),
+                                  textInputAction: TextInputAction.go,
+                                  onSubmitted: (_) => _start(),
+                                ),
+                              )
+                            : const SizedBox(width: double.infinity),
+                      ),
+                      NNButton(
+                        key: const ValueKey('start'),
+                        label: s.start,
+                        busy: _busy,
+                        onTap: _start,
+                      ),
+                      const SizedBox(height: NNSpace.xs),
+                      NNButton(
+                        key: const ValueKey('have-account'),
+                        label: s.haveAccount,
+                        kind: ButtonKind.plain,
+                        onTap: _busy ? null : () => showHaveCodeSheet(context),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: NNSpace.xl),
-                  Center(
-                    child: AnimatedBuilder(
-                      animation: _coin,
-                      builder: (_, _) => Coin(size: 120, join: _coin.value),
-                    ),
-                  ),
-                  const SizedBox(height: NNSpace.xl),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      s.welcomeTitle,
-                      textAlign: TextAlign.center,
-                      style: NNType.largeTitle.copyWith(color: p.text),
-                    ),
-                  ),
-                  const SizedBox(height: NNSpace.sm),
-                  Text(
-                    s.welcomeBody,
-                    textAlign: TextAlign.center,
-                    style: NNType.callout.copyWith(color: p.text2),
-                  ),
-                  const SizedBox(height: NNSpace.xxl),
-                  AnimatedSize(
-                    duration: reduceMotion(context)
-                        ? Duration.zero
-                        : NNMotion.standardDuration,
-                    curve: Curves.easeOutCubic,
-                    child: _asking
-                        ? Padding(
-                            padding: const EdgeInsets.only(bottom: NNSpace.lg),
-                            child: NNField(
-                              label: s.yourName,
-                              help: s.yourNameHint,
-                              error: _error,
-                              controller: _name,
-                              autofocus: true,
-                              maxLength: 40,
-                              fieldKey: const ValueKey('name'),
-                              textInputAction: TextInputAction.go,
-                              onSubmitted: (_) => _start(),
-                            ),
-                          )
-                        : const SizedBox(width: double.infinity),
-                  ),
-                  NNButton(
-                    key: const ValueKey('start'),
-                    label: s.start,
-                    busy: _busy,
-                    onTap: _start,
-                  ),
-                  const SizedBox(height: NNSpace.xs),
-                  NNButton(
-                    key: const ValueKey('have-account'),
-                    label: s.haveAccount,
-                    kind: ButtonKind.plain,
-                    onTap: _busy ? null : () => showHaveCodeSheet(context),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

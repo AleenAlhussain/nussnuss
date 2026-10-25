@@ -101,42 +101,53 @@ class _Row extends StatelessWidget {
         ? s.fill(s.nReminder, {'to': '${d['to'] ?? ''}', 'amount': amount})
         : n.kind;
     final group = '${d['emoji'] ?? ''} ${d['group'] ?? ''}'.trim();
-    return MergeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: NNSpace.sm),
-        child: Row(
-          children: [
-            Icon(
-              Icons.notifications_rounded,
-              color: n.read ? p.text3 : p.accent,
-            ),
-            const SizedBox(width: NNSpace.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: NNType.body.copyWith(
-                      color: p.text,
-                      fontWeight: n.read ? FontWeight.w400 : FontWeight.w600,
-                    ),
+    final id = n.groupId;
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: NNSpace.sm),
+      child: Row(
+        children: [
+          Icon(Icons.notifications_rounded, color: n.read ? p.text3 : p.accent),
+          const SizedBox(width: NNSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: NNType.body.copyWith(
+                    color: p.text,
+                    fontWeight: n.read ? FontWeight.w400 : FontWeight.w600,
                   ),
-                  Text(
-                    [
-                      if (group.isNotEmpty) group,
-                      MaterialLocalizations.of(
-                        context,
-                      ).formatMediumDate(n.createdAt),
-                    ].join(' · '),
-                    style: NNType.footnote.copyWith(color: p.text2),
-                  ),
-                ],
-              ),
+                ),
+                Text(
+                  [
+                    if (group.isNotEmpty) group,
+                    MaterialLocalizations.of(
+                      context,
+                    ).formatMediumDate(n.createdAt),
+                  ].join(' · '),
+                  style: NNType.footnote.copyWith(color: p.text2),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (id != null) Icon(Icons.chevron_right_rounded, color: p.text3),
+        ],
       ),
+    );
+    if (id == null) return MergeSemantics(child: row);
+    // Opens the group it is about, inside the Groups tab.
+    return Pressable(
+      key: ValueKey('notice-${n.id}'),
+      onTap: () {
+        final session = SessionScope.read(context);
+        Navigator.of(context).maybePop();
+        session.openGroup(id);
+      },
+      semanticLabel: [title, if (group.isNotEmpty) group].join(', '),
+      excludeChildSemantics: true,
+      scale: 0.98,
+      child: row,
     );
   }
 }

@@ -62,7 +62,7 @@ class Session extends ChangeNotifier {
   Me? me;
   String lang = 'en';
   ThemePref theme = ThemePref.system;
-  GlassPref glass = GlassPref.clear;
+  GlassPref glass = GlassPref.tinted;
   String look = 'default';
   bool sounds = false;
   Plan plan = Plan.free;
@@ -79,6 +79,37 @@ class Session extends ChangeNotifier {
   void openInvite(String token) {
     pendingInvite = token;
     notifyListeners();
+  }
+
+  /// Opens a group inside the Groups tab, from anywhere (a notification, a link).
+  void openGroup(String id) {
+    openGroupId = id;
+    notifyListeners();
+  }
+
+  static const _recentKey = 'nn:recent-search';
+
+  /// The last five searches that led to a result, newest first.
+  Future<List<String>> recentSearches() async {
+    try {
+      final raw = await store.read(_recentKey);
+      if (raw == null) return const [];
+      return (jsonDecode(raw) as List<dynamic>).cast<String>();
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  Future<List<String>> rememberSearch(String q) async {
+    final k = q.trim();
+    final now = await recentSearches();
+    if (k.isEmpty) return now;
+    final next = [
+      k,
+      ...now.where((r) => r.toLowerCase() != k.toLowerCase()),
+    ].take(5).toList();
+    await store.write(_recentKey, jsonEncode(next));
+    return next;
   }
 
   /// Bumped whenever groups change, so lists know to refresh.
@@ -98,9 +129,7 @@ class Session extends ChangeNotifier {
     theme =
         ThemePref.values.asNameMap()[await store.read(_themeKey)] ??
         ThemePref.system;
-    glass =
-        GlassPref.values.asNameMap()[await store.read(_glassKey)] ??
-        GlassPref.clear;
+    glass = GlassPref.parse(await store.read(_glassKey));
     final savedLook = await store.read(_lookKey);
     look = looks.contains(savedLook) ? savedLook! : 'default';
     sounds = await store.read(_soundsKey) == 'on';

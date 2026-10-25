@@ -3,8 +3,20 @@ import 'package:flutter/material.dart';
 
 import 'tokens.g.dart';
 
-/// The person's glass choice. Frosted also turns on by itself with Increase Contrast.
-enum GlassPref { clear, frosted }
+/// How much the glass shows through: Clear, Tinted (the default) or Solid. Solid also turns on by
+/// itself with Increase Contrast.
+enum GlassPref {
+  clear,
+  tinted,
+  solid;
+
+  /// Reads what older builds stored too: 'clear' or 'auto' is Clear, 'frosted' is Solid.
+  static GlassPref parse(String? v) => switch (v) {
+    'clear' || 'auto' => GlassPref.clear,
+    'solid' || 'frosted' => GlassPref.solid,
+    _ => GlassPref.tinted,
+  };
+}
 
 /// Palette and glass resolved for one brightness and contrast level.
 /// Read it with `NNTheme.of(context)`; every NussNuss widget draws from this, never from raw hex.
@@ -68,6 +80,20 @@ NNPalette _contrasted(NNPalette p) => NNPalette(
   focus: p.focus,
 );
 
+NNGlassStyle _tinted(NNPalette p, bool dark) {
+  final base = dark ? NNGlass.tintedDark : NNGlass.tintedLight;
+  return NNGlassStyle(
+    fill: p.accentSoft.withValues(
+      alpha: dark ? NNGlass.tintedAlphaDark : NNGlass.tintedAlphaLight,
+    ),
+    highlight: base.highlight,
+    shadow: base.shadow,
+    blur: base.blur,
+    saturation: base.saturation,
+    bordered: false,
+  );
+}
+
 /// The palette for a look ('default', 'night', 'saffron') in one brightness. Night is always dark.
 NNPalette paletteFor(String look, Brightness brightness) {
   final dark = brightness == Brightness.dark;
@@ -90,12 +116,14 @@ ThemeData buildTheme({
   final dark = brightness == Brightness.dark;
   final base = paletteFor(look, brightness);
   final p = highContrast ? _contrasted(base) : base;
-  final frosted = highContrast || glass == GlassPref.frosted;
-  final g = switch ((dark, frosted)) {
-    (false, false) => NNGlass.regularLight,
-    (true, false) => NNGlass.regularDark,
-    (false, true) => NNGlass.frostedLight,
-    (true, true) => NNGlass.frostedDark,
+  final level = highContrast ? GlassPref.solid : glass;
+  final g = switch ((level, dark)) {
+    (GlassPref.solid, false) => NNGlass.frostedLight,
+    (GlassPref.solid, true) => NNGlass.frostedDark,
+    (GlassPref.clear, false) => NNGlass.regularLight,
+    (GlassPref.clear, true) => NNGlass.regularDark,
+    // Tinted takes the look's own accentSoft, so Saffron and Night tint their glass too.
+    (GlassPref.tinted, _) => _tinted(p, dark),
   };
 
   final scheme = ColorScheme(

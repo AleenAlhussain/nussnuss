@@ -8,6 +8,7 @@ import 'package:nussnuss/data/session.dart';
 import 'package:nussnuss/design/glass.dart';
 import 'package:nussnuss/design/motion.dart';
 import 'package:nussnuss/design/theme.dart';
+import 'package:nussnuss/design/widgets.dart';
 import 'package:nussnuss/format.dart';
 import 'package:nussnuss/l10n/strings.g.dart';
 import 'package:nussnuss/screens/keypad.dart';
@@ -134,6 +135,27 @@ Future<void> startWithGroup(
 Future<void> goBack(WidgetTester tester) async {
   Navigator.of(tester.element(byKey('group'))).pop();
   await tester.pumpAndSettle();
+}
+
+/// Records haptics instead of playing them, for this test.
+List<Haptic> recordHaptics() {
+  final played = <Haptic>[];
+  final before = hapticPlayer;
+  hapticPlayer = played.add;
+  addTearDown(() => hapticPlayer = before);
+  return played;
+}
+
+/// On the group screen: an expense of [amount] for [title], paid by me, split equally.
+Future<void> addExpense(
+  WidgetTester tester,
+  String amount,
+  String title,
+) async {
+  await tapKey(tester, 'add');
+  await typeAmount(tester, amount);
+  await tester.enterText(byKey('title'), title);
+  await tapKey(tester, 'save-expense');
 }
 
 /// Leaves every screen so polling timers stop before the test ends.
@@ -637,27 +659,56 @@ void main() {
     );
   });
 
-  testWidgets('glass turns solid with Frosted and with Increase Contrast', (
-    tester,
-  ) async {
-    Widget host(GlassPref pref) => MaterialApp(
+  test('glass levels: Clear, Tinted (the default), Solid; older choices '
+      'carry over', () {
+    expect(GlassPref.values, [
+      GlassPref.clear,
+      GlassPref.tinted,
+      GlassPref.solid,
+    ]);
+    expect(GlassPref.parse(null), GlassPref.tinted);
+    expect(GlassPref.parse('tinted'), GlassPref.tinted);
+    expect(GlassPref.parse('clear'), GlassPref.clear);
+    expect(GlassPref.parse('auto'), GlassPref.clear);
+    expect(GlassPref.parse('solid'), GlassPref.solid);
+    expect(GlassPref.parse('frosted'), GlassPref.solid);
+  });
+
+  testWidgets('glass blurs when Clear or Tinted, not when Solid or with '
+      'Increase Contrast, and never sits on glass', (tester) async {
+    Widget host(GlassPref pref, {bool nested = false}) => MaterialApp(
       theme: buildTheme(brightness: Brightness.light, glass: pref),
       highContrastTheme: buildTheme(
         brightness: Brightness.light,
         glass: pref,
         highContrast: true,
       ),
-      home: const Scaffold(
-        body: Center(child: Glass(child: SizedBox(width: 120, height: 44))),
+      home: Scaffold(
+        body: Center(
+          child: Glass(
+            child: nested
+                ? const Glass(child: SizedBox(width: 120, height: 44))
+                : const SizedBox(width: 120, height: 44),
+          ),
+        ),
       ),
     );
 
     // MaterialApp cross-fades theme changes, so let each one finish before looking.
+    await tester.pumpWidget(host(GlassPref.tinted));
+    await tester.pumpAndSettle();
+    expect(find.byType(BackdropFilter), findsOneWidget);
+
     await tester.pumpWidget(host(GlassPref.clear));
     await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsOneWidget);
 
-    await tester.pumpWidget(host(GlassPref.frosted));
+    // Glass inside glass is a plain fill.
+    await tester.pumpWidget(host(GlassPref.tinted, nested: true));
+    await tester.pumpAndSettle();
+    expect(find.byType(BackdropFilter), findsOneWidget);
+
+    await tester.pumpWidget(host(GlassPref.solid));
     await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsNothing);
 
@@ -667,6 +718,261 @@ void main() {
     await tester.pumpWidget(host(GlassPref.clear));
     await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsNothing);
+  });
+
+  testWidgets('settings: the glass level has three choices and starts '
+      'Tinted', (tester) async {
+    final app = await pumpApp(tester);
+    expect(app.session.glass, GlassPref.tinted);
+    await startWithGroup(tester);
+    await goBack(tester);
+    await tapKey(tester, 'tab-1');
+    await reveal(tester, byKey('settings-glass'));
+    for (final g in GlassPref.values) {
+      expect(byKey('seg-$g'), findsOneWidget);
+    }
+    expect(
+      tester.widget<Segmented<GlassPref>>(byKey('settings-glass')).selected,
+      GlassPref.tinted,
+    );
+    await tapKey(tester, 'seg-GlassPref.solid');
+    expect(app.session.glass, GlassPref.solid);
+    expect((app.session.store as MemoryStore).values['nn:glass'], 'solid');
+    await leave(tester);
+
+    // A choice saved by an older version: Frosted is now Solid, Auto is Clear.
+    final frosted = await pumpApp(tester, store: {'nn:glass': 'frosted'});
+    expect(frosted.session.glass, GlassPref.solid);
+    await leave(tester);
+    final auto = await pumpApp(tester, store: {'nn:glass': 'auto'});
+    expect(auto.session.glass, GlassPref.clear);
+    await leave(tester);
+  });
+
+  testWidgets('tabs keep their own pages; tapping the tab you are on scrolls '
+      'up, then goes back to its first page', (tester) async {
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    // The tab bar floats over the group too.
+    expect(byKey('tab-0'), findsOneWidget);
+
+    // Settings and back: the group is still open under Groups.
+    await tapKey(tester, 'tab-1');
+    expect(byKey('settings'), findsOneWidget);
+    await tapKey(tester, 'tab-0');
+    expect(byKey('group'), findsOneWidget);
+
+    // Already at the top of the group: tapping Groups goes back to the list.
+    await tapKey(tester, 'tab-0');
+    expect(byKey('group'), findsNothing);
+    expect(byKey('groups'), findsOneWidget);
+    expect(find.text('Salalah trip'), findsOneWidget);
+
+    // Scrolled down in Settings: tapping Settings scrolls back to the top.
+    await tapKey(tester, 'tab-1');
+    ScrollPosition position() => tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: byKey('settings'),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+    await tester.drag(byKey('settings'), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(position().pixels, greaterThan(100));
+    await tapKey(tester, 'tab-1');
+    expect(position().pixels, 0);
+    await leave(tester);
+  });
+
+  testWidgets('a notification opens its group inside the Groups tab', (
+    tester,
+  ) async {
+    final server = FakeServer();
+    await pumpApp(tester, server: server);
+    await startWithGroup(tester);
+    final g = server.groupNamed('Salalah trip');
+    await goBack(tester);
+    server.notifications['Talal'] = [
+      {
+        'id': 'n1',
+        'kind': 'reminder',
+        'groupId': g.id,
+        'data': {
+          'to': 'Sara',
+          'amount': 2500,
+          'currency': 'AED',
+          'group': 'Salalah trip',
+          'emoji': g.emoji,
+        },
+        'createdAt': DateTime.now().toIso8601String(),
+        'read': false,
+      },
+    ];
+    await tapKey(tester, 'bell');
+    expect(byKey('notifications-sheet'), findsOneWidget);
+    await tapKey(tester, 'notice-n1');
+    expect(byKey('notifications-sheet'), findsNothing);
+    expect(byKey('group'), findsOneWidget);
+    expect(byKey('tab-0'), findsOneWidget);
+    // Back goes to the groups list underneath.
+    await goBack(tester);
+    expect(byKey('groups'), findsOneWidget);
+    await leave(tester);
+  });
+
+  testWidgets('search groups: by name and people, expenses by title, and '
+      'recent searches', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await addExpense(tester, '120', 'Chalet');
+    await goBack(tester);
+    await tapKey(tester, 'add');
+    await tester.enterText(byKey('group-name'), 'Our flat');
+    await tester.enterText(byKey('person-name'), 'Huda');
+    await tapKey(tester, 'add-person');
+    await tapKey(tester, 'create-group');
+    await goBack(tester);
+    expect(byKey('search'), findsOneWidget);
+    await meetsStandards(tester);
+
+    Future<void> search(String q) async {
+      await tester.enterText(byKey('search'), q);
+      await tester.pumpAndSettle();
+    }
+
+    await search('sala');
+    expect(find.text('Salalah trip'), findsOneWidget);
+    expect(find.text('Our flat'), findsNothing);
+    await search('huda');
+    expect(find.text('Our flat'), findsOneWidget);
+    expect(find.text('Salalah trip'), findsNothing);
+    // Expenses are found in the groups kept on this phone.
+    await search('chal');
+    expect(find.text('Expenses'), findsOneWidget);
+    expect(find.text('Chalet'), findsOneWidget);
+    await search('nothing like this');
+    expect(find.text('No results for “nothing like this”'), findsOneWidget);
+
+    // A search that led somewhere is remembered.
+    await search('chal');
+    await tapIt(tester, find.text('Chalet'));
+    expect(byKey('group'), findsOneWidget);
+    await goBack(tester);
+    await search('');
+    expect(byKey('recent-searches'), findsOneWidget);
+    await tapKey(tester, 'recent-0');
+    expect(find.text('Chalet'), findsOneWidget);
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('search in a group: by title, who paid or amount', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    for (final (amount, title) in [
+      ('10', 'Taxi'),
+      ('20', 'Lunch'),
+      ('30', 'Fuel'),
+      ('40', 'Tickets'),
+    ]) {
+      await addExpense(tester, amount, title);
+    }
+    // A short list needs no search.
+    expect(byKey('expense-search'), findsNothing);
+    await addExpense(tester, '55', 'Dinner');
+    await reveal(tester, byKey('expense-search'));
+
+    Future<void> search(String q) async {
+      await tester.enterText(byKey('expense-search'), q);
+      await tester.pumpAndSettle();
+    }
+
+    await search('fue');
+    expect(find.text('Fuel'), findsOneWidget);
+    expect(find.text('Taxi'), findsNothing);
+    await search('55');
+    expect(find.text('Dinner'), findsOneWidget);
+    expect(find.text('Fuel'), findsNothing);
+    await search('talal');
+    expect(find.text('Taxi'), findsOneWidget);
+    expect(find.text('Dinner'), findsOneWidget);
+    await search('zzz');
+    expect(byKey('no-results'), findsOneWidget);
+    expect(find.text('Taxi'), findsNothing);
+    await leave(tester);
+  });
+
+  testWidgets('a form error shakes the field or message, with the error '
+      'haptic', (tester) async {
+    final played = recordHaptics();
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await tapKey(tester, 'add');
+    Shake shakeOf(Finder f) => tester.widget<Shake>(
+      find.ancestor(of: f, matching: find.byType(Shake)).first,
+    );
+
+    played.clear();
+    await tapKey(tester, 'save-expense');
+    expect(find.text('Enter an amount.'), findsOneWidget);
+    expect(played, [Haptic.error]);
+    expect(shakeOf(byKey('expense-error')).trigger, 1);
+    // No amount: the amount shakes too.
+    expect(shakeOf(byKey('amount')).trigger, 1);
+    // The same mistake again shakes again.
+    await tapKey(tester, 'save-expense');
+    expect(played, [Haptic.error, Haptic.error]);
+    expect(shakeOf(byKey('expense-error')).trigger, 2);
+    await tapKey(tester, 'sheet-close');
+    await leave(tester);
+
+    // A code that does not work.
+    await pumpApp(tester);
+    await tapKey(tester, 'have-account');
+    played.clear();
+    await tester.enterText(byKey('code'), 'nope-nope');
+    await tapKey(tester, 'use-code');
+    expect(find.textContaining('code doesn’t work'), findsOneWidget);
+    expect(played, [Haptic.error]);
+    await leave(tester);
+  });
+
+  testWidgets('pull to refresh reloads the group and the groups, with a '
+      'light tap', (tester) async {
+    final played = recordHaptics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    final id = app.server.groupNamed('Salalah trip').id;
+    int count(String call) => app.server.calls.where((c) => c == call).length;
+
+    final group = count('GET /groups/$id');
+    played.clear();
+    await tester.drag(byKey('group'), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(count('GET /groups/$id'), group + 1);
+    expect(played, contains(Haptic.light));
+    expect(byKey('pull-refresh'), findsNothing);
+
+    await goBack(tester);
+    final groups = count('GET /groups');
+    played.clear();
+    await tester.drag(byKey('groups'), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(count('GET /groups'), groups + 1);
+    expect(played, contains(Haptic.light));
+
+    // A short pull does nothing.
+    await tester.drag(byKey('groups'), const Offset(0, 60));
+    await tester.pumpAndSettle();
+    expect(count('GET /groups'), groups + 1);
+    await leave(tester);
   });
 
   test('looks: Night is always dark, Saffron follows the setting', () {

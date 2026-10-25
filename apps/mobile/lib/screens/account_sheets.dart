@@ -30,6 +30,14 @@ class _HaveCode extends StatefulWidget {
 class _HaveCodeState extends State<_HaveCode> {
   final _code = TextEditingController();
   String? _error;
+
+  /// Goes up with every error: the field or message shakes, with the error haptic.
+  int _shakes = 0;
+
+  void _fail(String message) => setState(() {
+    _error = message;
+    _shakes++;
+  });
   bool _busy = false;
 
   @override
@@ -42,7 +50,7 @@ class _HaveCodeState extends State<_HaveCode> {
     final session = SessionScope.read(context);
     final s = session.s;
     if (_code.text.trim().length < 6) {
-      setState(() => _error = s.codeHint);
+      _fail(s.codeHint);
       return;
     }
     setState(() {
@@ -54,10 +62,8 @@ class _HaveCodeState extends State<_HaveCode> {
       if (mounted) Navigator.of(context).maybePop();
     } on ApiException catch (e) {
       if (mounted) {
-        setState(
-          () => _error = e.offline
-              ? s.offline
-              : (e.status == 401 ? s.codeBad : e.message),
+        _fail(
+          e.offline ? s.offline : (e.status == 401 ? s.codeBad : e.message),
         );
       }
     } finally {
@@ -75,6 +81,7 @@ class _HaveCodeState extends State<_HaveCode> {
           label: s.codeLabel,
           help: s.codeHint,
           error: _error,
+          shake: _shakes,
           controller: _code,
           autofocus: true,
           maxLength: 40,
@@ -180,9 +187,7 @@ class _CodeBodyState extends State<_CodeBody> {
                   await SessionScope.read(context).device.copy(r.code);
                   haptic(Haptic.success);
                   if (!context.mounted) return;
-                  ScaffoldMessenger.maybeOf(
-                    context,
-                  )?.showSnackBar(SnackBar(content: Text(s.codeCopied)));
+                  showToast(context, s.codeCopied);
                 },
         ),
       ],
@@ -242,6 +247,14 @@ class _AddPayToState extends State<_AddPayTo> {
   final _value = TextEditingController();
   final _label = TextEditingController();
   String? _error;
+
+  /// Goes up with every error: the field or message shakes, with the error haptic.
+  int _shakes = 0;
+
+  void _fail(String message) => setState(() {
+    _error = message;
+    _shakes++;
+  });
   bool _busy = false;
 
   @override
@@ -255,7 +268,7 @@ class _AddPayToState extends State<_AddPayTo> {
     final session = SessionScope.read(context);
     final s = session.s;
     if (_value.text.trim().length < 3) {
-      setState(() => _error = s.payValue);
+      _fail(s.payValue);
       return;
     }
     final item = PayTo(
@@ -272,7 +285,7 @@ class _AddPayToState extends State<_AddPayTo> {
       await session.setPayTo([...?session.me?.payTo, item]);
       if (mounted) Navigator.of(context).pop(item);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.offline ? s.offline : e.message);
+      if (mounted) _fail(e.offline ? s.offline : e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -308,6 +321,7 @@ class _AddPayToState extends State<_AddPayTo> {
             _ => 'https://',
           },
           error: _error,
+          shake: _shakes,
           controller: _value,
           maxLength: 120,
           fieldKey: const ValueKey('pay-value'),

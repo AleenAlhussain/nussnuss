@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/session.dart';
 import 'design/coin.dart';
+import 'design/page.dart';
 import 'design/theme.dart';
 import 'design/tokens.g.dart';
 import 'screens/home.dart';
@@ -160,7 +161,7 @@ class _Launch extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: NNTheme.of(context).palette.bg,
-      body: const Center(child: Coin(size: 96)),
+      body: Ambient.behind(const Center(child: Coin(size: 96))),
     );
   }
 }

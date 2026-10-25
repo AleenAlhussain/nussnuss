@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../core/extras.dart';
+import '../core/money.dart';
 import '../core/types.dart';
 import '../data/api.dart';
 import '../data/models.dart';
@@ -43,6 +45,12 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   StreamSubscription<int>? _live;
   late final Session _session = SessionScope.read(context);
   int _pending = 0;
+
+  /// True while the list first appears: its rows arrive one after another.
+  bool _fresh = true;
+
+  /// Filters the expenses by title, who paid or amount.
+  final _q = TextEditingController();
 
   Api get _api => _session.api;
 
@@ -91,6 +99,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _q.dispose();
     _poll?.cancel();
     _live?.cancel();
     _session.repo.removeListener(_onQueue);
@@ -149,28 +158,28 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     _session.touch();
   }
 
-  void _toast(String message, {Future<GroupDetail> Function()? undo}) {
+  void _toast(
+    String message, {
+    Future<GroupDetail> Function()? undo,
+    bool check = false,
+  }) {
     final s = _session.s;
-    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        key: const ValueKey('toast'),
-        content: Text(message),
-        duration: const Duration(seconds: 5),
-        action: undo == null
-            ? null
-            : SnackBarAction(
-                label: s.undo,
-                onPressed: () async {
-                  try {
-                    final g = await undo();
-                    if (mounted) _apply(g);
-                  } on ApiException catch (e) {
-                    if (mounted) setState(() => _error = e.message);
-                  }
-                },
-              ),
-      ),
+    showToast(
+      context,
+      message,
+      key: const ValueKey('toast'),
+      check: check,
+      actionLabel: undo == null ? null : s.undo,
+      onAction: undo == null
+          ? null
+          : () async {
+              try {
+                final g = await undo();
+                if (mounted) _apply(g);
+              } on ApiException catch (e) {
+                if (mounted) setState(() => _error = e.message);
+              }
+            },
     );
   }
 
@@ -233,23 +242,27 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _markPaid(Transfer t) async {
+  /// After the card's check has drawn and it has folded away (the card plays the success haptic).
+  /// False if it could not be recorded, so the card comes back.
+  Future<bool> _markPaid(Transfer t) async {
     final g = _g;
-    if (g == null) return;
+    if (g == null) return false;
     try {
       final r = await _session.repo.pay(g, t);
-      if (!mounted) return;
+      if (!mounted) return true;
       _apply(r.detail);
-      haptic(Haptic.success);
       final s = _session.s;
       _toast(
         r.queued ? '${s.paidRecorded}. ${s.savedOffline}' : s.paidRecorded,
+        check: true,
         undo: () async => r.queued
             ? _session.repo.cancelPending(r.detail, r.id)
             : _session.repo.took(await _api.unpay(r.id)),
       );
+      return true;
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+      return false;
     }
   }
 
@@ -357,6 +370,10 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
       );
     }
 
+    if (_fresh) {
+      // Rows built after this frame (while scrolling) just appear.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fresh = false);
+    }
     final last = g.expenses.isEmpty ? null : g.expenses.first;
     return NNPage(
       key: const ValueKey('group'),
@@ -417,6 +434,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
               child: Padding(
                 padding: const EdgeInsets.only(top: NNSpace.md),
                 child: CircleCard(
+                  key: ValueKey('circle-card-${c.id}'),
                   group: g,
                   circle: c,
                   onTap: () => showCircleSheet(
@@ -439,6 +457,16 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
             ),
           ),
         ),
+        if (_tab == _Tab.expenses && g.expenses.length >= 5)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: NNSpace.sm),
+              child: _SearchField(
+                controller: _q,
+                onChanged: () => setState(() {}),
+              ),
+            ),
+          ),
         if (_tab == _Tab.expenses) ..._expenses(g) else ..._settle(g),
       ],
     );
@@ -458,10 +486,34 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
         ),
       ];
     }
+    final k = g.expenses.length >= 5 ? _q.text.trim().toLowerCase() : '';
+    bool matches(Expense e) =>
+        k.isEmpty ||
+        e.title.toLowerCase().contains(k) ||
+        g.nameOf(e.paidBy).toLowerCase().contains(k) ||
+        (e.paidBy == g.me && s.you.toLowerCase().contains(k)) ||
+        money(e.amount, e.currency, s.lang).toLowerCase().contains(k) ||
+        minorToInput(e.amount, e.currency).contains(k);
+    final shown = g.expenses.where(matches).toList();
+    if (shown.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: Padding(
+            key: const ValueKey('no-results'),
+            padding: const EdgeInsets.symmetric(vertical: NNSpace.xl),
+            child: Text(
+              s.fill(s.noResults, {'q': _q.text.trim()}),
+              textAlign: TextAlign.center,
+              style: NNType.subhead.copyWith(color: p.text2),
+            ),
+          ),
+        ),
+      ];
+    }
     // One continuous list: a day heading, then that day's expenses, with air between days.
     final rows = <Object>[];
     DateTime? day;
-    for (final e in g.expenses) {
+    for (final e in shown) {
       final k = dayKey(e.spentAt);
       if (k != day) {
         rows.add(k);
@@ -477,7 +529,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
           if (r is DateTime) return SectionLabel(dayLabel(r, s));
           final e = r as Expense;
           final nextIsRow = i + 1 < rows.length && rows[i + 1] is Expense;
-          return Column(
+          final column = Column(
             children: [
               _ExpenseRow(
                 group: g,
@@ -492,6 +544,12 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
                   color: p.separator,
                 ),
             ],
+          );
+          return FadeIn(
+            key: ValueKey('fade-${e.id}'),
+            index: i,
+            animate: _fresh,
+            child: column,
           );
         },
       ),
@@ -541,6 +599,8 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
             group: g,
             t: t,
             onPaid: () => _markPaid(t),
+            index: i,
+            fresh: _fresh,
             onRemind: t.to == g.me ? () => _remind(t) : null,
             payTo: t.from == g.me
                 ? g.member(t.to)?.payTo ?? const []
@@ -768,7 +828,7 @@ class _ExpenseRow extends StatelessWidget {
 /// Swipe toward the person being paid to mark it as paid, or use the button. Undo lives in the toast.
 /// When they owe you there is a Remind button; when you owe someone who shared how to pay them,
 /// there is one button per way.
-class _TransferCard extends StatelessWidget {
+class _TransferCard extends StatefulWidget {
   const _TransferCard({
     super.key,
     required this.group,
@@ -777,13 +837,69 @@ class _TransferCard extends StatelessWidget {
     required this.onRemind,
     required this.payTo,
     required this.onPayWith,
+    this.index = 0,
+    this.fresh = false,
   });
   final GroupDetail group;
   final Transfer t;
-  final VoidCallback onPaid;
+
+  /// Runs once the card has shown it is done; false brings the card back.
+  final Future<bool> Function() onPaid;
   final VoidCallback? onRemind;
   final List<PayTo> payTo;
   final ValueChanged<PayTo> onPayWith;
+  final int index;
+  final bool fresh;
+
+  @override
+  State<_TransferCard> createState() => _TransferCardState();
+}
+
+class _TransferCardState extends State<_TransferCard>
+    with SingleTickerProviderStateMixin {
+  bool _done = false;
+
+  /// Past the point where letting go marks it paid.
+  bool _reached = false;
+  late final AnimationController _pop = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 150),
+  );
+
+  GroupDetail get group => widget.group;
+  Transfer get t => widget.t;
+  List<PayTo> get payTo => widget.payTo;
+  VoidCallback? get onRemind => widget.onRemind;
+  ValueChanged<PayTo> get onPayWith => widget.onPayWith;
+
+  @override
+  void dispose() {
+    _pop.dispose();
+    super.dispose();
+  }
+
+  void onPaid() {
+    if (!_done) setState(() => _done = true);
+  }
+
+  Future<void> _finish() async {
+    final ok = await widget.onPaid();
+    if (!ok && mounted) {
+      setState(() {
+        _done = false;
+        _reached = false;
+      });
+    }
+  }
+
+  void _onSwipe(DismissUpdateDetails d) {
+    if (d.reached == _reached) return;
+    setState(() => _reached = d.reached);
+    if (d.reached) {
+      haptic(Haptic.selection);
+      if (!reduceMotion(context)) _pop.forward(from: 0);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -793,9 +909,10 @@ class _TransferCard extends StatelessWidget {
     final amount = money(t.amount, group.currency, s.lang);
     String method(PayTo x) =>
         x.label?.isNotEmpty == true ? x.label! : s.raw('pay_${x.kind}');
-    return Dismissible(
+    final dismissible = Dismissible(
       key: ValueKey('swipe-${t.from}-${t.to}-${t.amount}'),
-      direction: DismissDirection.startToEnd,
+      direction: _done ? DismissDirection.none : DismissDirection.startToEnd,
+      onUpdate: _onSwipe,
       confirmDismiss: (_) async {
         onPaid();
         return false;
@@ -810,7 +927,21 @@ class _TransferCard extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_rounded, color: p.surface),
+            // At the threshold the tick pops (150 ms) and fills.
+            AnimatedBuilder(
+              animation: _pop,
+              builder: (context, child) => Transform.scale(
+                scale: 1 + 0.3 * math.sin(math.pi * _pop.value),
+                child: child,
+              ),
+              child: Icon(
+                _reached
+                    ? Icons.check_circle_rounded
+                    : Icons.check_circle_outline_rounded,
+                key: ValueKey('swipe-tick-$_reached'),
+                color: p.surface,
+              ),
+            ),
             const SizedBox(width: NNSpace.xs),
             Text(s.markPaid, style: NNType.headline.copyWith(color: p.surface)),
           ],
@@ -914,6 +1045,11 @@ class _TransferCard extends StatelessWidget {
         ),
       ),
     );
+    return FadeIn(
+      index: widget.index,
+      animate: widget.fresh,
+      child: DoneAndGone(done: _done, onDone: _finish, child: dismissible),
+    );
   }
 }
 
@@ -987,6 +1123,46 @@ class _BalanceRow extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Filters a long list of expenses. A plain field in the content (not glass).
+class _SearchField extends StatefulWidget {
+  const _SearchField({required this.controller, required this.onChanged});
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+
+  @override
+  State<_SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<_SearchField> {
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: p.surface,
+        shape: StadiumBorder(side: BorderSide(color: p.separator)),
+      ),
+      child: SearchFieldBody(
+        controller: widget.controller,
+        focusNode: _focus,
+        hint: context.s.search,
+        onChanged: widget.onChanged,
+        fieldKey: const ValueKey('expense-search'),
+        clearKey: const ValueKey('expense-search-clear'),
+        ring: p.focus,
       ),
     );
   }
