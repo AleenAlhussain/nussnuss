@@ -6,9 +6,21 @@ let failures = 0;
 const line = (ok, label, ratio, need) =>
   console.log(`  ${ok ? 'OK  ' : 'FAIL'} ${label.padEnd(44)} ${ratio.toFixed(2).padStart(5)}:1${need ? ` (need ${need})` : ''}`);
 
-for (const mode of ['light', 'dark']) {
-  const c = tokens.color[mode];
-  console.log(`\n[${mode}] token pairs`);
+// Every palette people can see: light and dark, and each look laid over them.
+const palettes = [
+  ['light', tokens.color.light, 'light'],
+  ['dark', tokens.color.dark, 'dark'],
+];
+for (const [name, look] of Object.entries(tokens.looks ?? {})) {
+  for (const mode of ['light', 'dark']) {
+    if (look.onlyDark && mode === 'light') continue;
+    if (!look[mode]) continue;
+    palettes.push([`${name} ${mode}`, { ...tokens.color[mode], ...look[mode] }, mode]);
+  }
+}
+
+for (const [label, c, mode] of palettes) {
+  console.log(`\n[${label}] token pairs`);
   for (const [fg, bg, kind] of tokens.pairs) {
     const r = contrast(c[fg], c[bg]);
     const need = kind === 'body' ? 4.5 : kind === 'ui' ? 3 : 0;
@@ -19,7 +31,7 @@ for (const mode of ['light', 'dark']) {
 
   for (const variant of ['regular', 'frosted']) {
     const g = tokens.glass[variant][mode];
-    console.log(`\n[${mode}] text on ${variant} glass`);
+    console.log(`\n[${label}] text on ${variant} glass`);
     for (const backdropKey of tokens.glass.backdrops[mode]) {
       const surface = composite(g.fill, g.fillAlpha, c[backdropKey]);
       for (const fg of tokens.glass.onGlass) {

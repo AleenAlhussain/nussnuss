@@ -2,6 +2,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nussnuss/core/money.dart';
 import 'package:nussnuss/core/split.dart';
+import 'package:nussnuss/core/suggest.dart';
 import 'package:nussnuss/core/types.dart';
 
 const all3 = [SplitItem('a', 1), SplitItem('s', 1), SplitItem('o', 1)];
@@ -228,5 +229,41 @@ void main() {
         expect(settles(b, t), isTrue);
       },
     );
+  });
+
+  group('title suggestions', () {
+    test('recent titles first, then ideas for the hour and the kind of group, '
+        'without repeats', () {
+      const recent = [
+        (title: 'Shawarma', category: 'food'),
+        (title: 'shawarma ', category: 'food'),
+        (title: 'Dinner', category: 'food'),
+        (title: 'Fuel', category: 'transport'),
+      ];
+      String label(String k) => k[0].toUpperCase() + k.substring(1);
+      expect(suggestTitles(recent: recent, hour: 21, label: label), const [
+        Suggestion(title: 'Shawarma', category: 'food'),
+        Suggestion(title: 'Dinner', category: 'food'),
+        Suggestion(key: 'groceries', category: 'groceries'),
+        Suggestion(key: 'taxi', category: 'transport'),
+      ]);
+      List<String?> keys(List<Suggestion> s) => s.map((x) => x.key).toList();
+      expect(keys(suggestTitles(recent: const [], hour: 9, emoji: '🏠')), [
+        'groceries',
+        'rent',
+        'internet',
+        'electricity',
+      ]);
+      expect(
+        keys(suggestTitles(recent: const [], hour: 2, emoji: '🌙', n: 2)),
+        ['suhoor', 'iftar'],
+      );
+      expect(keys(suggestTitles(recent: const [], hour: 13, emoji: '✈️')), [
+        'lunch',
+        'taxi',
+        'hotel',
+        'tickets',
+      ]);
+    });
   });
 }

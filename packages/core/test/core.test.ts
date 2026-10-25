@@ -11,6 +11,10 @@ import {
   parseAmount,
   parseAmountExpression,
   simplifyDebts,
+  itemizedSplit,
+  payAction,
+  spendingByCategory,
+  suggestTitles,
   validateSplit,
   type ExpenseLike,
   type GroupLike,
@@ -169,5 +173,75 @@ describe('splits and balances', () => {
       after[x.to] -= x.amount;
     }
     expect(Object.values(after).every((v) => v === 0)).toBe(true);
+  });
+});
+
+describe('title suggestions', () => {
+  test('recent titles first, then ideas for the hour and the kind of group, without repeats', () => {
+    const recent = [
+      { title: 'Shawarma', category: 'food' },
+      { title: 'shawarma ', category: 'food' },
+      { title: 'Dinner', category: 'food' },
+      { title: 'Fuel', category: 'transport' },
+    ];
+    const label = (k: string) => k[0].toUpperCase() + k.slice(1);
+    expect(suggestTitles({ recent, hour: 21, label })).toEqual([
+      { title: 'Shawarma', category: 'food' },
+      { title: 'Dinner', category: 'food' },
+      { key: 'groceries', category: 'groceries' },
+      { key: 'taxi', category: 'transport' },
+    ]);
+    expect(suggestTitles({ recent: [], hour: 9, emoji: '🏠' }).map((s) => s.key)).toEqual(['groceries', 'rent', 'internet', 'electricity']);
+    expect(suggestTitles({ recent: [], hour: 2, emoji: '🌙', n: 2 }).map((s) => s.key)).toEqual(['suhoor', 'iftar']);
+    expect(suggestTitles({ recent: [], hour: 13, emoji: '✈️' }).map((s) => s.key)).toEqual(['lunch', 'taxi', 'hotel', 'tickets']);
+  });
+});
+
+describe('receipt by item', () => {
+  const ids = ['a', 's', 'o'];
+  test('items shared by who had them, tax and service in proportion, adds up exactly', () => {
+    // 100.00 bill: a's burger 40, s and o share a 30 pizza, everyone shares 15 fries; 15 tax and service.
+    const r = itemizedSplit(10000, [
+      { price: 4000, members: ['a'] },
+      { price: 3000, members: ['s', 'o'] },
+      { price: 1500, members: ['a', 's', 'o'] },
+    ], ids)!;
+    expect(r.rest).toBe(1500);
+    expect(r.items.reduce((x, y) => x + y.value, 0)).toBe(10000);
+    expect(r.items).toEqual([
+      { memberId: 'a', value: 5294 },
+      { memberId: 's', value: 2353 },
+      { memberId: 'o', value: 2353 },
+    ]);
+  });
+  test('no items, or more than the total, is not a split', () => {
+    expect(itemizedSplit(1000, [], ids)).toBeNull();
+    expect(itemizedSplit(1000, [{ price: 500, members: [] }], ids)).toBeNull();
+    expect(itemizedSplit(1000, [{ price: 1500, members: ['a'] }], ids)).toBeNull();
+    expect(itemizedSplit(1000, [{ price: 1000, members: ['o'] }], ids)!.items.map((i) => i.value)).toEqual([0, 0, 1000]);
+  });
+});
+
+describe('pay with', () => {
+  test('links open, account details copy, PayPal.me gets the amount', () => {
+    expect(payAction({ kind: 'iban', value: 'AE070331234567890123456' }, 4550, 'AED')).toEqual({ copy: 'AE070331234567890123456' });
+    expect(payAction({ kind: 'instapay', value: 'sara@instapay' }, 100, 'EGP')).toEqual({ copy: 'sara@instapay' });
+    expect(payAction({ kind: 'instapay', value: 'https://ipn.eg/S/sara/instapay/abc' }, 100, 'EGP')).toEqual({ open: 'https://ipn.eg/S/sara/instapay/abc' });
+    expect(payAction({ kind: 'paypal', value: 'https://paypal.me/sara' }, 1250, 'USD')).toEqual({ open: 'https://paypal.me/sara/12.50USD' });
+    expect(payAction({ kind: 'paypal', value: 'https://paypal.me/sara/5' }, 1250, 'USD')).toEqual({ open: 'https://paypal.me/sara/5' });
+    expect(payAction({ kind: 'paypal', value: 'https://paypal.me/sara' }, 1250, 'KWD')).toEqual({ open: 'https://paypal.me/sara/1.250KWD' });
+    expect(payAction({ kind: 'wise', value: 'https://wise.com/pay/me/sara' }, 1, 'GBP')).toEqual({ open: 'https://wise.com/pay/me/sara' });
+    expect(payAction({ kind: 'stcpay', value: '+966 50 000 0000' }, 1, 'SAR')).toEqual({ copy: '+966 50 000 0000' });
+  });
+});
+
+describe('spending by category', () => {
+  test('in the group currency, largest first', () => {
+    const e = (amount: number, category: string, currency = 'AED', rate = 1) => ({ amount, currency, rate, paidBy: 'a', mode: 'equal' as const, items: all3, category });
+    expect(spendingByCategory([e(1000, 'food'), e(500, 'transport'), e(2000, 'food'), e(1000, 'stay', 'USD', 3.6725)], 'AED')).toEqual([
+      { category: 'stay', amount: 3673 },
+      { category: 'food', amount: 3000 },
+      { category: 'transport', amount: 500 },
+    ]);
   });
 });

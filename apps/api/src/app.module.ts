@@ -22,6 +22,7 @@ import { PaymentsController } from './payments/payments.controller.js';
 import { PlansController } from './plans/plans.controller.js';
 import { PlansService } from './plans/plans.service.js';
 import { RatesController } from './rates/rates.controller.js';
+import { CrashController } from './telemetry/crash.controller.js';
 import { RecurringController } from './recurring/recurring.controller.js';
 import { RecurringService } from './recurring/recurring.service.js';
 
@@ -29,6 +30,7 @@ import { RecurringService } from './recurring/recurring.service.js';
   imports: [DbModule, ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 300) }])],
   controllers: [
     HealthController,
+    CrashController,
     AuthController,
     AccountsController,
     GroupsController,

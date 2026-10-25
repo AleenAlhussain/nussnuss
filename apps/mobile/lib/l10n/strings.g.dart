@@ -124,6 +124,201 @@ class NNStrings {
   String get getsBack => _m['getsBack']!;
   String get even => _m['even']!;
   String get members => _m['members']!;
+  String get details => _m['details']!;
+  String get youPaid => _m['youPaid']!;
+  String get splitEqualAll => _m['splitEqualAll']!;
+  String get splitEqualN => _m['splitEqualN']!;
+  String get suggestions => _m['suggestions']!;
+  String get sugBreakfast => _m['sug_breakfast']!;
+  String get sugCoffee => _m['sug_coffee']!;
+  String get sugLunch => _m['sug_lunch']!;
+  String get sugDinner => _m['sug_dinner']!;
+  String get sugGroceries => _m['sug_groceries']!;
+  String get sugTaxi => _m['sug_taxi']!;
+  String get sugFuel => _m['sug_fuel']!;
+  String get sugHotel => _m['sug_hotel']!;
+  String get sugTickets => _m['sug_tickets']!;
+  String get sugRent => _m['sug_rent']!;
+  String get sugInternet => _m['sug_internet']!;
+  String get sugElectricity => _m['sug_electricity']!;
+  String get sugIftar => _m['sug_iftar']!;
+  String get sugSuhoor => _m['sug_suhoor']!;
+  String get sugGift => _m['sug_gift']!;
+  String get repeatLast => _m['repeatLast']!;
+  String get repeatHint => _m['repeatHint']!;
+  String get repeated => _m['repeated']!;
+  String get remind => _m['remind']!;
+  String get remindName => _m['remindName']!;
+  String get remindMessage => _m['remindMessage']!;
+  String get shareSummary => _m['shareSummary']!;
+  String get summaryTitle => _m['summaryTitle']!;
+  String get summaryMade => _m['summaryMade']!;
+  String get summarySaved => _m['summarySaved']!;
+  String get account => _m['account']!;
+  String get accountSafe => _m['accountSafe']!;
+  String get accountUnsafe => _m['accountUnsafe']!;
+  String get accountUnsafeBody => _m['accountUnsafeBody']!;
+  String get recoveryCode => _m['recoveryCode']!;
+  String get recoveryMake => _m['recoveryMake']!;
+  String get recoveryRemake => _m['recoveryRemake']!;
+  String get recoveryMadeOn => _m['recoveryMadeOn']!;
+  String get recoveryShow => _m['recoveryShow']!;
+  String get linkDevice => _m['linkDevice']!;
+  String get linkShow => _m['linkShow']!;
+  String get haveCode => _m['haveCode']!;
+  String get codeLabel => _m['codeLabel']!;
+  String get codeHint => _m['codeHint']!;
+  String get codeBad => _m['codeBad']!;
+  String get continueApple => _m['continueApple']!;
+  String get continueGoogle => _m['continueGoogle']!;
+  String get passkeys => _m['passkeys']!;
+  String get passkeyAdd => _m['passkeyAdd']!;
+  String get passkeyAdded => _m['passkeyAdded']!;
+  String get passkeySignIn => _m['passkeySignIn']!;
+  String get passkeyHint => _m['passkeyHint']!;
+  String get passkeyOn => _m['passkeyOn']!;
+  String get devices => _m['devices']!;
+  String get thisDevice => _m['thisDevice']!;
+  String get otherDevice => _m['otherDevice']!;
+  String get lastSeen => _m['lastSeen']!;
+  String get signOut => _m['signOut']!;
+  String get remove => _m['remove']!;
+  String get exportData => _m['exportData']!;
+  String get copy => _m['copy']!;
+  String get codeCopied => _m['codeCopied']!;
+  String get linkedWith => _m['linkedWith']!;
+  String get haveAccount => _m['haveAccount']!;
+  String get welcomeBack => _m['welcomeBack']!;
+  String get savedOffline => _m['savedOffline']!;
+  String get pendingN => _m['pendingN']!;
+  String get syncFailed => _m['syncFailed']!;
+  String get privacy => _m['privacy']!;
+  String get terms => _m['terms']!;
+  String get about => _m['about']!;
+  String get look => _m['look']!;
+  String get lookDefault => _m['look_default']!;
+  String get lookNight => _m['look_night']!;
+  String get lookSaffron => _m['look_saffron']!;
+  String get lookHint => _m['lookHint']!;
+  String get sounds => _m['sounds']!;
+  String get soundsHint => _m['soundsHint']!;
+  String get on => _m['on']!;
+  String get off => _m['off']!;
+  String get plus => _m['plus']!;
+  String get plusTagline => _m['plusTagline']!;
+  String get plusFRecurring => _m['plusF_recurring']!;
+  String get plusFReminders => _m['plusF_reminders']!;
+  String get plusFRates => _m['plusF_rates']!;
+  String get plusFCharts => _m['plusF_charts']!;
+  String get plusFExport => _m['plusF_export']!;
+  String get plusFItems => _m['plusF_items']!;
+  String get plusFLooks => _m['plusF_looks']!;
+  String get planMonthly => _m['planMonthly']!;
+  String get planYearly => _m['planYearly']!;
+  String get planYearlySave => _m['planYearlySave']!;
+  String get tripPass => _m['tripPass']!;
+  String get tripPassBody => _m['tripPassBody']!;
+  String get buy => _m['buy']!;
+  String get restore => _m['restore']!;
+  String get buyInApp => _m['buyInApp']!;
+  String get storeSoon => _m['storeSoon']!;
+  String get plusOnUntil => _m['plusOnUntil']!;
+  String get tripOnUntil => _m['tripOnUntil']!;
+  String get yourPlan => _m['yourPlan']!;
+  String get planFree => _m['planFree']!;
+  String get needsPlus => _m['needsPlus']!;
+  String get seePlus => _m['seePlus']!;
+  String get plusThanks => _m['plusThanks']!;
+  String get cancelAnytime => _m['cancelAnytime']!;
+  String get devBuy => _m['devBuy']!;
+  String get repeats => _m['repeats']!;
+  String get everyNone => _m['every_none']!;
+  String get everyWeek => _m['every_week']!;
+  String get everyMonth => _m['every_month']!;
+  String get nextOn => _m['nextOn']!;
+  String get recurringTitle => _m['recurringTitle']!;
+  String get stopRepeating => _m['stopRepeating']!;
+  String get repeatSaved => _m['repeatSaved']!;
+  String get modeItems => _m['mode_items']!;
+  String get addItem => _m['addItem']!;
+  String get itemName => _m['itemName']!;
+  String get itemPrice => _m['itemPrice']!;
+  String get itemsRest => _m['itemsRest']!;
+  String get itemsOver => _m['itemsOver']!;
+  String get scanReceipt => _m['scanReceipt']!;
+  String get scanning => _m['scanning']!;
+  String get scanFailed => _m['scanFailed']!;
+  String get paidIn => _m['paidIn']!;
+  String get rate => _m['rate']!;
+  String get rateLine => _m['rateLine']!;
+  String get rateLive => _m['rateLive']!;
+  String get errRate => _m['err_rate']!;
+  String get groupMore => _m['groupMore']!;
+  String get spending => _m['spending']!;
+  String get byCategory => _m['byCategory']!;
+  String get byPerson => _m['byPerson']!;
+  String get exportCsv => _m['exportCsv']!;
+  String get print => _m['print']!;
+  String get weeklyReminders => _m['weeklyReminders']!;
+  String get weeklyRemindersHint => _m['weeklyRemindersHint']!;
+  String get notifications => _m['notifications']!;
+  String get noNotifications => _m['noNotifications']!;
+  String get nReminder => _m['n_reminder']!;
+  String get whatKind => _m['whatKind']!;
+  String get tplTrip => _m['tpl_trip']!;
+  String get tplFlat => _m['tpl_flat']!;
+  String get tplDinner => _m['tpl_dinner']!;
+  String get tplIftar => _m['tpl_iftar']!;
+  String get tplEid => _m['tpl_eid']!;
+  String get tplWedding => _m['tpl_wedding']!;
+  String get tplOffice => _m['tpl_office']!;
+  String get tplNameFlat => _m['tplName_flat']!;
+  String get tplNameDinner => _m['tplName_dinner']!;
+  String get tplNameIftar => _m['tplName_iftar']!;
+  String get tplNameEid => _m['tplName_eid']!;
+  String get tplNameWedding => _m['tplName_wedding']!;
+  String get tplNameOffice => _m['tplName_office']!;
+  String get payTo => _m['payTo']!;
+  String get payToHint => _m['payToHint']!;
+  String get payAdd => _m['payAdd']!;
+  String get payIban => _m['pay_iban']!;
+  String get payInstapay => _m['pay_instapay']!;
+  String get payStcpay => _m['pay_stcpay']!;
+  String get payPhone => _m['pay_phone']!;
+  String get payPaypal => _m['pay_paypal']!;
+  String get payWise => _m['pay_wise']!;
+  String get payLink => _m['pay_link']!;
+  String get payValue => _m['payValue']!;
+  String get payLabel => _m['payLabel']!;
+  String get payWith => _m['payWith']!;
+  String get payCopied => _m['payCopied']!;
+  String get payThenMark => _m['payThenMark']!;
+  String get circles => _m['circles']!;
+  String get newCircle => _m['newCircle']!;
+  String get circleName => _m['circleName']!;
+  String get circleNamePh => _m['circleNamePh']!;
+  String get circleEach => _m['circleEach']!;
+  String get circleEvery => _m['circleEvery']!;
+  String get circleStart => _m['circleStart']!;
+  String get circleOrder => _m['circleOrder']!;
+  String get circlePot => _m['circlePot']!;
+  String get circleRound => _m['circleRound']!;
+  String get circleGets => _m['circleGets']!;
+  String get circleDue => _m['circleDue']!;
+  String get circlePaidN => _m['circlePaidN']!;
+  String get circleUpcoming => _m['circle_upcoming']!;
+  String get circleRunning => _m['circle_running']!;
+  String get circleDone => _m['circle_done']!;
+  String get circleHint => _m['circleHint']!;
+  String get circleNeedTwo => _m['circleNeedTwo']!;
+  String get markMemberPaid => _m['markMemberPaid']!;
+  String get late => _m['late']!;
+  String get paid => _m['paid']!;
+  String get deleteCircle => _m['deleteCircle']!;
+  String get moveUp => _m['moveUp']!;
+  String get more => _m['more']!;
+  String get loading => _m['loading']!;
+  String get tryAgain => _m['tryAgain']!;
   String get catFood => _m['cat_food']!;
   String get catGroceries => _m['cat_groceries']!;
   String get catTransport => _m['cat_transport']!;
@@ -216,7 +411,7 @@ const _en = <String, String>{
   'deleteAccount': 'Delete my account',
   'deleteAccountBody': 'Removes your account from this and every device. In shared groups your name becomes “Former member” so your friends’ balances still add up.',
   'deleteAccountConfirm': 'Delete account',
-  'offline': 'You’re offline. Changes will need a connection.',
+  'offline': 'You’re offline. What you add is saved and syncs later.',
   'error': 'Something went wrong. Try again.',
   'err_amount': 'Enter an amount.',
   'err_title': 'Add a short description.',
@@ -234,6 +429,201 @@ const _en = <String, String>{
   'getsBack': 'gets back {amount}',
   'even': 'even',
   'members': '{n} people',
+  'details': 'Details',
+  'youPaid': 'You paid',
+  'splitEqualAll': 'split equally',
+  'splitEqualN': 'split between {n}',
+  'suggestions': 'Suggestions',
+  'sug_breakfast': 'Breakfast',
+  'sug_coffee': 'Coffee',
+  'sug_lunch': 'Lunch',
+  'sug_dinner': 'Dinner',
+  'sug_groceries': 'Groceries',
+  'sug_taxi': 'Taxi',
+  'sug_fuel': 'Fuel',
+  'sug_hotel': 'Hotel',
+  'sug_tickets': 'Tickets',
+  'sug_rent': 'Rent',
+  'sug_internet': 'Internet',
+  'sug_electricity': 'Electricity',
+  'sug_iftar': 'Iftar',
+  'sug_suhoor': 'Suhoor',
+  'sug_gift': 'Gift',
+  'repeatLast': 'Repeat {title}',
+  'repeatHint': 'Press and hold + to repeat the last expense.',
+  'repeated': 'Added again',
+  'remind': 'Remind',
+  'remindName': 'Remind {name}',
+  'remindMessage': 'Hi {name}, a friendly reminder: you owe me {amount} for "{group}" on NussNuss.',
+  'shareSummary': 'Share summary',
+  'summaryTitle': 'Who owes who',
+  'summaryMade': 'Split with NussNuss · free, no limits',
+  'summarySaved': 'Image saved',
+  'account': 'Account',
+  'accountSafe': 'Your account is saved',
+  'accountUnsafe': 'Keep your groups if you lose this phone',
+  'accountUnsafeBody': 'Right now your account lives on this device only. Add a passkey or make a recovery code.',
+  'recoveryCode': 'Recovery code',
+  'recoveryMake': 'Make a recovery code',
+  'recoveryRemake': 'Make a new recovery code',
+  'recoveryMadeOn': 'Made on {date}',
+  'recoveryShow': 'Write this down or save it in your password manager. You’ll see it only once, and a new one replaces it.',
+  'linkDevice': 'Use on another device',
+  'linkShow': 'On your other device, choose “I have a code” and type this code. It works once, for 10 minutes.',
+  'haveCode': 'I have a code',
+  'codeLabel': 'Code',
+  'codeHint': 'A recovery code, or a code from your other device.',
+  'codeBad': 'That code doesn’t work. Check it, or make a new one.',
+  'continueApple': 'Continue with Apple',
+  'continueGoogle': 'Continue with Google',
+  'passkeys': 'Passkeys',
+  'passkeyAdd': 'Add a passkey',
+  'passkeyAdded': 'Passkey added',
+  'passkeySignIn': 'Sign in with a passkey',
+  'passkeyHint': 'Uses Face ID, your fingerprint or screen lock. Nothing to remember.',
+  'passkeyOn': 'Passkey added {date}',
+  'devices': 'Signed-in devices',
+  'thisDevice': 'This device',
+  'otherDevice': 'Another device',
+  'lastSeen': 'Last used {date}',
+  'signOut': 'Sign out',
+  'remove': 'Remove',
+  'exportData': 'Download my data',
+  'copy': 'Copy',
+  'codeCopied': 'Code copied',
+  'linkedWith': 'Linked with {provider}',
+  'haveAccount': 'Already have an account?',
+  'welcomeBack': 'Welcome back',
+  'savedOffline': 'Saved on this device. It syncs when you’re back online.',
+  'pendingN': '{n} waiting to sync',
+  'syncFailed': 'Couldn’t sync “{title}”, so it was removed.',
+  'privacy': 'Privacy',
+  'terms': 'Terms',
+  'about': 'About',
+  'look': 'Look',
+  'look_default': 'Violet',
+  'look_night': 'Night',
+  'look_saffron': 'Saffron',
+  'lookHint': 'Night is always dark. Looks come with Plus, or one at a time.',
+  'sounds': 'Sounds',
+  'soundsHint': 'A quiet coin tap when you save and a chime when a group is settled.',
+  'on': 'On',
+  'off': 'Off',
+  'plus': 'NussNuss Plus',
+  'plusTagline': 'Splitting stays free forever. Plus saves you time.',
+  'plusF_recurring': 'Recurring bills that add themselves',
+  'plusF_reminders': 'Weekly reminders sent by the app, not by you',
+  'plusF_rates': 'Live exchange rates',
+  'plusF_charts': 'Spending by category and person',
+  'plusF_export': 'CSV download and print',
+  'plusF_items': 'Split a receipt by item',
+  'plusF_looks': 'Every look',
+  'planMonthly': 'Monthly',
+  'planYearly': 'Yearly',
+  'planYearlySave': 'Save 37%',
+  'tripPass': 'Trip Pass',
+  'tripPassBody': 'Plus for everyone in this group for 30 days. Paid once.',
+  'buy': 'Continue',
+  'restore': 'Restore purchases',
+  'buyInApp': 'Get Plus in the NussNuss app on your phone. It works here too.',
+  'storeSoon': 'Purchases open when the app is in the App Store and Google Play.',
+  'plusOnUntil': 'Plus is on until {date}',
+  'tripOnUntil': 'Trip Pass is on until {date}',
+  'yourPlan': 'Your plan',
+  'planFree': 'Free',
+  'needsPlus': 'Part of Plus',
+  'seePlus': 'See Plus',
+  'plusThanks': 'Thank you. Plus is on.',
+  'cancelAnytime': 'Cancel any time in your store settings.',
+  'devBuy': 'Turn on for testing',
+  'repeats': 'Repeats',
+  'every_none': 'Never',
+  'every_week': 'Every week',
+  'every_month': 'Every month',
+  'nextOn': 'Next on {date}',
+  'recurringTitle': 'Recurring',
+  'stopRepeating': 'Stop repeating',
+  'repeatSaved': 'Saved. It will repeat.',
+  'mode_items': 'Items',
+  'addItem': 'Add item',
+  'itemName': 'Item',
+  'itemPrice': 'Price',
+  'itemsRest': '{amount} tax and service, shared by item',
+  'itemsOver': 'The items add up to more than the total.',
+  'scanReceipt': 'Scan receipt',
+  'scanning': 'Reading the receipt…',
+  'scanFailed': 'Couldn’t read that receipt. Add the items by hand.',
+  'paidIn': 'Paid in',
+  'rate': 'Exchange rate',
+  'rateLine': '1 {from} = {rate} {to}',
+  'rateLive': 'Live rate filled in',
+  'err_rate': 'Enter the exchange rate.',
+  'groupMore': 'Group options',
+  'spending': 'Spending',
+  'byCategory': 'By category',
+  'byPerson': 'Paid by each person',
+  'exportCsv': 'Download CSV',
+  'print': 'Print',
+  'weeklyReminders': 'Weekly reminders',
+  'weeklyRemindersHint': 'Each week the app reminds people who owe money, so you don’t have to.',
+  'notifications': 'Notifications',
+  'noNotifications': 'Nothing new',
+  'n_reminder': 'You owe {to} {amount}',
+  'whatKind': 'What’s it for?',
+  'tpl_trip': 'Trip',
+  'tpl_flat': 'Flat',
+  'tpl_dinner': 'Dinner',
+  'tpl_iftar': 'Iftar',
+  'tpl_eid': 'Eid',
+  'tpl_wedding': 'Wedding',
+  'tpl_office': 'Office',
+  'tplName_flat': 'Our flat',
+  'tplName_dinner': 'Dinner out',
+  'tplName_iftar': 'Ramadan iftars',
+  'tplName_eid': 'Eid gifts',
+  'tplName_wedding': 'The wedding',
+  'tplName_office': 'Office lunches',
+  'payTo': 'How friends pay you',
+  'payToHint': 'Shown to people in your groups when they settle up with you. Up to 5.',
+  'payAdd': 'Add a way to get paid',
+  'pay_iban': 'Bank (IBAN)',
+  'pay_instapay': 'InstaPay',
+  'pay_stcpay': 'STC Pay',
+  'pay_phone': 'Mobile wallet',
+  'pay_paypal': 'PayPal',
+  'pay_wise': 'Wise',
+  'pay_link': 'Payment link',
+  'payValue': 'Number, address or link',
+  'payLabel': 'Label (optional)',
+  'payWith': 'Pay with {method}',
+  'payCopied': '{method} copied. Paste it in your bank app.',
+  'payThenMark': 'After paying, mark it as paid here.',
+  'circles': 'Money circles',
+  'newCircle': 'New money circle',
+  'circleName': 'Name',
+  'circleNamePh': 'Family circle',
+  'circleEach': 'Each person pays',
+  'circleEvery': 'How often',
+  'circleStart': 'First payment',
+  'circleOrder': 'Who gets the pot, in order',
+  'circlePot': 'Pot {amount}',
+  'circleRound': 'Round {n}',
+  'circleGets': '{name} gets the pot',
+  'circleDue': 'Due {date}',
+  'circlePaidN': '{paid} of {total} paid',
+  'circle_upcoming': 'Starts {date}',
+  'circle_running': 'Running',
+  'circle_done': 'Finished',
+  'circleHint': 'NussNuss keeps track of the circle. The money moves between you, not through the app.',
+  'circleNeedTwo': 'Pick at least two people.',
+  'markMemberPaid': '{name} paid',
+  'late': 'Late',
+  'paid': 'Paid',
+  'deleteCircle': 'Delete circle',
+  'moveUp': 'Move {name} up',
+  'more': 'More',
+  'loading': 'Loading',
+  'tryAgain': 'Try again',
   'cat_food': 'Food',
   'cat_groceries': 'Groceries',
   'cat_transport': 'Transport',
@@ -326,7 +716,7 @@ const _ar = <String, String>{
   'deleteAccount': 'احذف حسابي',
   'deleteAccountBody': 'يحذف حسابك من هذا الجهاز وكل الأجهزة. في المجموعات المشتركة يصبح اسمك "عضو سابق" حتى تبقى حسابات أصحابك صحيحة.',
   'deleteAccountConfirm': 'احذف الحساب',
-  'offline': 'أنت غير متصل. التعديلات تحتاج اتصالًا.',
+  'offline': 'أنت غير متصل. اللي تضيفه ينحفظ ويتزامن بعدين.',
   'error': 'صار خطأ. حاول مرة ثانية.',
   'err_amount': 'اكتب المبلغ.',
   'err_title': 'اكتب وصفًا قصيرًا.',
@@ -344,6 +734,201 @@ const _ar = <String, String>{
   'getsBack': 'له {amount}',
   'even': 'خالص',
   'members': '{n} أشخاص',
+  'details': 'التفاصيل',
+  'youPaid': 'أنت دفعت',
+  'splitEqualAll': 'بالتساوي على الكل',
+  'splitEqualN': 'بين {n}',
+  'suggestions': 'اقتراحات',
+  'sug_breakfast': 'فطور',
+  'sug_coffee': 'قهوة',
+  'sug_lunch': 'غداء',
+  'sug_dinner': 'عشاء',
+  'sug_groceries': 'مقاضي',
+  'sug_taxi': 'تاكسي',
+  'sug_fuel': 'بنزين',
+  'sug_hotel': 'فندق',
+  'sug_tickets': 'تذاكر',
+  'sug_rent': 'إيجار',
+  'sug_internet': 'إنترنت',
+  'sug_electricity': 'كهرباء',
+  'sug_iftar': 'إفطار',
+  'sug_suhoor': 'سحور',
+  'sug_gift': 'هدية',
+  'repeatLast': 'كرّر {title}',
+  'repeatHint': 'اضغط مطولًا على + لتكرار آخر مصروف.',
+  'repeated': 'انضاف مرة ثانية',
+  'remind': 'ذكّر',
+  'remindName': 'ذكّر {name}',
+  'remindMessage': 'هلا {name}، تذكير لطيف: عليك لي {amount} في "{group}" على نص نص.',
+  'shareSummary': 'شارك الملخص',
+  'summaryTitle': 'مين عليه لمين',
+  'summaryMade': 'قسّمناها بـ نص نص · مجاني وبلا حدود',
+  'summarySaved': 'تم حفظ الصورة',
+  'account': 'الحساب',
+  'accountSafe': 'حسابك محفوظ',
+  'accountUnsafe': 'احتفظ بمجموعاتك لو ضاع جوالك',
+  'accountUnsafeBody': 'حاليًا حسابك على هذا الجهاز فقط. أضف مفتاح مرور أو أنشئ رمز استعادة.',
+  'recoveryCode': 'رمز الاستعادة',
+  'recoveryMake': 'أنشئ رمز استعادة',
+  'recoveryRemake': 'أنشئ رمز استعادة جديد',
+  'recoveryMadeOn': 'أُنشئ في {date}',
+  'recoveryShow': 'اكتبه أو احفظه في مدير كلمات المرور. يظهر مرة واحدة فقط، والرمز الجديد يلغي القديم.',
+  'linkDevice': 'استخدمه على جهاز آخر',
+  'linkShow': 'على جهازك الآخر، اختر "عندي رمز" واكتب هذا الرمز. يعمل مرة واحدة خلال ١٠ دقائق.',
+  'haveCode': 'عندي رمز',
+  'codeLabel': 'الرمز',
+  'codeHint': 'رمز الاستعادة، أو رمز من جهازك الآخر.',
+  'codeBad': 'هذا الرمز لا يعمل. تأكد منه أو أنشئ رمزًا جديدًا.',
+  'continueApple': 'المتابعة مع Apple',
+  'continueGoogle': 'المتابعة مع Google',
+  'passkeys': 'مفاتيح المرور',
+  'passkeyAdd': 'أضف مفتاح مرور',
+  'passkeyAdded': 'تمت إضافة مفتاح المرور',
+  'passkeySignIn': 'ادخل بمفتاح مرور',
+  'passkeyHint': 'يستخدم بصمة الوجه أو الإصبع أو قفل الشاشة. لا شيء تحفظه.',
+  'passkeyOn': 'مفتاح مرور أُضيف {date}',
+  'devices': 'الأجهزة المسجّلة',
+  'thisDevice': 'هذا الجهاز',
+  'otherDevice': 'جهاز آخر',
+  'lastSeen': 'آخر استخدام {date}',
+  'signOut': 'تسجيل الخروج',
+  'remove': 'إزالة',
+  'exportData': 'نزّل بياناتي',
+  'copy': 'نسخ',
+  'codeCopied': 'تم نسخ الرمز',
+  'linkedWith': 'مربوط مع {provider}',
+  'haveAccount': 'عندك حساب؟',
+  'welcomeBack': 'أهلًا من جديد',
+  'savedOffline': 'انحفظ على الجهاز. يتزامن لما يرجع الاتصال.',
+  'pendingN': '{n} بانتظار المزامنة',
+  'syncFailed': 'تعذرت مزامنة "{title}" فتمت إزالته.',
+  'privacy': 'الخصوصية',
+  'terms': 'الشروط',
+  'about': 'عن التطبيق',
+  'look': 'الإطلالة',
+  'look_default': 'بنفسجي',
+  'look_night': 'ليل',
+  'look_saffron': 'زعفران',
+  'lookHint': 'ليل داكن دائمًا. الإطلالات ضمن بلس، أو كل وحدة لحالها.',
+  'sounds': 'الأصوات',
+  'soundsHint': 'نقرة عملة هادئة عند الحفظ ونغمة عند تسوية المجموعة.',
+  'on': 'تشغيل',
+  'off': 'إيقاف',
+  'plus': 'نص نص بلس',
+  'plusTagline': 'التقسيم مجاني للأبد. بلس يوفّر وقتك.',
+  'plusF_recurring': 'فواتير متكررة تنضاف لحالها',
+  'plusF_reminders': 'تذكير أسبوعي من التطبيق، مو منك',
+  'plusF_rates': 'أسعار صرف مباشرة',
+  'plusF_charts': 'الإنفاق حسب التصنيف والشخص',
+  'plusF_export': 'تنزيل CSV والطباعة',
+  'plusF_items': 'قسّم الفاتورة بالبنود',
+  'plusF_looks': 'كل الإطلالات',
+  'planMonthly': 'شهري',
+  'planYearly': 'سنوي',
+  'planYearlySave': 'وفّر ٣٧٪',
+  'tripPass': 'تذكرة الرحلة',
+  'tripPassBody': 'بلس لكل من في المجموعة لمدة ٣٠ يومًا. دفعة واحدة.',
+  'buy': 'متابعة',
+  'restore': 'استرجاع المشتريات',
+  'buyInApp': 'اشترك في بلس من تطبيق نص نص على جوالك، ويشتغل هنا كمان.',
+  'storeSoon': 'الشراء يتاح لما يكون التطبيق في App Store وGoogle Play.',
+  'plusOnUntil': 'بلس مفعّل حتى {date}',
+  'tripOnUntil': 'تذكرة الرحلة مفعّلة حتى {date}',
+  'yourPlan': 'خطتك',
+  'planFree': 'مجاني',
+  'needsPlus': 'من مزايا بلس',
+  'seePlus': 'شوف بلس',
+  'plusThanks': 'شكرًا لك. بلس مفعّل.',
+  'cancelAnytime': 'تقدر تلغي بأي وقت من إعدادات المتجر.',
+  'devBuy': 'فعّل للتجربة',
+  'repeats': 'يتكرر',
+  'every_none': 'لا',
+  'every_week': 'كل أسبوع',
+  'every_month': 'كل شهر',
+  'nextOn': 'القادم في {date}',
+  'recurringTitle': 'المتكررة',
+  'stopRepeating': 'أوقف التكرار',
+  'repeatSaved': 'انحفظ وراح يتكرر.',
+  'mode_items': 'بالبنود',
+  'addItem': 'أضف بند',
+  'itemName': 'البند',
+  'itemPrice': 'السعر',
+  'itemsRest': '{amount} ضريبة وخدمة موزعة على البنود',
+  'itemsOver': 'البنود أكثر من المبلغ الكلي.',
+  'scanReceipt': 'امسح الفاتورة',
+  'scanning': 'جاري قراءة الفاتورة…',
+  'scanFailed': 'تعذرت قراءة الفاتورة. أضف البنود يدويًا.',
+  'paidIn': 'العملة',
+  'rate': 'سعر الصرف',
+  'rateLine': '1 {from} = {rate} {to}',
+  'rateLive': 'تم إدخال السعر المباشر',
+  'err_rate': 'اكتب سعر الصرف.',
+  'groupMore': 'خيارات المجموعة',
+  'spending': 'الإنفاق',
+  'byCategory': 'حسب التصنيف',
+  'byPerson': 'دفع كل شخص',
+  'exportCsv': 'نزّل CSV',
+  'print': 'اطبع',
+  'weeklyReminders': 'تذكير أسبوعي',
+  'weeklyRemindersHint': 'كل أسبوع يذكّر التطبيق اللي عليهم فلوس، بدالك.',
+  'notifications': 'الإشعارات',
+  'noNotifications': 'لا جديد',
+  'n_reminder': 'عليك {amount} لـ {to}',
+  'whatKind': 'لأي مناسبة؟',
+  'tpl_trip': 'رحلة',
+  'tpl_flat': 'سكن',
+  'tpl_dinner': 'عزومة',
+  'tpl_iftar': 'إفطار',
+  'tpl_eid': 'العيد',
+  'tpl_wedding': 'عرس',
+  'tpl_office': 'المكتب',
+  'tplName_flat': 'سكننا',
+  'tplName_dinner': 'عزومة',
+  'tplName_iftar': 'إفطارات رمضان',
+  'tplName_eid': 'عيديات',
+  'tplName_wedding': 'العرس',
+  'tplName_office': 'غداء المكتب',
+  'payTo': 'كيف يدفع لك أصحابك',
+  'payToHint': 'يظهر لأعضاء مجموعاتك لما يسوّون معك. حتى ٥ طرق.',
+  'payAdd': 'أضف طريقة استلام',
+  'pay_iban': 'حساب بنكي (IBAN)',
+  'pay_instapay': 'إنستاباي',
+  'pay_stcpay': 'STC Pay',
+  'pay_phone': 'محفظة الجوال',
+  'pay_paypal': 'PayPal',
+  'pay_wise': 'Wise',
+  'pay_link': 'رابط دفع',
+  'payValue': 'الرقم أو العنوان أو الرابط',
+  'payLabel': 'اسم مختصر (اختياري)',
+  'payWith': 'ادفع عبر {method}',
+  'payCopied': 'تم نسخ {method}. الصقه في تطبيق البنك.',
+  'payThenMark': 'بعد الدفع، سجّله كمدفوع هنا.',
+  'circles': 'الجمعيات',
+  'newCircle': 'جمعية جديدة',
+  'circleName': 'الاسم',
+  'circleNamePh': 'جمعية العائلة',
+  'circleEach': 'كل شخص يدفع',
+  'circleEvery': 'كل كم',
+  'circleStart': 'أول دفعة',
+  'circleOrder': 'ترتيب الاستلام',
+  'circlePot': 'المبلغ {amount}',
+  'circleRound': 'الدور {n}',
+  'circleGets': '{name} يستلم',
+  'circleDue': 'الموعد {date}',
+  'circlePaidN': 'دفع {paid} من {total}',
+  'circle_upcoming': 'تبدأ {date}',
+  'circle_running': 'شغّالة',
+  'circle_done': 'خلصت',
+  'circleHint': 'نص نص يتابع الجمعية فقط. الفلوس تنتقل بينكم مباشرة، مو عن طريق التطبيق.',
+  'circleNeedTwo': 'اختر شخصين على الأقل.',
+  'markMemberPaid': '{name} دفع',
+  'late': 'متأخر',
+  'paid': 'مدفوع',
+  'deleteCircle': 'احذف الجمعية',
+  'moveUp': 'قدّم {name}',
+  'more': 'المزيد',
+  'loading': 'جاري التحميل',
+  'tryAgain': 'حاول مرة ثانية',
   'cat_food': 'أكل',
   'cat_groceries': 'مقاضي',
   'cat_transport': 'مواصلات',

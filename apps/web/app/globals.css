@@ -26,6 +26,27 @@
   --radius-control: var(--nn-radius-control);
   --font-sans: var(--nn-font);
   --font-rounded: var(--nn-font-rounded);
+  --font-display: var(--nn-font-display);
+}
+
+/* Readex Pro: amounts and big titles, Latin and Arabic in one family (SIL Open Font License, see /fonts/OFL.txt). */
+@font-face {
+  font-family: 'Readex Pro';
+  src: url('/fonts/ReadexPro-500.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Readex Pro';
+  src: url('/fonts/ReadexPro-600.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Readex Pro';
+  src: url('/fonts/ReadexPro-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
 }
 
 html {
@@ -47,18 +68,21 @@ body {
 
 /* iOS text styles */
 @utility t-large-title {
+  font-family: var(--nn-type-large-title-family);
   font-size: var(--nn-type-large-title-size);
   line-height: var(--nn-type-large-title-line);
   font-weight: var(--nn-type-large-title-weight);
   letter-spacing: var(--nn-type-large-title-tracking);
 }
 @utility t-title-1 {
+  font-family: var(--nn-type-title-1-family);
   font-size: var(--nn-type-title-1-size);
   line-height: var(--nn-type-title-1-line);
   font-weight: var(--nn-type-title-1-weight);
   letter-spacing: var(--nn-type-title-1-tracking);
 }
 @utility t-title-2 {
+  font-family: var(--nn-type-title-2-family);
   font-size: var(--nn-type-title-2-size);
   line-height: var(--nn-type-title-2-line);
   font-weight: var(--nn-type-title-2-weight);
@@ -95,7 +119,7 @@ body {
   line-height: var(--nn-type-caption-line);
 }
 @utility t-amount-hero {
-  font-family: var(--nn-font-rounded);
+  font-family: var(--nn-font-display);
   font-size: clamp(2.5rem, 12vw, var(--nn-type-amount-hero-size));
   line-height: 1.1;
   font-weight: var(--nn-type-amount-hero-weight);

@@ -94,26 +94,96 @@ class NNColors {
     focus: Color(0xFF4F3BD6),
   );
   static const dark = NNPalette(
-    bg: Color(0xFF000000),
-    surface: Color(0xFF1C1A26),
-    surface2: Color(0xFF2A2738),
-    separator: Color(0xFF3A3650),
+    bg: Color(0xFF0D0A1C),
+    surface: Color(0xFF18132E),
+    surface2: Color(0xFF241D42),
+    separator: Color(0xFF3A3160),
     text: Color(0xFFF4F2FA),
-    text2: Color(0xFFABA6C4),
-    text3: Color(0xFF9792B3),
-    accent: Color(0xFF8F7DFF),
+    text2: Color(0xFFB4ADD0),
+    text3: Color(0xFF9D96BC),
+    accent: Color(0xFF9B8BFF),
     onAccent: Color(0xFF120E2B),
-    accentSoft: Color(0xFF2A2450),
-    onAccentSoft: Color(0xFFCFC7FF),
+    accentSoft: Color(0xFF2B2360),
+    onAccentSoft: Color(0xFFD6D0FF),
     highlight: Color(0xFFFFC93D),
     onHighlight: Color(0xFF15121F),
     success: Color(0xFF4ADE95),
-    successSoft: Color(0xFF0F2E21),
+    successSoft: Color(0xFF0E2D25),
     danger: Color(0xFFFF8A5C),
-    dangerSoft: Color(0xFF3A1D12),
-    focus: Color(0xFF8F7DFF),
+    dangerSoft: Color(0xFF3B1E1C),
+    focus: Color(0xFF9B8BFF),
   );
 }
+
+/// Optional looks (sold in Looks). night is always dark.
+class NNLooks {
+  static const saffronLight = NNPalette(
+    bg: Color(0xFFF2F1F7),
+    surface: Color(0xFFFFFFFF),
+    surface2: Color(0xFFE9E7F1),
+    separator: Color(0xFFD9D6E5),
+    text: Color(0xFF15121F),
+    text2: Color(0xFF57526D),
+    text3: Color(0xFF6A6582),
+    accent: Color(0xFF8C5A00),
+    onAccent: Color(0xFFFFFFFF),
+    accentSoft: Color(0xFFFAEFD3),
+    onAccentSoft: Color(0xFF6B4400),
+    highlight: Color(0xFF4F3BD6),
+    onHighlight: Color(0xFFFFFFFF),
+    success: Color(0xFF0F7B4A),
+    successSoft: Color(0xFFE2F3EA),
+    danger: Color(0xFFB93A0E),
+    dangerSoft: Color(0xFFFBE9E2),
+    focus: Color(0xFF8C5A00),
+  );
+  static const saffronDark = NNPalette(
+    bg: Color(0xFF0D0A1C),
+    surface: Color(0xFF18132E),
+    surface2: Color(0xFF241D42),
+    separator: Color(0xFF3A3160),
+    text: Color(0xFFF4F2FA),
+    text2: Color(0xFFB4ADD0),
+    text3: Color(0xFF9D96BC),
+    accent: Color(0xFFFFC93D),
+    onAccent: Color(0xFF1A1300),
+    accentSoft: Color(0xFF3A2E0E),
+    onAccentSoft: Color(0xFFFFE3A0),
+    highlight: Color(0xFF9B8BFF),
+    onHighlight: Color(0xFF120E2B),
+    success: Color(0xFF4ADE95),
+    successSoft: Color(0xFF0E2D25),
+    danger: Color(0xFFFF8A5C),
+    dangerSoft: Color(0xFF3B1E1C),
+    focus: Color(0xFFFFC93D),
+  );
+  static const nightDark = NNPalette(
+    bg: Color(0xFF05030D),
+    surface: Color(0xFF110D22),
+    surface2: Color(0xFF1B1535),
+    separator: Color(0xFF2E2652),
+    text: Color(0xFFF4F2FA),
+    text2: Color(0xFFB4ADD0),
+    text3: Color(0xFFA49DC4),
+    accent: Color(0xFF9B8BFF),
+    onAccent: Color(0xFF120E2B),
+    accentSoft: Color(0xFF2B2360),
+    onAccentSoft: Color(0xFFD6D0FF),
+    highlight: Color(0xFFFFC93D),
+    onHighlight: Color(0xFF15121F),
+    success: Color(0xFF4ADE95),
+    successSoft: Color(0xFF0E2D25),
+    danger: Color(0xFFFF8A5C),
+    dangerSoft: Color(0xFF3B1E1C),
+    focus: Color(0xFF9B8BFF),
+  );
+
+  /// Looks that ignore the light/dark setting and are always dark.
+  static const alwaysDark = <String>{'night'};
+}
+
+/// Font family for amounts and big titles, bundled in assets/fonts.
+const nnDisplayFamily = 'ReadexPro';
 
 class NNGlass {
   static const regularLight = NNGlassStyle(
@@ -125,7 +195,7 @@ class NNGlass {
     bordered: false,
   );
   static const regularDark = NNGlassStyle(
-    fill: Color(0xCC1C1A26),
+    fill: Color(0xCC1A1533),
     highlight: Color(0x24FFFFFF),
     shadow: Color(0x80000000),
     blur: 28.0,
@@ -141,7 +211,7 @@ class NNGlass {
     bordered: true,
   );
   static const frostedDark = NNGlassStyle(
-    fill: Color(0xF51C1A26),
+    fill: Color(0xF51A1533),
     highlight: Color(0x00000000),
     shadow: Color(0x00000000),
     blur: 0.0,
@@ -152,9 +222,9 @@ class NNGlass {
 
 /// iOS text styles at the default (Large) Dynamic Type size; Flutter scales them with the system text scale.
 class NNType {
-  static const largeTitle = TextStyle(fontSize: 34.0, height: 1.2059, fontWeight: FontWeight.w700, letterSpacing: 0.37);
-  static const title1 = TextStyle(fontSize: 28.0, height: 1.2143, fontWeight: FontWeight.w700, letterSpacing: 0.36);
-  static const title2 = TextStyle(fontSize: 22.0, height: 1.2727, fontWeight: FontWeight.w700, letterSpacing: 0.35);
+  static const largeTitle = TextStyle(fontFamily: 'ReadexPro', fontSize: 34.0, height: 1.2059, fontWeight: FontWeight.w700, letterSpacing: 0.37);
+  static const title1 = TextStyle(fontFamily: 'ReadexPro', fontSize: 28.0, height: 1.2143, fontWeight: FontWeight.w700, letterSpacing: 0.36);
+  static const title2 = TextStyle(fontFamily: 'ReadexPro', fontSize: 22.0, height: 1.2727, fontWeight: FontWeight.w700, letterSpacing: 0.35);
   static const title3 = TextStyle(fontSize: 20.0, height: 1.2500, fontWeight: FontWeight.w600, letterSpacing: 0.38);
   static const headline = TextStyle(fontSize: 17.0, height: 1.2941, fontWeight: FontWeight.w600, letterSpacing: -0.43);
   static const body = TextStyle(fontSize: 17.0, height: 1.2941, fontWeight: FontWeight.w400, letterSpacing: -0.43);
@@ -162,7 +232,7 @@ class NNType {
   static const subhead = TextStyle(fontSize: 15.0, height: 1.3333, fontWeight: FontWeight.w400, letterSpacing: -0.23);
   static const footnote = TextStyle(fontSize: 13.0, height: 1.3846, fontWeight: FontWeight.w400, letterSpacing: -0.08);
   static const caption = TextStyle(fontSize: 12.0, height: 1.3333, fontWeight: FontWeight.w400, letterSpacing: 0.00);
-  static const amountHero = TextStyle(fontSize: 56.0, height: 1.1429, fontWeight: FontWeight.w700, letterSpacing: -0.50);
+  static const amountHero = TextStyle(fontFamily: 'ReadexPro', fontSize: 56.0, height: 1.1429, fontWeight: FontWeight.w700, letterSpacing: -0.50);
 }
 
 class NNSpace {

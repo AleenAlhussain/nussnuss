@@ -425,3 +425,42 @@ describe('rates, export, reminders and live updates', () => {
     expect(no.status).toBe(404);
   });
 });
+
+describe('offline replays and crash reports', () => {
+  test('"mark as paid" with a client id is recorded once however often it is sent', async () => {
+    const a = await signUp('Huda');
+    const g = await group(a.token, ['Ali']);
+    const id = crypto.randomUUID();
+    const body = { id, from: g.ids.Ali, to: g.me, amount: 1500 };
+    const first = await as(a.token).post(`/groups/${g.id}/payments`).send(body).expect(201);
+    const again = await as(a.token).post(`/groups/${g.id}/payments`).send(body).expect(201);
+    expect(first.body.id).toBe(id);
+    expect(again.body.id).toBe(id);
+    expect(again.body.detail.payments).toHaveLength(1);
+    const other = await group(a.token, ['Sami']);
+    await as(a.token).post(`/groups/${other.id}/payments`).send({ id, from: other.ids.Sami, to: other.me, amount: 1 }).expect(400);
+  });
+
+  test('crash reports are accepted without an account and logged only when turned on, secrets scrubbed', async () => {
+    const lines: string[] = [];
+    const capture = (chunk: string | Uint8Array) => {
+      lines.push(String(chunk));
+      return true;
+    };
+    const spies = [vi.spyOn(process.stdout, 'write').mockImplementation(capture), vi.spyOn(process.stderr, 'write').mockImplementation(capture)];
+    const secret = 'abcdefghijklmnopqrstuvwxyz0123456789ABCD';
+    try {
+      await http.post('/telemetry/crash').send({ app: 'web', version: '2.0.0', message: `boom ${secret}` }).expect(204);
+      expect(lines.join('')).not.toContain('boom');
+      process.env.CRASH_REPORTS = 'log';
+      await http.post('/telemetry/crash').send({ app: 'android', version: '2.0.0', message: `boom ${secret} sara@example.com`, stack: 'at main.dart:12' }).expect(204);
+      await http.post('/telemetry/crash').send({ app: 'desktop', version: '1', message: 'x' }).expect(400);
+    } finally {
+      process.env.CRASH_REPORTS = '';
+      for (const s of spies) s.mockRestore();
+    }
+    const out = lines.join('');
+    expect(out).toContain('boom [redacted] [email]');
+    expect(out).not.toContain(secret);
+  });
+});
