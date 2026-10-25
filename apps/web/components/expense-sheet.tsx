@@ -19,14 +19,14 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, newId, type Expense, type ExpenseInput, type GroupDetail, type Plan } from '@/lib/api';
-import { haptic, spring } from '@/lib/feel';
+import { haptic, shake, spring } from '@/lib/feel';
 import { money } from '@/lib/format';
 import { catKey, modeKey, type TKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { Sheet } from './glass';
 import { Keypad } from './keypad';
 import { usePaywall } from './paywall';
-import { Avatar, Button, Chip, cx, Segmented } from './ui';
+import { Avatar, Button, Chip, cx, ErrorText, Segmented } from './ui';
 
 const TONES = ['#4F3BD6', '#B0265A', '#0B5FA5', '#9A5B00', '#0F7B4A', '#6B4E9E', '#B93A0E', '#2F6F73'];
 type Mode = SplitMode | 'items';
@@ -100,6 +100,9 @@ export function ExpenseSheet({
   const [every, setEvery] = useState<Every>('none');
   const [details, setDetails] = useState(false);
   const [tried, setTried] = useState(false);
+  // Counts failed saves: each one shakes the message (and the amount, when it is missing).
+  const [miss, setMiss] = useState(0);
+  const pad = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const rateFor = useRef('');
 
@@ -250,7 +253,8 @@ export function ExpenseSheet({
   const save = async () => {
     setTried(true);
     if (!amount || !rate || err) {
-      haptic('warning');
+      setMiss((n) => n + 1);
+      if (!amount) shake(pad.current);
       if (err || !rate) setDetails(true);
       return;
     }
@@ -305,11 +309,9 @@ export function ExpenseSheet({
       morph={!editing}
       footer={
         <div className="flex flex-col gap-2">
-          {message ? (
-            <p className="text-center t-footnote text-danger" role="alert" data-testid="expense-error">
-              {message}
-            </p>
-          ) : null}
+          <ErrorText nonce={miss} testId="expense-error">
+            {message}
+          </ErrorText>
           <div className="flex gap-2">
             {editing && onDelete ? (
               <Button variant="danger" aria-label={t('delete')} onClick={() => onDelete(editing)} className="w-12 px-0" data-testid="delete-expense">
@@ -336,7 +338,9 @@ export function ExpenseSheet({
           </button>
         ) : null}
 
-        <Keypad value={amountText} onChange={setAmountText} currency={cur} lang={lang} label={t('amount')} />
+        <div ref={pad} data-testid="amount-pad">
+          <Keypad value={amountText} onChange={setAmountText} currency={cur} lang={lang} label={t('amount')} />
+        </div>
 
         <div className="flex flex-col gap-2">
           <label htmlFor="exp-title" className="t-footnote font-medium text-text-2 ps-1">

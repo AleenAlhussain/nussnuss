@@ -1,8 +1,8 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { forwardRef, useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
-import { haptic, spring } from '@/lib/feel';
+import { forwardRef, useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { haptic, shake, spring } from '@/lib/feel';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -20,15 +20,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
         ref={ref}
         type="button"
         className={cx(
-          'tap focus-ring inline-flex items-center justify-center gap-2 rounded-full px-5 t-headline transition-[transform,opacity] duration-150 active:scale-[0.97] disabled:opacity-40',
+          'tap press focus-ring inline-flex items-center justify-center gap-2 rounded-full px-5 t-headline disabled:opacity-40',
           styles[variant],
           block && 'w-full',
           className,
         )}
-        onClick={(e) => {
-          if (variant !== 'plain') haptic('light');
-          onClick?.(e);
-        }}
+        // No haptic on solid buttons: the light tap is for glass buttons (bar, tab, add), and the
+        // action itself answers with success or error.
+        onClick={onClick}
         {...rest}
       >
         {icon}
@@ -46,12 +45,20 @@ export function Field({
   ...rest
 }: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; error?: string | null }) {
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
+  // A new error shakes the field and gives the error haptic, so it is felt as well as seen.
+  useEffect(() => {
+    if (!error) return;
+    shake(input.current);
+    haptic('error');
+  }, [error]);
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
       <label htmlFor={id} className="t-footnote font-medium text-text-2 ps-1">
         {label}
       </label>
       <input
+        ref={input}
         id={id}
         aria-invalid={!!error}
         aria-describedby={error || hint ? `${id}-d` : undefined}
@@ -67,6 +74,34 @@ export function Field({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** A checkmark that draws itself in 300 ms (done, paid). With Reduce Motion it is simply there. */
+export function DrawCheck({ size = 18, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={className} data-testid="draw-check">
+      <path d="M5 12.5l4.5 4.5L19 7.5" pathLength={24} fill="none" stroke="currentColor" strokeWidth={2.75} strokeLinecap="round" strokeLinejoin="round" className="draw-check" />
+    </svg>
+  );
+}
+
+/**
+ * An error line under a form. Each new message (or a new `nonce`, for the same message again) shakes it
+ * and gives the error haptic.
+ */
+export function ErrorText({ children, nonce, testId, className }: { children: ReactNode; nonce?: number; testId?: string; className?: string }) {
+  const el = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!children) return;
+    shake(el.current);
+    haptic('error');
+  }, [children, nonce]);
+  if (!children) return null;
+  return (
+    <p ref={el} className={cx('text-center t-footnote text-danger', className)} role="alert" data-testid={testId}>
+      {children}
+    </p>
   );
 }
 

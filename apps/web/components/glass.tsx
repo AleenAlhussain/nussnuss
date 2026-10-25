@@ -4,10 +4,17 @@ import { AnimatePresence, motion, useDragControls } from 'motion/react';
 import { CaretLeft, GearSix, Plus, UsersThree } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { bouncy, haptic, spring } from '@/lib/feel';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { bouncy, haptic, sheetSpring, spring } from '@/lib/feel';
 import { useSession } from '@/lib/session';
 import { cx } from './ui';
+
+/**
+ * Whether the top bar has become glass (once the large title has scrolled under it). Its buttons then
+ * become plain fills, because glass never sits on glass.
+ */
+const BarGlass = createContext(false);
 
 /** Tracks scroll: how far down, and whether the person is scrolling down (to shrink the tab bar). */
 function useScroll() {
@@ -69,34 +76,31 @@ export function Screen({
   const collapsed = y > 44;
   return (
     <div className="min-h-dvh" data-testid={testId}>
-      {/* Scroll edge effect: the bar itself is not glass (its buttons are), content blurs and fades under it. */}
-      <header className="fixed inset-x-0 top-0 z-30" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      {/* At the top the bar is clear and its buttons are glass. Once the title scrolls under it, the bar itself
+          turns into a band of glass (fading out at its lower edge) and the buttons become plain fills. */}
+      <header className="fixed inset-x-0 top-0 z-30" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} data-collapsed={collapsed || undefined}>
         <div
           aria-hidden
           className={cx('pointer-events-none absolute inset-x-0 top-0 transition-opacity duration-200', collapsed ? 'opacity-100' : 'opacity-0')}
           style={{
-            height: 'calc(env(safe-area-inset-top, 0px) + var(--nn-layout-top-bar) + 28px)',
-            background: 'linear-gradient(to bottom, var(--nn-bg) 0%, var(--nn-bg) calc(100% - 28px), transparent 100%)',
-            WebkitBackdropFilter: 'blur(16px) saturate(1.4)',
-            backdropFilter: 'blur(16px) saturate(1.4)',
-            WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 28px), transparent)',
-            maskImage: 'linear-gradient(to bottom, #000 calc(100% - 28px), transparent)',
+            height: 'calc(env(safe-area-inset-top, 0px) + var(--nn-layout-top-bar) + 16px)',
+            background: 'var(--nn-glass-fill)',
+            WebkitBackdropFilter: 'blur(var(--nn-glass-blur)) saturate(var(--nn-glass-saturate))',
+            backdropFilter: 'blur(var(--nn-glass-blur)) saturate(var(--nn-glass-saturate))',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 16px), transparent)',
+            maskImage: 'linear-gradient(to bottom, #000 calc(100% - 16px), transparent)',
           }}
         />
         <div
           className="relative mx-auto flex items-center gap-1"
           style={{ height: 'var(--nn-layout-top-bar)', maxWidth: 'var(--nn-layout-max-content)', paddingInline: 'max(8px, env(safe-area-inset-left, 0px))' }}
         >
+          <BarGlass.Provider value={collapsed}>
           <div className="flex min-w-[88px] items-center">
             {back ? (
-              <button
-                type="button"
-                onClick={() => (window.history.length > 1 ? router.back() : router.push(back))}
-                className="tap focus-ring glass inline-flex items-center justify-center rounded-full text-text"
-                aria-label={t('back')}
-              >
+              <BarButton label={t('back')} onClick={() => (window.history.length > 1 ? router.back() : router.push(back))} testId="back">
                 <CaretLeft size={22} weight="bold" className="rtl:-scale-x-100" />
-              </button>
+              </BarButton>
             ) : null}
           </div>
           <motion.h1
@@ -109,6 +113,7 @@ export function Screen({
             {title}
           </motion.h1>
           <div className="flex min-w-[88px] items-center justify-end gap-1">{actions}</div>
+          </BarGlass.Provider>
         </div>
       </header>
 
@@ -138,13 +143,34 @@ export function Screen({
   );
 }
 
-/** Floating glass capsule with the two tabs, and a separate tinted add button, like the iOS 26 tab bar. */
+/** Which tab a path belongs to, and where each tab was last (so switching tabs never loses your place). */
+const TAB_OF = (path: string) => (path.startsWith('/settings') || path === '/privacy' || path === '/terms' ? 'settings' : 'groups');
+const lastPath = (tab: string): string | null => {
+  try {
+    return sessionStorage.getItem(`nn:tab:${tab}`);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Floating glass capsule with the two tabs, and a separate tinted add button, like the iOS 26 tab bar.
+ * Scrolling down shrinks it to an icon-only capsule; scrolling up brings the labels back. Each tab keeps
+ * its own place; tapping the tab you are on scrolls to the top, and tapping it again goes to its first screen.
+ */
 function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: boolean; onAdd?: () => void; onAddHold?: () => void; addLabel?: string; showTabs: boolean }) {
   const path = usePathname();
+  const router = useRouter();
   const { t } = useSession();
+  const current = TAB_OF(path);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(`nn:tab:${current}`, path);
+    } catch {}
+  }, [current, path]);
   const tabs = [
-    { href: '/', label: t('groups'), icon: UsersThree, on: path === '/' || path.startsWith('/g/') },
-    { href: '/settings', label: t('settings'), icon: GearSix, on: path.startsWith('/settings') },
+    { key: 'groups', href: '/', label: t('groups'), icon: UsersThree },
+    { key: 'settings', href: '/settings', label: t('settings'), icon: GearSix },
   ];
   return (
     <nav
@@ -160,24 +186,45 @@ function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: bo
             animate={{ scale: compact ? 0.9 : 1, y: compact ? 4 : 0 }}
             transition={spring}
             className="glass pointer-events-auto flex origin-bottom-left items-center gap-1 rounded-full p-1.5 rtl:origin-bottom-right"
+            data-testid="tab-bar"
+            data-compact={compact || undefined}
           >
-            {tabs.map((tab) => (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                aria-current={tab.on ? 'page' : undefined}
-                onClick={() => haptic('selection')}
-                className={cx(
-                  'focus-ring flex h-12 items-center gap-2 rounded-full px-4 t-subhead font-semibold transition-colors',
-                  tab.on ? 'on-glass-fill text-text' : 'text-text-2',
-                )}
-              >
-                <tab.icon size={22} weight={tab.on ? 'fill' : 'regular'} />
-                <motion.span initial={false} animate={{ width: compact && !tab.on ? 0 : 'auto', opacity: compact && !tab.on ? 0 : 1 }} className="overflow-hidden whitespace-nowrap @max-[21.5rem]:sr-only">
-                  {tab.label}
-                </motion.span>
-              </Link>
-            ))}
+            {tabs.map((tab) => {
+              const on = tab.key === current;
+              const target = on ? tab.href : (lastPath(tab.key) ?? tab.href);
+              return (
+                <Link
+                  key={tab.key}
+                  href={target}
+                  aria-current={on ? 'page' : undefined}
+                  aria-label={tab.label}
+                  data-testid={`tab-${tab.key}`}
+                  onClick={(e) => {
+                    haptic('selection');
+                    if (!on) return;
+                    e.preventDefault();
+                    // On the tab already: first to the top, then back to its first screen.
+                    if (window.scrollY > 4) window.scrollTo({ top: 0, behavior: 'smooth' });
+                    else if (path !== tab.href) router.push(tab.href);
+                  }}
+                  className={cx(
+                    'glass-press focus-ring flex h-12 items-center gap-2 rounded-full px-4 t-subhead font-semibold transition-colors',
+                    on ? 'on-glass-fill text-text' : 'text-text-2',
+                  )}
+                >
+                  <tab.icon size={22} weight={on ? 'fill' : 'regular'} />
+                  <motion.span
+                    initial={false}
+                    animate={{ width: compact ? 0 : 'auto', opacity: compact ? 0 : 1 }}
+                    transition={spring}
+                    className="overflow-hidden whitespace-nowrap @max-[21.5rem]:sr-only"
+                    aria-hidden
+                  >
+                    {tab.label}
+                  </motion.span>
+                </Link>
+              );
+            })}
           </motion.div>
         ) : (
           <span />
@@ -211,7 +258,8 @@ function AddButton({ onClick, onHold, label }: { onClick: () => void; onHold?: (
       aria-label={label}
       data-testid="add"
       layoutId={ADD_MORPH}
-      whileTap={{ scale: 0.92 }}
+      // Glass swells under the finger (and brightens) instead of shrinking.
+      whileTap={{ scale: 1.04, filter: 'brightness(1.12)' }}
       transition={bouncy}
       style={{ borderRadius: 999 }}
       onPointerDown={() => {
@@ -255,13 +303,34 @@ function AddButton({ onClick, onHold, label }: { onClick: () => void; onHold?: (
   );
 }
 
-/** Glass icon button for the top bar. */
+/** Icon button for the top bar: glass over content, a plain fill once the bar itself is glass. */
 export function BarButton({ label, onClick, children, testId }: { label: string; onClick: () => void; children: ReactNode; testId?: string }) {
+  const onGlass = useContext(BarGlass);
   return (
-    <button type="button" aria-label={label} data-testid={testId} onClick={onClick} className="tap focus-ring glass inline-grid place-items-center rounded-full text-text">
+    <button
+      type="button"
+      aria-label={label}
+      data-testid={testId}
+      onClick={() => {
+        haptic('light');
+        onClick();
+      }}
+      className={cx('tap focus-ring glass-press inline-grid place-items-center rounded-full text-text', onGlass ? 'on-glass-fill' : 'glass')}
+    >
       {children}
     </button>
   );
+}
+
+/** How many sheets are open; while any is, the screen behind steps back (see `html[data-sheet]` in CSS). */
+let openSheets = 0;
+function stepBack(open: boolean) {
+  const el = document.documentElement;
+  openSheets = Math.max(0, openSheets + (open ? 1 : -1));
+  if (openSheets) {
+    if (open && openSheets === 1) el.style.setProperty('--nn-sheet-origin', `${window.scrollY + window.innerHeight / 2}px`);
+    el.dataset.sheet = 'open';
+  } else delete el.dataset.sheet;
 }
 
 /**
@@ -293,9 +362,12 @@ export function Sheet({
   const { t } = useSession();
 
   const close = useCallback(() => onClose(), [onClose]);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
+    stepBack(true);
     opener.current = document.activeElement;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -324,11 +396,14 @@ export function Sheet({
       clearTimeout(first);
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
+      stepBack(false);
       (opener.current as HTMLElement | null)?.focus?.();
     };
   }, [open, close]);
 
-  return (
+  // In <body>, outside <main>: the screen behind scales back while a sheet is open, and the sheet must not.
+  if (!mounted) return null;
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center" data-testid={testId}>
@@ -349,7 +424,7 @@ export function Sheet({
             initial={morph ? { opacity: 1 } : { y: '100%', opacity: 0.6 }}
             animate={{ y: 0, opacity: 1 }}
             exit={morph ? { opacity: 1 } : { y: '100%', opacity: 0.6 }}
-            transition={spring}
+            transition={sheetSpring}
             drag="y"
             dragControls={drag}
             dragListener={false}
@@ -373,7 +448,7 @@ export function Sheet({
               <h2 id={titleId} className="t-headline text-text">
                 {title}
               </h2>
-              <button type="button" onClick={close} className="tap focus-ring on-glass-fill grid place-items-center rounded-full t-subhead font-semibold text-text" aria-label={t('close')}>
+              <button type="button" onClick={close} className="tap press focus-ring on-glass-fill grid place-items-center rounded-full t-subhead font-semibold text-text" aria-label={t('close')} data-testid="sheet-close">
                 ✕
               </button>
             </div>
@@ -387,6 +462,7 @@ export function Sheet({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

@@ -53,12 +53,14 @@ GitHub Actions runs all of these on every push, builds both Docker images and st
 
 ## Design
 
-NussNuss follows Apple's 2025 design language without becoming an iOS copy:
+NussNuss follows Apple's design language, starting from the more readable 2026 version of Liquid Glass, without becoming an iOS copy:
 
-- **Liquid Glass only on the navigation layer.** The tab bar, the add button, the bar buttons and the sheets are glass; content cards are solid. Glass never sits on glass.
-- **The rim of light.** Glass panes have a 1px highlight along the top edge and a shadow painted only outside the shape, so the pane itself stays clean.
-- **Frosted, by choice or by need.** Settings has a Frosted option that makes every glass surface solid. It turns on by itself with Reduce Transparency or Increase Contrast in the browser, and with Increase Contrast on iPhone.
-- **Springs, not curves.** Motion uses the same three springs everywhere (standard, bouncy, gentle), defined once in the tokens. Reduce Motion swaps them for short fades.
+- **Glass only on the navigation layer.** The tab bar, the add button, the bar buttons, the floating search on Groups, the sheets and the toast are glass; content (balances, expense rows, cards, forms) is solid. Glass never sits on glass: buttons on a glass bar use a fill, and a toast over an open sheet turns solid.
+- **Three levels.** Settings → Glass offers Clear, Tinted (the default: the accent's soft colour under the blur, for readable labels) and Solid. Solid turns on by itself with Reduce Transparency or Increase Contrast, and where the browser has no backdrop blur.
+- **The edge.** Glass panes have a light hairline that fades from the top corner, a highlight along the top and a shadow painted only outside the shape. A faint accent glow sits behind the app so the glass has colour to bend; the contrast check runs on top of it.
+- **Navigation.** Two tabs that remember where you were; tapping the tab you are on goes to the top, then back to its first screen. Search on Groups finds groups, people and expenses; a group with five or more expenses gets its own search. Opening a group grows its card into the screen.
+- **Springs, not curves.** Motion uses the same springs everywhere (standard, bouncy, gentle, and one for sheets), defined once in the tokens. A sheet steps the page behind it back to 96%. Presses dip on solid buttons and swell on glass ones. Lists arrive in a short stagger, loading shows a shimmer, pull down to refresh.
+- **Haptics with a meaning.** A tick for each choice, a light tap for buttons and for the pull or swipe crossing its threshold, success when something is paid or saved, an error buzz with a shake when a form needs fixing. Reduce Motion swaps slides, zooms, swells and shakes for short fades.
 - **The coin.** The brand mark is one coin in two fair halves. When a group is settled, the halves snap together.
 - **Platform manners.** 44pt touch targets on iOS and 48dp on Android, the native back gesture on each, system fonts, and Arabic that mirrors the layout while numbers stay readable.
 

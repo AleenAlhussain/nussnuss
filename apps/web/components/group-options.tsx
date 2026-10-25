@@ -1,9 +1,9 @@
 'use client';
 
-import { CaretRight, ChartBar, Check, CoinVertical, DownloadSimple, Plus, Printer, Repeat, Ticket, Trash } from '@phosphor-icons/react';
+import { CaretRight, ChartBar, CoinVertical, DownloadSimple, Plus, Printer, Repeat, Ticket, Trash } from '@phosphor-icons/react';
 import { memberStats, parseAmount, spendingByCategory } from '@nussnuss/core';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, saveBlob, type Circle, type GroupDetail } from '@/lib/api';
 import { haptic } from '@/lib/feel';
 import { money } from '@/lib/format';
@@ -13,7 +13,7 @@ import { groupHasPlus } from './expense-sheet';
 import { Sheet } from './glass';
 import { shortDate, usePaywall } from './paywall';
 import { useToast } from './toast';
-import { Avatar, Button, cx, Field, Segmented } from './ui';
+import { Avatar, Button, cx, DrawCheck, ErrorText, Field, Segmented } from './ui';
 
 function Row({ icon, title, sub, onClick, trailing, testId }: { icon: ReactNode; title: string; sub?: string; onClick?: () => void; trailing?: ReactNode; testId?: string }) {
   const inner = (
@@ -249,6 +249,13 @@ export function GroupOptions({
 export function CirclesCard({ g, onOpen }: { g: GroupDetail; onOpen: (c: Circle) => void }) {
   const { t, prefs } = useSession();
   const live = (g.circles ?? []).filter((c) => c.status !== 'done');
+  // Someone turning late while the app is open: the chip pulses once and you feel a warning.
+  const lateNow = live.reduce((n, c) => n + (c.rounds[c.current ?? 0]?.late.length ?? 0), 0);
+  const lateBefore = useRef<number | null>(null);
+  useEffect(() => {
+    if (lateBefore.current !== null && lateNow > lateBefore.current) haptic('warning');
+    lateBefore.current = lateNow;
+  }, [lateNow]);
   if (!live.length) return null;
   const name = (id: string) => {
     const m = g.members.find((x) => x.id === id);
@@ -274,7 +281,7 @@ export function CirclesCard({ g, onOpen }: { g: GroupDetail; onOpen: (c: Circle)
             </span>
             <span className="flex flex-col items-end gap-0.5 text-end">
               <span className="t-footnote text-text-2 num">{t('circlePaidN', { paid: r.paid.length, total: others })}</span>
-              {r.late.length ? <span className="t-footnote font-semibold text-danger">{`${r.late.length} ${t('late')}`}</span> : null}
+              {r.late.length ? <span className="pulse-once rounded-full px-1.5 t-footnote font-semibold text-danger" data-testid="circle-late">{`${r.late.length} ${t('late')}`}</span> : null}
             </span>
           </button>
         );
@@ -335,13 +342,13 @@ export function CircleSheet({ circle, g, onClose, onChange }: { circle: Circle |
                           }}
                           className={cx(
                             'focus-ring flex h-11 items-center gap-1.5 rounded-full pe-3 ps-1 t-footnote font-semibold',
-                            paid ? 'bg-success-soft text-success' : late ? 'bg-danger-soft text-danger' : 'bg-surface-2 text-text-2',
+                            paid ? 'bg-success-soft text-success' : late ? 'pulse-once bg-danger-soft text-danger' : 'bg-surface-2 text-text-2',
                           )}
                           data-testid="circle-member"
                         >
                           <Avatar name={realName(m)} index={idx(m)} size={28} />
                           {name(m)}
-                          {paid ? <Check size={16} weight="bold" aria-hidden /> : late ? ` · ${t('late')}` : null}
+                          {paid ? <DrawCheck size={16} /> : late ? ` · ${t('late')}` : null}
                         </button>
                       );
                     })}
@@ -417,11 +424,7 @@ export function NewCircleSheet({ open, g, onClose, onCreated }: { open: boolean;
       testId="new-circle-sheet"
       footer={
         <div className="flex flex-col gap-2">
-          {error ? (
-            <p className="text-center t-footnote text-danger" role="alert">
-              {error}
-            </p>
-          ) : null}
+          <ErrorText>{error}</ErrorText>
           <Button block onClick={create} disabled={busy} data-testid="create-circle">
             {t('create')}
           </Button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, BellRinging, Check, Copy, ArrowSquareOut, ShareFat } from '@phosphor-icons/react';
+import { ArrowRight, BellRinging, Check, CheckCircle, Copy, ArrowSquareOut, ShareFat } from '@phosphor-icons/react';
 import { payAction, type PayTo, type Transfer } from '@nussnuss/core';
 import { AnimatePresence, motion, useMotionValue, useTransform } from 'motion/react';
 import { useState } from 'react';
@@ -35,6 +35,8 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
   const rtl = prefs.lang === 'ar';
   const x = useMotionValue(0);
   const reveal = useTransform(x, rtl ? [-140, 0] : [0, 140], rtl ? [1, 0] : [0, 1]);
+  // Past the point where letting go marks it paid, the tick pops and you feel a light tick.
+  const [armed, setArmed] = useState(false);
   const idx = (id: string) => group.members.findIndex((m) => m.id === id);
   const member = (id: string) => group.members.find((p) => p.id === id);
   const name = (id: string) => {
@@ -64,7 +66,9 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
   return (
     <motion.li layout exit={{ opacity: 0, height: 0, marginTop: 0 }} transition={spring} className="relative list-none overflow-hidden rounded-card" data-testid="transfer">
       <motion.div aria-hidden style={{ opacity: reveal }} className="absolute inset-0 flex items-center gap-2 bg-success px-6 t-headline text-white">
-        <Check size={22} weight="bold" />
+        <motion.span animate={{ scale: armed ? 1.25 : 1 }} transition={{ type: 'spring', duration: 0.15, bounce: 0.4 }} className="inline-flex" data-armed={armed || undefined} data-testid="swipe-tick">
+          <CheckCircle size={26} weight={armed ? 'fill' : 'bold'} />
+        </motion.span>
         {t('markPaid')}
       </motion.div>
       <motion.div
@@ -72,7 +76,15 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={rtl ? { left: 0.7, right: 0 } : { left: 0, right: 0.7 }}
         style={{ x }}
+        onDrag={(_, info) => {
+          const far = rtl ? info.offset.x < -110 : info.offset.x > 110;
+          if (far !== armed) {
+            setArmed(far);
+            if (far) haptic('selection');
+          }
+        }}
         onDragEnd={(_, info) => {
+          setArmed(false);
           const far = rtl ? info.offset.x < -110 : info.offset.x > 110;
           if (far) {
             haptic('success');
@@ -108,7 +120,7 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
                     key={`${p.kind}-${i}`}
                     type="button"
                     onClick={() => payWith(p)}
-                    className="tap focus-ring inline-flex items-center gap-2 rounded-full bg-accent px-4 t-subhead font-semibold text-on-accent active:scale-[0.98]"
+                    className="tap focus-ring inline-flex items-center gap-2 rounded-full bg-accent px-4 t-subhead font-semibold text-on-accent press"
                   >
                     {'open' in a ? <ArrowSquareOut size={18} /> : <Copy size={18} />}
                     {t('payWith', { method: methodName(p, t) })}
@@ -128,7 +140,7 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
             }}
             data-testid="mark-paid"
             aria-describedby="swipe-hint"
-            className="tap focus-ring flex flex-1 items-center justify-center gap-2 rounded-full bg-accent-soft t-subhead font-semibold text-on-accent-soft active:scale-[0.98]"
+            className="tap focus-ring flex flex-1 items-center justify-center gap-2 rounded-full bg-accent-soft t-subhead font-semibold text-on-accent-soft press"
           >
             <Check size={18} weight="bold" />
             {t('markPaid')}
@@ -142,7 +154,7 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
               }}
               data-testid="remind"
               aria-label={t('remindName', { name: name(tr.from) })}
-              className="tap focus-ring flex items-center justify-center gap-2 rounded-full bg-surface-2 px-4 t-subhead font-semibold text-text active:scale-[0.98]"
+              className="tap focus-ring flex items-center justify-center gap-2 rounded-full bg-surface-2 px-4 t-subhead font-semibold text-text press"
             >
               <BellRinging size={18} />
               {t('remind')}

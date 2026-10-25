@@ -9,7 +9,7 @@ import { useSession } from '@/lib/session';
 import { Sheet } from './glass';
 import { methodName } from './settle';
 import { useToast } from './toast';
-import { Button, Field, Section } from './ui';
+import { Button, ErrorText, Field, Section } from './ui';
 
 const ICON: Record<PayToKind, typeof Bank> = { iban: Bank, instapay: Wallet, stcpay: Wallet, phone: Wallet, paypal: LinkIcon, wise: LinkIcon, link: LinkIcon };
 const PLACEHOLDER: Record<PayToKind, string> = {
@@ -95,11 +95,7 @@ export function PayToSection() {
         testId="pay-to-sheet"
         footer={
           <div className="flex flex-col gap-2">
-            {error ? (
-              <p className="text-center t-footnote text-danger" role="alert">
-                {error}
-              </p>
-            ) : null}
+            <ErrorText>{error}</ErrorText>
             <Button block onClick={add} disabled={value.trim().length < 3} data-testid="save-pay-to">
               {t('save')}
             </Button>

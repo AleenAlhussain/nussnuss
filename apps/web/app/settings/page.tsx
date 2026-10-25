@@ -116,7 +116,11 @@ export default function SettingsPage() {
             value={prefs.glass}
             testId="settings-glass"
             onChange={(v) => setPrefs({ glass: v })}
-            options={(['auto', 'frosted'] as const).map((k) => ({ key: k, label: t(`glass_${k}`) }))}
+            options={[
+              { key: 'clear', label: t('glass_auto') },
+              { key: 'tinted', label: t('glass_tinted') },
+              { key: 'frosted', label: t('glass_solid') },
+            ]}
           />
         </div>
       </Section>

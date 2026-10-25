@@ -7,7 +7,8 @@ import { kvClear } from './kv';
 import { translate, type Lang, type TKey } from './i18n';
 
 export type ThemePref = 'system' | 'light' | 'dark';
-export type GlassPref = 'auto' | 'frosted';
+/** Glass level, like Apple's clear-to-tinted slider: Clear, Tinted (the default) or Solid ('frosted'). */
+export type GlassPref = 'clear' | 'tinted' | 'frosted';
 export type Look = 'default' | 'night' | 'saffron';
 export const LOOKS: Look[] = ['default', 'night', 'saffron'];
 
@@ -48,12 +49,15 @@ function readPrefs(): Prefs {
   const fallback: Prefs = {
     lang: typeof navigator !== 'undefined' && navigator.language?.startsWith('ar') ? 'ar' : 'en',
     theme: 'system',
-    glass: 'auto',
+    glass: 'tinted',
     look: 'default',
     sounds: false,
   };
   try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') };
+    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
+    // Before the Tinted level existed, 'auto' meant the clear glass.
+    if (saved.glass === 'auto') saved.glass = 'clear';
+    return { ...fallback, ...saved };
   } catch {
     return fallback;
   }
@@ -62,7 +66,7 @@ function readPrefs(): Prefs {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
-  const [prefs, setPrefsState] = useState<Prefs>({ lang: 'en', theme: 'system', glass: 'auto', look: 'default', sounds: false });
+  const [prefs, setPrefsState] = useState<Prefs>({ lang: 'en', theme: 'system', glass: 'tinted', look: 'default', sounds: false });
   const [plan, setPlan] = useState<Plan | null>(null);
   const [firstRun, setFirstRun] = useState(false);
 
@@ -135,8 +139,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     el.dir = prefs.lang === 'ar' ? 'rtl' : 'ltr';
     if (prefs.theme === 'system') delete el.dataset.theme;
     else el.dataset.theme = prefs.theme;
-    if (prefs.glass === 'frosted') el.dataset.glass = 'frosted';
-    else delete el.dataset.glass;
+    if (prefs.glass === 'tinted') delete el.dataset.glass;
+    else el.dataset.glass = prefs.glass;
     // A look someone has not got (or no longer has) falls back to the standard one.
     if (prefs.look !== 'default' && ownsLook(prefs.look)) el.dataset.look = prefs.look;
     else delete el.dataset.look;

@@ -1,7 +1,7 @@
 'use client';
 
-import { Airplane, Basket, Car, CloudArrowUp, Coffee, DotsThree, House, Receipt, ShareNetwork, ShoppingBag, Sparkle, Tag } from '@phosphor-icons/react';
-import { expenseInGroupCurrency, type Transfer } from '@nussnuss/core';
+import { Airplane, Basket, Car, CloudArrowUp, Coffee, DotsThree, House, MagnifyingGlass, Receipt, ShareNetwork, ShoppingBag, Sparkle, Tag } from '@phosphor-icons/react';
+import { expenseInGroupCurrency, minorToInput, type Transfer } from '@nussnuss/core';
 import { AnimatePresence, motion } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
@@ -10,6 +10,7 @@ import { BarButton, Screen } from '@/components/glass';
 import { CircleSheet, CirclesCard, GroupOptions, NewCircleSheet } from '@/components/group-options';
 import { ShareSheet } from '@/components/group-sheets';
 import { usePaywall } from '@/components/paywall';
+import { PullToRefresh } from '@/components/pull';
 import { Rolling } from '@/components/rolling';
 import { SettlePlan } from '@/components/settle';
 import { useToast } from '@/components/toast';
@@ -39,7 +40,7 @@ function BalanceHero({ g, pending }: { g: GroupDetail; pending: number }) {
   const label = mine > 0 ? t('youAreOwed') : mine < 0 ? t('youOwe') : t('allSettled');
   const tone = mine > 0 ? 'text-success' : mine < 0 ? 'text-danger' : 'text-text';
   return (
-    <section className="flex flex-col gap-1 px-1 pb-2" aria-label={label}>
+    <section className="flex flex-col gap-1 px-1 pb-2" aria-label={label} data-vt="group-card">
       <span className="t-subhead font-medium text-text-2">{label}</span>
       <Rolling text={money(Math.abs(mine), g.currency, prefs.lang)} className={`t-amount-hero ${tone}`} testId="my-balance" />
       <span className="flex flex-wrap items-center gap-2 t-footnote text-text-2">
@@ -58,25 +59,42 @@ function BalanceHero({ g, pending }: { g: GroupDetail; pending: number }) {
 }
 
 /** One continuous list with day headings: the balance first and large, then everything that happened. */
-function ExpenseList({ g, onOpen }: { g: GroupDetail; onOpen: (e: Expense) => void }) {
+function ExpenseList({ g, onOpen, q = '' }: { g: GroupDetail; onOpen: (e: Expense) => void; q?: string }) {
   const { t, prefs } = useSession();
   const lang = prefs.lang;
+  // The first time the list appears its rows arrive one after another (30 ms apart, within 400 ms).
+  const first = useRef(true);
+  useEffect(() => {
+    first.current = false;
+  }, []);
+  const name = (id: string) => {
+    const m = g.members.find((x) => x.id === id);
+    return m?.isMe ? t('you') : (m?.name ?? '?');
+  };
+  const shown = useMemo(() => {
+    const k = q.trim().toLocaleLowerCase();
+    if (!k) return g.expenses;
+    return g.expenses.filter((e) => {
+      const who = g.members.find((m) => m.id === e.paidBy)?.name ?? '';
+      const amount = money(expenseInGroupCurrency(e, g.currency), g.currency, lang).toLocaleLowerCase();
+      return e.title.toLocaleLowerCase().includes(k) || who.toLocaleLowerCase().includes(k) || amount.includes(k) || minorToInput(e.amount, e.currency).includes(k);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, g.expenses, g.members, g.currency, lang]);
   const days = useMemo(() => {
     const out: { key: string; label: string; items: Expense[] }[] = [];
-    for (const e of g.expenses) {
+    for (const e of shown) {
       const k = dayKey(e.spentAt);
       let d = out.find((x) => x.key === k);
       if (!d) out.push((d = { key: k, label: dayLabel(e.spentAt, lang, t), items: [] }));
       d.items.push(e);
     }
     return out;
-  }, [g.expenses, lang, t]);
-  const name = (id: string) => {
-    const m = g.members.find((x) => x.id === id);
-    return m?.isMe ? t('you') : (m?.name ?? '?');
-  };
+  }, [shown, lang, t]);
 
   if (!g.expenses.length) return <Empty icon={<Receipt size={36} />} title={t('noExpensesTitle')} body={t('noExpensesBody')} />;
+  if (!shown.length) return <p className="py-8 text-center t-subhead text-text-2">{t('noResults', { q: q.trim() })}</p>;
+  let row = 0;
   // overflow-clip, not hidden: hidden would make the list its own scroll box and break the sticky day headings.
   return (
     <div className="overflow-clip rounded-card bg-surface">
@@ -84,12 +102,20 @@ function ExpenseList({ g, onOpen }: { g: GroupDetail; onOpen: (e: Expense) => vo
         <section key={d.key}>
           <h2 className="sticky top-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar))] z-10 bg-surface/95 px-4 pb-1 pt-3 t-footnote font-semibold text-text-2 backdrop-blur">{d.label}</h2>
           <ul>
-            <AnimatePresence initial={false}>
+            <AnimatePresence>
               {d.items.map((e) => {
                 const Icon = CAT_ICON[e.category] ?? Tag;
                 const shareCount = e.items.filter((i) => i.value > 0).length;
+                const n = row++;
                 return (
-                  <motion.li key={e.id} layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={spring}>
+                  <motion.li
+                    key={e.id}
+                    layout
+                    initial={{ opacity: 0, y: first.current ? 8 : -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ ...spring, delay: first.current ? Math.min(n * 0.03, 0.12) : 0 }}
+                  >
                     <button type="button" onClick={() => onOpen(e)} className="focus-ring flex w-full scroll-mt-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar)+3rem)] items-center gap-3 px-4 py-3 text-start active:bg-surface-2" data-testid="expense-row">
                       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-row bg-accent-soft text-on-accent-soft" aria-hidden>
                         <Icon size={22} />
@@ -117,21 +143,21 @@ function ExpenseList({ g, onOpen }: { g: GroupDetail; onOpen: (e: Expense) => vo
 function GroupSkeleton() {
   return (
     <div className="flex flex-col gap-6" aria-busy="true">
-      <div className="flex flex-col gap-2 px-1">
-        <div className="h-4 w-24 animate-pulse rounded bg-surface" />
-        <div className="h-14 w-56 animate-pulse rounded-control bg-surface" />
-        <div className="h-3 w-32 animate-pulse rounded bg-surface" />
+      <div className="flex flex-col gap-2 px-1" data-vt="group-card">
+        <div className="shimmer h-4 w-24 rounded" />
+        <div className="shimmer h-14 w-56 rounded-control" />
+        <div className="shimmer h-3 w-32 rounded" />
       </div>
-      <div className="h-10 animate-pulse rounded-control bg-surface" />
+      <div className="shimmer h-10 rounded-control" />
       <div className="flex flex-col gap-px overflow-hidden rounded-card">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="flex items-center gap-3 bg-surface px-4 py-3">
-            <div className="h-11 w-11 animate-pulse rounded-row bg-surface-2" />
+            <div className="shimmer h-11 w-11 rounded-row" />
             <div className="flex flex-1 flex-col gap-2">
-              <div className="h-3.5 w-2/3 animate-pulse rounded bg-surface-2" />
-              <div className="h-3 w-1/3 animate-pulse rounded bg-surface-2" />
+              <div className="shimmer h-3.5 w-2/3 rounded" />
+              <div className="shimmer h-3 w-1/3 rounded" />
             </div>
-            <div className="h-4 w-16 animate-pulse rounded bg-surface-2" />
+            <div className="shimmer h-4 w-16 rounded" />
           </div>
         ))}
       </div>
@@ -158,6 +184,7 @@ export default function GroupPage() {
   const [tab, setTab] = useState<'expenses' | 'settle'>('expenses');
   const [sheet, setSheet] = useState<{ open: boolean; editing: Expense | null }>({ open: false, editing: null });
   const [panel, setPanel] = useState<null | 'share' | 'options' | 'new-circle' | { circle: Circle }>(null);
+  const [q, setQ] = useState('');
   const pending = usePending(id);
   const version = useRef(0);
 
@@ -272,7 +299,7 @@ export default function GroupPage() {
       const r = await submit({ kind: 'pay', groupId: g.id, payment: { id: pid, ...tr }, title: t('markPaid') }, g);
       apply(r.detail);
       if (r.detail.transfers.length === 0) play('chime', prefs.sounds);
-      toast(r.queued ? t('savedOffline') : t('paidRecorded'), r.queued ? undefined : { label: t('undo'), run: () => api.unpay(pid).then(apply).catch(() => toast(t('error'))) });
+      toast(r.queued ? t('savedOffline') : t('paidRecorded'), r.queued ? undefined : { label: t('undo'), run: () => api.unpay(pid).then(apply).catch(() => toast(t('error'))) }, { done: !r.queued });
     } catch {
       toast(t('error'));
     }
@@ -337,7 +364,23 @@ export default function GroupPage() {
           { key: 'settle', label: t('settleUp') },
         ]}
       />
-      {tab === 'expenses' ? <ExpenseList g={g} onOpen={(e) => setSheet({ open: true, editing: e })} /> : <SettlePlan group={g} onPay={pay} />}
+      {tab === 'expenses' && g.expenses.length >= 5 ? (
+        <label className="flex h-11 items-center gap-2 rounded-full bg-surface px-4 text-text-2 ring-1 ring-separator focus-within:outline focus-within:outline-3 focus-within:outline-[var(--nn-focus)]">
+          <MagnifyingGlass size={18} aria-hidden />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('search')}
+            aria-label={t('search')}
+            data-testid="expense-search"
+            enterKeyHint="search"
+            className="min-w-0 flex-1 bg-transparent t-body text-text outline-none placeholder:text-text-2"
+          />
+        </label>
+      ) : null}
+      {tab === 'expenses' ? <ExpenseList g={g} q={q} onOpen={(e) => setSheet({ open: true, editing: e })} /> : <SettlePlan group={g} onPay={pay} />}
+      <PullToRefresh onRefresh={() => flush(undefined, apply).finally(load)} />
       <ExpenseSheet
         open={sheet.open}
         editing={sheet.editing}

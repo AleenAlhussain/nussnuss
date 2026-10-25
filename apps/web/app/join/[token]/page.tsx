@@ -4,7 +4,7 @@ import { LinkBreak } from '@phosphor-icons/react';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Coin } from '@/components/coin';
-import { Avatar, Button, Empty, Field } from '@/components/ui';
+import { Avatar, Button, Empty, ErrorText, Field } from '@/components/ui';
 import { api, type InvitePreview } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { cacheGroup } from '@/lib/sync';
@@ -76,7 +76,7 @@ export default function JoinPage() {
       </fieldset>
 
       <div className="mt-auto flex flex-col gap-2">
-        {error ? <p className="text-center t-footnote text-danger" role="alert">{error}</p> : null}
+        <ErrorText>{error}</ErrorText>
         <Button block disabled={!pick || busy || (pick !== 'new' && !open.some((m) => m.id === pick))} onClick={join} data-testid="join-btn">
           {pick && pick !== 'new' ? t('joinAs', { name: preview.members.find((m) => m.id === pick)?.name ?? '' }) : t('joinBtn')}
         </Button>

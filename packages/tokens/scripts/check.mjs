@@ -29,11 +29,28 @@ for (const [label, c, mode] of palettes) {
     line(ok, `${fg} on ${bg}`, r, need || undefined);
   }
 
-  for (const variant of ['regular', 'frosted']) {
-    const g = tokens.glass[variant][mode];
+  // Text that sits on the background, where the ambient light is strongest.
+  const amb = tokens.ambient?.[mode];
+  if (amb) {
+    console.log(`\n[${label}] text on the ambient light`);
+    for (const [glow, a] of [['accent', amb.accentAlpha], ['highlight', amb.highlightAlpha]]) {
+      const under = composite(c[glow], a, c.bg);
+      for (const [fg, need] of [['text', 4.5], ['text2', 4.5], ['accent', 4.5], ['success', 3], ['danger', 3]]) {
+        const r = contrast(c[fg], under);
+        const ok = r >= need;
+        if (!ok) failures++;
+        line(ok, `${fg} on bg under the ${glow} glow`, r, need);
+      }
+    }
+  }
+
+  for (const variant of ['regular', 'tinted', 'frosted']) {
+    const v = tokens.glass[variant];
+    const g = v[mode];
+    const fill = v.fillRole ? c[v.fillRole] : g.fill;
     console.log(`\n[${label}] text on ${variant} glass`);
     for (const backdropKey of tokens.glass.backdrops[mode]) {
-      const surface = composite(g.fill, g.fillAlpha, c[backdropKey]);
+      const surface = composite(fill, g.fillAlpha, c[backdropKey]);
       for (const fg of tokens.glass.onGlass) {
         const r = contrast(c[fg], surface);
         // Secondary text and tinted icons on glass need 4.5:1 too: the bar is read at a glance.
