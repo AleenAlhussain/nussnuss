@@ -60,6 +60,8 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // Flutter shrinks release builds with R8; these rules cover the plugins (see the file).
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
