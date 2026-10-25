@@ -177,7 +177,8 @@ class _OptionsState extends State<_Options> {
                   ],
                 ),
         ),
-        SectionLabel(s.weeklyReminders),
+        // The row names itself; a header saying the same again would only repeat it.
+        const SizedBox(height: NNSpace.md),
         _SwitchRow(
           key: const ValueKey('reminders'),
           label: s.weeklyReminders,

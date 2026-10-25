@@ -927,39 +927,64 @@ class _BalanceRow extends StatelessWidget {
     final s = context.s;
     final p = NNTheme.of(context).palette;
     final b = group.balances[m.id] ?? 0;
-    final text = b > 0
-        ? s.fill(s.getsBack, {'amount': money(b, group.currency, s.lang)})
-        : b < 0
-        ? s.fill(s.owes, {'amount': money(-b, group.currency, s.lang)})
-        : s.even;
-    // Name and balance share the row; either wraps rather than overflowing at large text sizes.
+    // "gets back" / "owes" above the amount, both right-aligned, so neither wraps mid-amount.
+    final label = (b > 0 ? s.getsBack : (b < 0 ? s.owes : s.even))
+        .replaceAll('{amount}', '')
+        .trim();
+    final amount = b == 0 ? null : money(b.abs(), group.currency, s.lang);
+    final color = b > 0 ? p.success : (b < 0 ? p.danger : p.text2);
     return MergeSemantics(
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 56),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: NNSpace.xs),
-          child: Row(
-            children: [
-              Avatar(name: m.name, size: 32),
-              const SizedBox(width: NNSpace.sm),
-              Expanded(
-                child: Text(
-                  m.isMe ? s.you : m.name,
-                  style: NNType.body.copyWith(color: p.text),
-                ),
-              ),
-              const SizedBox(width: NNSpace.xs),
-              Flexible(
-                child: Text(
-                  text,
-                  textAlign: TextAlign.end,
-                  style: NNType.subhead.copyWith(
-                    color: b > 0 ? p.success : (b < 0 ? p.danger : p.text2),
-                    fontWeight: FontWeight.w600,
+          child: LayoutBuilder(
+            builder: (context, c) => Row(
+              children: [
+                Avatar(name: m.name, size: 32),
+                const SizedBox(width: NNSpace.sm),
+                Expanded(
+                  child: Text(
+                    m.isMe ? s.you : m.name,
+                    style: NNType.body.copyWith(color: p.text),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: NNSpace.xs),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: c.maxWidth * 0.5),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NNType.footnote.copyWith(
+                          color: amount == null ? p.text2 : color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (amount != null)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: Text(
+                            amount,
+                            key: ValueKey('balance-${m.id}'),
+                            style: NNType.headline.copyWith(
+                              color: color,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

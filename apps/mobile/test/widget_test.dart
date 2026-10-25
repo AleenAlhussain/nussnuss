@@ -192,19 +192,45 @@ void main() {
     await startWithGroup(tester);
     final emoji = app.server.groupNamed('Salalah trip').emoji;
 
-    // Amount only: the title is the first suggestion for this hour and kind of group.
+    // Amount only: the title is the first suggestion for this hour and kind of group, and its
+    // category comes with it (Lunch is food), in the summary and in what is saved.
+    final first = suggestTitles(
+      recent: const [],
+      hour: DateTime.now().hour,
+      emoji: emoji,
+    ).first;
+    final title = NNStrings.en.raw('sug_${first.key}');
+    final category = NNStrings.en.raw('cat_${first.category}');
     await tapKey(tester, 'add');
     expect(
       tester.widget<Text>(byKey('details-summary')).data,
-      'You paid · split equally · Other',
+      'You paid · split equally · $category',
     );
     expect(byKey('sug-0'), findsOneWidget);
     await typeAmount(tester, '45');
     await tapKey(tester, 'save-expense');
-    final idea = contextIdeas(DateTime.now().hour, emoji).first;
-    final title = NNStrings.en.raw('sug_$idea');
     expect(find.text(title), findsOneWidget);
+    expect(
+      app.server.groupNamed('Salalah trip').expenses.single['category'],
+      first.category,
+    );
     expect(balance(tester), 'AED 30.00');
+
+    // Typing a title that matches a suggestion picks up its category; picking one by hand wins.
+    await tapKey(tester, 'add');
+    await tester.enterText(byKey('title'), 'taxi');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(byKey('details-summary')).data,
+      endsWith(NNStrings.en.catTransport),
+    );
+    await tapKey(tester, 'details');
+    await tapKey(tester, 'cat-fun');
+    expect(
+      tester.widget<Text>(byKey('details-summary')).data,
+      endsWith(NNStrings.en.catFun),
+    );
+    await tapKey(tester, 'sheet-close');
 
     // The same again, from the sheet's "Repeat" chip and from a long press on +.
     await tapKey(tester, 'add');
@@ -381,6 +407,11 @@ void main() {
     // With narrow space the other tab shows only its icon, so tap it by key.
     await tapKey(tester, 'tab-1');
     expect(byKey('settings'), findsOneWidget);
+    // The status card is at the top; the list builds lazily, so look before scrolling away.
+    expect(
+      find.text('Keep your groups if you lose this phone'),
+      findsOneWidget,
+    );
     for (final k in [
       'account-status',
       'recovery',
@@ -393,10 +424,6 @@ void main() {
       await reveal(tester, byKey(k));
       expect(byKey(k), findsOneWidget);
     }
-    expect(
-      find.text('Keep your groups if you lose this phone'),
-      findsOneWidget,
-    );
     await meetsStandards(tester);
 
     await tapKey(tester, 'recovery');

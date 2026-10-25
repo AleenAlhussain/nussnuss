@@ -88,8 +88,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
   String _amount = '';
   final _title = TextEditingController();
   final _rate = TextEditingController();
-  String _category = 'other';
-  bool _categoryChosen = false;
+
+  /// Picked by the person; null means "work it out from the title" (see [_cat]).
+  String? _category;
   late String _paidBy = g.me;
   SplitChoice _mode = SplitChoice.equal;
   late Set<String> _included = _ids.toSet();
@@ -117,6 +118,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
       _fill(e);
       _details = true;
     }
+    // The summary and the chips follow the title as it is typed.
+    _title.addListener(_onTitle);
   }
 
   @override
@@ -141,7 +144,6 @@ class _ExpenseFormState extends State<ExpenseForm> {
     _amount = minorToInput(e.amount, e.currency);
     _title.text = e.title;
     _category = e.category;
-    _categoryChosen = true;
     _paidBy = _ids.contains(e.paidBy) ? e.paidBy : g.me;
     _mode = SplitChoice.values.byName(e.mode.name);
     _rate.text = e.currency == g.currency ? '' : _rateText(e.rate);
@@ -172,7 +174,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
 
   @override
   void dispose() {
-    _title.dispose();
+    _title
+      ..removeListener(_onTitle)
+      ..dispose();
     _rate.dispose();
     for (final c in [..._exact.values, ..._percent.values]) {
       c.dispose();
@@ -193,6 +197,31 @@ class _ExpenseFormState extends State<ExpenseForm> {
 
   String _suggestionLabel(Suggestion x) =>
       x.title ?? context.s.raw('sug_${x.key}');
+
+  void _onTitle() => setState(() {});
+
+  /// The title that will be saved: what was typed, or else the first suggestion.
+  String get _shownTitle {
+    final typed = _title.text.trim();
+    if (typed.isNotEmpty) return typed;
+    final first = _suggestions?.firstOrNull;
+    return first != null ? _suggestionLabel(first) : context.s.raw('cat_other');
+  }
+
+  /// Same as the web: a category the person picked; else that of a recent expense with the same
+  /// title; else that of the matching suggestion (Lunch → food, Taxi → transport); else other.
+  String get _cat {
+    final picked = _category;
+    if (picked != null) return picked;
+    final k = _shownTitle.toLowerCase();
+    for (final e in g.expenses) {
+      if (e.title.trim().toLowerCase() == k) return e.category;
+    }
+    for (final x in _suggestions ?? const <Suggestion>[]) {
+      if (_suggestionLabel(x).toLowerCase() == k) return x.category;
+    }
+    return 'other';
+  }
 
   ({List<SplitItem> items, int rest})? get _itemized {
     final total = _total;
@@ -279,14 +308,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
     final session = SessionScope.read(context);
     final s = session.s;
     final total = _total;
-    final first = _suggestions!.isEmpty ? null : _suggestions!.first;
-    var title = _title.text.trim();
-    var category = _category;
-    if (title.isEmpty && first != null) {
-      title = _suggestionLabel(first);
-      if (!_categoryChosen) category = first.category;
-    }
-    if (title.isEmpty) title = s.raw('cat_$category');
+    final title = _shownTitle;
+    final category = _cat;
     String? err;
     if (total == null) {
       err = s.errAmount;
@@ -391,7 +414,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
     return [
       payer,
       split,
-      s.raw('cat_$_category'),
+      s.raw('cat_$_cat'),
       if (_foreign) _currency,
       if (_repeat != 'none') s.raw('every_$_repeat'),
     ].join(' · ');
@@ -467,8 +490,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                             _suggestionLabel(suggestions[i]),
                         onTap: () => setState(() {
                           _title.text = _suggestionLabel(suggestions[i]);
-                          _category = suggestions[i].category;
-                          _categoryChosen = true;
+                          _category = null;
                         }),
                       ),
                     ),
@@ -574,11 +596,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
                 key: ValueKey('cat-$c'),
                 label: s.raw('cat_$c'),
                 icon: categoryIcon(c),
-                selected: _category == c,
-                onTap: () => setState(() {
-                  _category = c;
-                  _categoryChosen = true;
-                }),
+                selected: _cat == c,
+                onTap: () => setState(() => _category = c),
               ),
           ],
         ),
