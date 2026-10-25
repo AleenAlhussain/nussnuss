@@ -8,9 +8,36 @@ import '../data/session.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
+import '../design/motion.dart';
 import '../design/widgets.dart';
+import '../l10n/strings.g.dart';
+import 'summary_card.dart';
 
-const _emojis = ['🍽️', '✈️', '🏠', '🏖️', '🛒', '🎉', '⚽', '☕'];
+const _emojis = [
+  '🍽️',
+  '✈️',
+  '🏠',
+  '🏖️',
+  '🛒',
+  '🎉',
+  '⚽',
+  '☕',
+  '🌙',
+  '🎁',
+  '💍',
+  '💼',
+];
+
+/// Ready starts: the emoji and a name for the usual reasons people share costs.
+const _templates = [
+  (key: 'trip', emoji: '✈️'),
+  (key: 'flat', emoji: '🏠'),
+  (key: 'dinner', emoji: '🍽️'),
+  (key: 'iftar', emoji: '🌙'),
+  (key: 'eid', emoji: '🎁'),
+  (key: 'wedding', emoji: '💍'),
+  (key: 'office', emoji: '💼'),
+];
 
 /// Where invite links open. The web join page lets friends join without installing anything.
 String webUrl() {
@@ -20,10 +47,25 @@ String webUrl() {
       : 'http://localhost:3000';
 }
 
-Future<GroupDetail?> showNewGroupSheet(BuildContext context) {
+/// The currency from the phone's region, so most people never touch the picker.
+String guessCurrency() {
+  const byRegion = {
+    'AE': 'AED', 'SA': 'SAR', 'KW': 'KWD', 'QA': 'QAR', 'BH': 'BHD', //
+    'OM': 'OMR', 'EG': 'EGP', 'JO': 'JOD', 'SY': 'SYP', 'LB': 'LBP',
+    'IQ': 'IQD', 'MA': 'MAD', 'TN': 'TND', 'DZ': 'DZD', 'TR': 'TRY',
+    'GB': 'GBP', 'US': 'USD', 'IN': 'INR', 'PK': 'PKR', 'DE': 'EUR',
+    'FR': 'EUR', 'ES': 'EUR', 'IT': 'EUR', 'NL': 'EUR',
+  };
+  final region = WidgetsBinding.instance.platformDispatcher.locale.countryCode;
+  final code = byRegion[region];
+  return code != null && currencies.any((c) => c.code == code) ? code : 'AED';
+}
+
+Future<GroupDetail?> showNewGroupSheet(BuildContext context, {Rect? origin}) {
   return showNNSheet<GroupDetail>(
     context,
     key: const ValueKey('new-group-sheet'),
+    origin: origin,
     title: context.s.newGroup,
     builder: (_) => const NewGroupForm(),
   );
@@ -41,9 +83,24 @@ class _NewGroupFormState extends State<NewGroupForm> {
   final _person = TextEditingController();
   final _people = <String>[];
   String _emoji = _emojis.first;
-  String _currency = 'AED';
+  String _currency = guessCurrency();
+  String? _template;
   String? _error;
   bool _busy = false;
+
+  void _pickTemplate(String key, String emoji) {
+    final s = context.s;
+    final typed = _name.text.trim();
+    // A name the person typed stays; one we filled in from another template is replaced.
+    final ours = _template != null && typed == s.raw('tplName_$_template');
+    setState(() {
+      _template = key;
+      _emoji = emoji;
+      if (typed.isEmpty || ours) {
+        _name.text = key == 'trip' ? '' : s.raw('tplName_$key');
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -111,6 +168,37 @@ class _NewGroupFormState extends State<NewGroupForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Padding(
+          padding: const EdgeInsetsDirectional.only(
+            start: NNSpace.xxs,
+            bottom: 6,
+          ),
+          child: Text(
+            s.whatKind,
+            style: NNType.footnote.copyWith(
+              color: p.text2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final t in _templates)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: NNSpace.xs),
+                  child: NNChip(
+                    key: ValueKey('tpl-${t.key}'),
+                    label: '${t.emoji} ${s.raw('tpl_${t.key}')}',
+                    selected: _template == t.key,
+                    onTap: () => _pickTemplate(t.key, t.emoji),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: NNSpace.md),
         NNField(
           label: s.groupName,
           hint: s.groupNamePh,
@@ -261,6 +349,9 @@ class _ShareBodyState extends State<_ShareBody> {
   String? _error;
   bool _copied = false;
 
+  String _message(NNStrings s) =>
+      '${s.fill(s.shareMessage, {'name': widget.group.name})} $_link';
+
   @override
   void initState() {
     super.initState();
@@ -292,9 +383,9 @@ class _ShareBodyState extends State<_ShareBody> {
           child: _link == null
               ? Center(
                   child: _error == null
-                      ? const Padding(
-                          padding: EdgeInsets.all(NNSpace.xs),
-                          child: CircularProgressIndicator.adaptive(),
+                      ? Skeleton(
+                          label: s.loading,
+                          child: const Bone(height: 18),
                         )
                       : Text(
                           _error!,
@@ -309,19 +400,47 @@ class _ShareBodyState extends State<_ShareBody> {
                 ),
         ),
         const SizedBox(height: NNSpace.lg),
+        Builder(
+          builder: (ctx) => NNButton(
+            key: const ValueKey('share-link'),
+            label: s.share,
+            icon: Icons.ios_share_rounded,
+            onTap: _link == null
+                ? null
+                : () => SessionScope.read(
+                    context,
+                  ).device.share(text: _message(s), origin: originOf(ctx)),
+          ),
+        ),
+        const SizedBox(height: NNSpace.sm),
+        NNButton(
+          key: const ValueKey('whatsapp'),
+          label: s.sendWhatsApp,
+          icon: Icons.chat_rounded,
+          kind: ButtonKind.tinted,
+          onTap: _link == null
+              ? null
+              : () async {
+                  final device = SessionScope.read(context).device;
+                  final text = _message(s);
+                  final ok = await device.open(
+                    Uri.parse(
+                      'https://wa.me/?text=${Uri.encodeComponent(text)}',
+                    ),
+                  );
+                  if (!ok) await device.share(text: text);
+                },
+        ),
+        const SizedBox(height: NNSpace.sm),
         NNButton(
           key: const ValueKey('copy-link'),
           label: _copied ? s.copied : s.copyLink,
           icon: _copied ? Icons.check_rounded : Icons.link_rounded,
+          kind: ButtonKind.plain,
           onTap: _link == null
               ? null
               : () async {
-                  await Clipboard.setData(
-                    ClipboardData(
-                      text:
-                          '${s.fill(s.shareMessage, {'name': widget.group.name})} $_link',
-                    ),
-                  );
+                  await Clipboard.setData(ClipboardData(text: _message(s)));
                   haptic(Haptic.success);
                   if (!mounted) return;
                   setState(() => _copied = true);

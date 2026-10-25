@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's page colour, so the launch screen and the first frame match (tokens: color.light.bg). -->
+    <color name="launch_bg">#F2F1F7</color>
+</resources>

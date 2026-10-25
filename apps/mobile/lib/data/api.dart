@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../core/extras.dart';
 import '../core/types.dart';
 import 'models.dart';
 
@@ -31,13 +32,19 @@ typedef Transport =
     );
 
 class ApiException implements Exception {
-  const ApiException(this.status, this.message);
+  const ApiException(this.status, this.message, {this.plus = false});
 
   /// 0 means the request never reached the server.
   final int status;
   final String message;
 
+  /// The server said this needs Plus (403 with `plus: true`): show the paywall.
+  final bool plus;
+
   bool get offline => status == 0;
+
+  /// The request reached the server and was refused, so retrying the same thing will not help.
+  bool get rejected => status >= 400 && status < 500 && status != 408;
 
   @override
   String toString() => 'ApiException($status, $message)';
@@ -116,16 +123,51 @@ class Api {
       final msg = data is Map<String, dynamic> && data['message'] is String
           ? data['message'] as String
           : 'Something went wrong.';
-      throw ApiException(res.status, msg);
+      throw ApiException(
+        res.status,
+        msg,
+        plus: data is Map<String, dynamic> && data['plus'] == true,
+      );
     }
     return data;
   }
 
+  /// For non-JSON answers (the CSV export).
+  Future<String> _text(String path) async {
+    final headers = <String, String>{'Accept': 'text/csv'};
+    if (token != null) headers['Authorization'] = 'Bearer $token';
+    final res = await _send('GET', Uri.parse('$baseUrl$path'), headers, null);
+    if (res.status >= 400) {
+      Object? data;
+      try {
+        data = jsonDecode(res.body);
+      } on FormatException {
+        data = null;
+      }
+      final map = data is Map<String, dynamic> ? data : const {};
+      throw ApiException(
+        res.status,
+        map['message'] as String? ?? 'Something went wrong.',
+        plus: map['plus'] == true,
+      );
+    }
+    return res.body;
+  }
+
+  Uri url(String path) => Uri.parse('$baseUrl$path');
+
   Map<String, dynamic> _map(Object? v) => v as Map<String, dynamic>;
   GroupDetail _detail(Object? v) => GroupDetail.fromJson(_map(v));
+  List<Map<String, dynamic>> _list(Object? v) =>
+      (v as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+
+  ({String token, Me me}) _session(Object? v) {
+    final d = _map(v);
+    return (token: d['token'] as String, me: Me.fromJson(_map(d['user'])));
+  }
 
   Future<({String token, Me me})> anonymous(String name, String locale) async {
-    final d = _map(
+    return _session(
       await _call(
         'POST',
         '/auth/anonymous',
@@ -137,14 +179,127 @@ class Api {
         auth: false,
       ),
     );
-    return (token: d['token'] as String, me: Me.fromJson(_map(d['user'])));
   }
 
   Future<Me> me() async => Me.fromJson(_map(await _call('GET', '/me')));
-  Future<Me> patchMe({String? name, String? locale}) async => Me.fromJson(
-    _map(await _call('PATCH', '/me', body: {'name': ?name, 'locale': ?locale})),
+  Future<Me> patchMe({
+    String? name,
+    String? locale,
+    List<PayTo>? payTo,
+  }) async => Me.fromJson(
+    _map(
+      await _call(
+        'PATCH',
+        '/me',
+        body: {
+          'name': ?name,
+          'locale': ?locale,
+          if (payTo != null) 'payTo': [for (final p in payTo) p.toJson()],
+        },
+      ),
+    ),
   );
   Future<void> deleteMe() => _call('DELETE', '/me');
+
+  // Keeping an account: recovery codes, codes for another device, signed-in devices.
+  Future<Security> security() async =>
+      Security.fromJson(_map(await _call('GET', '/me/security')));
+  Future<String> makeRecoveryCode() async =>
+      _map(await _call('POST', '/me/recovery'))['code'] as String;
+  Future<({String code, DateTime expiresAt})> makeLinkCode() async {
+    final d = _map(await _call('POST', '/me/link'));
+    return (
+      code: d['code'] as String,
+      expiresAt:
+          DateTime.tryParse(d['expiresAt'] as String? ?? '')?.toLocal() ??
+          DateTime.now().add(const Duration(minutes: 10)),
+    );
+  }
+
+  /// Signs in with a code: 8 characters is a code from another device, longer is a recovery code.
+  Future<({String token, Me me})> signInWithCode(String code) async {
+    final clean = code.replaceAll(RegExp(r'[\s-]'), '');
+    return _session(
+      await _call(
+        'POST',
+        clean.length <= 8 ? '/auth/link' : '/auth/recover',
+        body: {'code': code.trim(), 'device': Platform.operatingSystem},
+        auth: false,
+      ),
+    );
+  }
+
+  Future<void> endSession(String id) => _call('DELETE', '/me/sessions/$id');
+  Future<String> exportMine() async =>
+      jsonEncode(await _call('GET', '/me/export'));
+
+  // Plus.
+  Future<Plan> plan() async =>
+      Plan.fromJson(_map(await _call('GET', '/me/plan')));
+  Future<Plan> verifyApple(String signedTransaction, {String? groupId}) async =>
+      Plan.fromJson(
+        _map(
+          await _call(
+            'POST',
+            '/purchases/apple',
+            body: {'signedTransaction': signedTransaction, 'groupId': ?groupId},
+          ),
+        ),
+      );
+  Future<Plan> verifyGoogle(
+    String productId,
+    String purchaseToken, {
+    String? groupId,
+  }) async => Plan.fromJson(
+    _map(
+      await _call(
+        'POST',
+        '/purchases/google',
+        body: {
+          'productId': productId,
+          'purchaseToken': purchaseToken,
+          'groupId': ?groupId,
+        },
+      ),
+    ),
+  );
+  Future<Plan> devPurchase(String productId, {String? groupId}) async =>
+      Plan.fromJson(
+        _map(
+          await _call(
+            'POST',
+            '/purchases/dev',
+            body: {'productId': productId, 'groupId': ?groupId},
+          ),
+        ),
+      );
+
+  // Notifications inbox.
+  Future<List<AppNotification>> notifications() async => [
+    for (final n in (await _call('GET', '/me/notifications')) as List<dynamic>)
+      AppNotification.fromJson(_map(n)),
+  ];
+  Future<void> markNotificationsRead() =>
+      _call('POST', '/me/notifications/read', body: const <String, Object>{});
+
+  /// Crash reports carry no personal data: the message, the stack, the app version.
+  Future<void> reportCrash({
+    required String app,
+    required String version,
+    required String message,
+    String? stack,
+  }) => _call(
+    'POST',
+    '/telemetry/crash',
+    body: {
+      'app': app,
+      'version': version,
+      'message': message.length > 500 ? message.substring(0, 500) : message,
+      if (stack != null)
+        'stack': stack.length > 8000 ? stack.substring(0, 8000) : stack,
+    },
+    auth: false,
+  );
 
   Future<List<GroupSummary>> groups() async => [
     for (final g in (await _call('GET', '/groups')) as List<dynamic>)
@@ -198,12 +353,18 @@ class Api {
   Future<GroupDetail> restoreExpense(String id) async =>
       _detail(await _call('POST', '/expenses/$id/restore'));
 
+  /// [id] is made on the device, so "mark as paid" is safe to send again after a dropped connection.
   Future<({String id, GroupDetail detail})> pay(
     String groupId,
-    Transfer t,
-  ) async {
+    Transfer t, {
+    String? id,
+  }) async {
     final d = _map(
-      await _call('POST', '/groups/$groupId/payments', body: t.toJson()),
+      await _call(
+        'POST',
+        '/groups/$groupId/payments',
+        body: {...t.toJson(), 'id': ?id},
+      ),
     );
     return (id: d['id'] as String, detail: _detail(d['detail']));
   }
@@ -213,6 +374,108 @@ class Api {
 
   Future<String> invite(String groupId) async =>
       _map(await _call('POST', '/groups/$groupId/invites'))['token'] as String;
+
+  Future<({Map<String, dynamic> group, List<Member> members})> preview(
+    String token,
+  ) async {
+    final d = _map(await _call('GET', '/invites/$token', auth: false));
+    return (
+      group: _map(d['group']),
+      members: [for (final m in _list(d['members'])) Member.fromJson(m)],
+    );
+  }
+
+  Future<GroupDetail> join(
+    String token, {
+    String? memberId,
+    String? name,
+  }) async => _detail(
+    await _call(
+      'POST',
+      '/invites/$token/join',
+      body: {'memberId': ?memberId, 'name': ?name},
+    ),
+  );
+
+  // Plus features of a group.
+  Future<GroupDetail> addRecurring(
+    String groupId,
+    ExpenseInput e, {
+    required String every,
+    DateTime? startAt,
+  }) async => _detail(
+    await _call(
+      'POST',
+      '/groups/$groupId/recurring',
+      body: {
+        ...e.toJson()
+          ..remove('id')
+          ..remove('currency')
+          ..remove('rate'),
+        'every': every,
+        if (startAt != null) 'startAt': startAt.toUtc().toIso8601String(),
+      },
+    ),
+  );
+  Future<GroupDetail> stopRecurring(String id) async =>
+      _detail(await _call('DELETE', '/recurring/$id'));
+  Future<double> rate(String from, String to, {String? groupId}) async =>
+      ((_map(
+                await _call(
+                  'GET',
+                  '/rates?from=$from&to=$to${groupId == null ? '' : '&groupId=$groupId'}',
+                ),
+              ))['rate']
+              as num)
+          .toDouble();
+  Future<String> exportCsv(String groupId) =>
+      _text('/groups/$groupId/export.csv');
+  Future<GroupDetail> setReminders(
+    String groupId, {
+    required bool weekly,
+  }) async => _detail(
+    await _call(
+      'PATCH',
+      '/groups/$groupId/reminders',
+      body: {'every': weekly ? 'week' : 'off'},
+    ),
+  );
+
+  // Money circles.
+  Future<GroupDetail> createCircle(
+    String groupId, {
+    required String name,
+    required int amount,
+    required String every,
+    required String startOn,
+    required List<String> turns,
+  }) async => _detail(
+    await _call(
+      'POST',
+      '/groups/$groupId/circles',
+      body: {
+        'name': name,
+        'amount': amount,
+        'every': every,
+        'startOn': startOn,
+        'turns': turns,
+      },
+    ),
+  );
+  Future<GroupDetail> circlePaid(
+    String circleId, {
+    required int round,
+    required String memberId,
+    required bool paid,
+  }) async => _detail(
+    await _call(
+      'POST',
+      '/circles/$circleId/${paid ? 'paid' : 'unpaid'}',
+      body: {'round': round, 'memberId': memberId},
+    ),
+  );
+  Future<GroupDetail> deleteCircle(String id) async =>
+      _detail(await _call('DELETE', '/circles/$id'));
 }
 
 final _rng = Random.secure();

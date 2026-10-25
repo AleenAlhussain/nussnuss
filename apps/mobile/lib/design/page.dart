@@ -74,6 +74,11 @@ class _NNPageState extends State<NNPage> {
     );
     final still = reduceMotion(context);
     final duration = still ? NNMotion.fade : const Duration(milliseconds: 220);
+    // Both sides get the same width so the small title stays centred; wide enough for the buttons.
+    final n = widget.actions.length;
+    final sideWidth = n <= 1
+        ? 96.0
+        : (n * touchTarget(context) + (n - 1) * NNSpace.xs).clamp(96.0, 220.0);
 
     Widget list = CustomScrollView(
       controller: _scroll,
@@ -173,7 +178,7 @@ class _NNPageState extends State<NNPage> {
               child: Row(
                 children: [
                   SizedBox(
-                    width: 96,
+                    width: sideWidth,
                     child: Align(
                       alignment: AlignmentDirectional.centerStart,
                       child: widget.leading,
@@ -202,7 +207,7 @@ class _NNPageState extends State<NNPage> {
                     ),
                   ),
                   SizedBox(
-                    width: 96,
+                    width: sideWidth,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [

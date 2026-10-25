@@ -2,25 +2,31 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
+import '../core/extras.dart';
 import '../core/types.dart';
 import '../data/api.dart';
 import '../data/models.dart';
 import '../data/session.dart';
 import '../design/coin.dart';
 import '../design/glass.dart';
+import '../design/motion.dart';
 import '../design/page.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
 import 'expense_sheet.dart';
+import 'group_options.dart';
 import 'group_sheets.dart';
+import 'summary_card.dart';
 
 enum _Tab { expenses, settle }
 
 /// One group: what you owe or get back, every expense by day, and the settle-up plan.
-/// Polls for changes from friends every few seconds while open, and on coming back to the app.
+/// Friends' changes arrive live (server-sent events), with a slow poll as a fallback; with no
+/// connection it shows the copy on this device and keeps what you add until it can send it.
 class GroupScreen extends StatefulWidget {
   const GroupScreen({super.key, required this.groupId, this.initial});
   final String groupId;
@@ -35,17 +41,51 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   String? _error;
   _Tab _tab = _Tab.expenses;
   Timer? _poll;
+  StreamSubscription<int>? _live;
+  late final Session _session = SessionScope.read(context);
+  int _pending = 0;
 
-  Api get _api => SessionScope.read(context).api;
+  Api get _api => _session.api;
 
   @override
   void initState() {
     super.initState();
     _g = widget.initial;
     WidgetsBinding.instance.addObserver(this);
-    _load();
-    _poll = Timer.periodic(
-      const Duration(seconds: 8),
+    _session.repo.addListener(_onQueue);
+    _pending = _session.repo.pendingFor(widget.groupId);
+    _start();
+  }
+
+  Future<void> _start() async {
+    if (_g == null) {
+      final cached = await _session.repo.cachedGroup(widget.groupId);
+      if (mounted && cached != null && _g == null) setState(() => _g = cached);
+    }
+    await _load();
+    _listen();
+  }
+
+  void _listen() {
+    final live = _session.live;
+    if (live == null) {
+      _startPoll();
+      return;
+    }
+    _live = live(widget.groupId).listen(
+      (v) {
+        _poll?.cancel();
+        _poll = null;
+        if (v != _g?.version) _load();
+      },
+      // The stream reconnects by itself; meanwhile a slow poll keeps things fresh.
+      onError: (Object _) => _startPoll(),
+    );
+  }
+
+  void _startPoll() {
+    _poll ??= Timer.periodic(
+      const Duration(seconds: 30),
       (_) => _checkForChanges(),
     );
   }
@@ -53,27 +93,43 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _poll?.cancel();
+    _live?.cancel();
+    _session.repo.removeListener(_onQueue);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  void _onQueue() {
+    final n = _session.repo.pendingFor(widget.groupId);
+    if (n == _pending) return;
+    final synced = n < _pending;
+    setState(() => _pending = n);
+    if (synced) _load();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_session.repo.sync());
+      _load();
+    }
   }
 
   Future<void> _load() async {
     try {
-      final g = await _api.group(widget.groupId);
+      final g = await _session.repo.group(widget.groupId);
       if (mounted) {
         setState(() {
           _g = g;
           _error = null;
         });
       }
+      if (_session.repo.pendingFor(widget.groupId) > 0) {
+        unawaited(_session.repo.sync());
+      }
     } on ApiException catch (e) {
       if (mounted) {
-        setState(() => _error = e.offline ? context.s.offline : e.message);
+        setState(() => _error = e.offline ? _session.s.offline : e.message);
       }
     }
   }
@@ -91,11 +147,11 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
 
   void _apply(GroupDetail g) {
     setState(() => _g = g);
-    SessionScope.read(context).touch();
+    _session.touch();
   }
 
   void _toast(String message, {Future<GroupDetail> Function()? undo}) {
-    final s = context.s;
+    final s = _session.s;
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
@@ -119,15 +175,62 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _addOrEdit([Expense? e]) async {
+  Future<void> _addOrEdit({Expense? e, Rect? origin}) async {
     final g = _g;
     if (g == null) return;
-    final r = await showExpenseSheet(context, group: g, editing: e);
+    final r = await showExpenseSheet(
+      context,
+      group: g,
+      editing: e,
+      origin: origin,
+    );
     if (r == null || !mounted) return;
     _apply(r.detail);
     final deleted = r.deletedId;
+    final s = _session.s;
     if (deleted != null) {
-      _toast(context.s.deleted, undo: () => _api.restoreExpense(deleted));
+      _toast(
+        r.queued ? '${s.deleted}. ${s.savedOffline}' : s.deleted,
+        undo: () async => r.queued
+            ? _session.repo.cancelPending(r.detail, deleted)
+            : _session.repo.took(await _api.restoreExpense(deleted)),
+      );
+    } else if (r.queued) {
+      _toast(s.savedOffline);
+    }
+  }
+
+  /// Long-press on +: the last expense again, now. Covers rent, coffee and the daily taxi.
+  Future<void> _repeatLast() async {
+    final g = _g;
+    if (g == null || g.expenses.isEmpty) {
+      return _addOrEdit();
+    }
+    final last = g.expenses.first;
+    final input = ExpenseInput(
+      id: newId(),
+      title: last.title,
+      amount: last.amount,
+      paidBy: g.member(last.paidBy) != null ? last.paidBy : g.me,
+      mode: last.mode,
+      items: last.items,
+      category: last.category,
+      currency: last.currency == g.currency ? null : last.currency,
+      rate: last.currency == g.currency ? null : last.rate,
+    );
+    try {
+      final r = await _session.repo.saveExpense(g, input, editing: false);
+      if (!mounted) return;
+      _apply(r.detail);
+      _session.click();
+      final s = _session.s;
+      _toast(
+        r.queued ? '${s.repeated}. ${s.savedOffline}' : s.repeated,
+        undo: () async =>
+            (await _session.repo.deleteExpense(r.detail, input.id)).detail,
+      );
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
     }
   }
 
@@ -135,16 +238,68 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     final g = _g;
     if (g == null) return;
     try {
-      final r = await _api.pay(g.id, t);
+      final r = await _session.repo.pay(g, t);
       if (!mounted) return;
       _apply(r.detail);
       haptic(Haptic.success);
-      _toast(context.s.paidRecorded, undo: () => _api.unpay(r.id));
+      final s = _session.s;
+      _toast(
+        r.queued ? '${s.paidRecorded}. ${s.savedOffline}' : s.paidRecorded,
+        undo: () async => r.queued
+            ? _session.repo.cancelPending(r.detail, r.id)
+            : _session.repo.took(await _api.unpay(r.id)),
+      );
     } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _remind(Transfer t) async {
+    final g = _g!;
+    final s = _session.s;
+    final text = s.fill(s.remindMessage, {
+      'name': g.nameOf(t.from),
+      'amount': money(t.amount, g.currency, s.lang),
+      'group': g.name,
+    });
+    final opened = await _session.device.open(
+      Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}'),
+    );
+    if (!opened) await _session.device.share(text: text);
+  }
+
+  Future<void> _payWith(Transfer t, PayTo p) async {
+    final g = _g!;
+    final s = _session.s;
+    final method = p.label?.isNotEmpty == true
+        ? p.label!
+        : s.raw('pay_${p.kind}');
+    final action = payAction(p, t.amount, g.currency);
+    Future<void> copy(String text) async {
+      await Clipboard.setData(ClipboardData(text: text));
+      haptic(Haptic.success);
       if (mounted) {
-        setState(() => _error = e.offline ? context.s.offline : e.message);
+        _toast('${s.fill(s.payCopied, {'method': method})} ${s.payThenMark}');
       }
     }
+
+    switch (action) {
+      case PayOpen(:final url):
+        final ok = await _session.device.open(Uri.parse(url));
+        if (!ok) {
+          await copy(url);
+        } else if (mounted) {
+          _toast(s.payThenMark);
+        }
+      case PayCopy(:final text):
+        await copy(text);
+    }
+  }
+
+  Future<void> _options() async {
+    final g = _g;
+    if (g == null) return;
+    await showGroupOptions(context, group: g, onChanged: _apply);
   }
 
   @override
@@ -164,22 +319,46 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
         title: '',
         leading: back,
         slivers: [
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: _error == null
-                  ? const CircularProgressIndicator.adaptive()
-                  : EmptyState(
-                      title: s.error,
-                      body: _error!,
-                      art: const Coin(size: 64, join: 0),
+          SliverToBoxAdapter(
+            child: _error == null
+                ? Padding(
+                    padding: const EdgeInsets.only(top: NNSpace.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Skeleton(
+                          label: s.loading,
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Bone(width: 110),
+                              SizedBox(height: NNSpace.sm),
+                              Bone(width: 220, height: 48, radius: 12),
+                              SizedBox(height: NNSpace.sm),
+                              Bone(width: 160, height: 12),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: NNSpace.xl),
+                        SkeletonRows(
+                          label: s.loading,
+                          count: 4,
+                          separate: false,
+                        ),
+                      ],
                     ),
-            ),
+                  )
+                : EmptyState(
+                    title: s.error,
+                    body: _error!,
+                    art: const Coin(size: 64, join: 0),
+                  ),
           ),
         ],
       );
     }
 
+    final last = g.expenses.isEmpty ? null : g.expenses.first;
     return NNPage(
       key: const ValueKey('group'),
       title: '${g.emoji} ${g.name}'.trim(),
@@ -187,20 +366,40 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
       actions: [
         GlassIconButton(
           key: const ValueKey('share'),
-          icon: Icons.ios_share_rounded,
+          icon: Icons.person_add_alt_1_rounded,
           label: s.share,
           onTap: () => showShareSheet(context, g),
+        ),
+        GlassIconButton(
+          key: const ValueKey('more'),
+          icon: Icons.more_horiz_rounded,
+          label: s.groupMore,
+          onTap: _options,
         ),
       ],
       onRefresh: _load,
       bottom: Row(
         children: [
           const Spacer(),
-          AddButton(label: s.addExpense, onTap: _addOrEdit),
+          AddButton(
+            label: s.addExpense,
+            onTap: (origin) => _addOrEdit(origin: origin),
+            onLongPress: last == null ? null : _repeatLast,
+            longPressLabel: last == null
+                ? null
+                : s.fill(s.repeatLast, {'title': last.title}),
+          ),
         ],
       ),
       slivers: [
         SliverToBoxAdapter(child: _BalanceHero(group: g)),
+        if (_pending > 0)
+          SliverToBoxAdapter(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: _PendingPill(count: _pending),
+            ),
+          ),
         if (_error != null)
           SliverToBoxAdapter(
             child: Padding(
@@ -213,6 +412,23 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
+        for (final c in g.circles)
+          if (c.status != 'done')
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: NNSpace.md),
+                child: CircleCard(
+                  group: g,
+                  circle: c,
+                  onTap: () => showCircleSheet(
+                    context,
+                    group: g,
+                    circleId: c.id,
+                    onChanged: _apply,
+                  ),
+                ),
+              ),
+            ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: NNSpace.lg),
@@ -231,63 +447,76 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
 
   List<Widget> _expenses(GroupDetail g) {
     final s = context.s;
+    final p = NNTheme.of(context).palette;
     if (g.expenses.isEmpty) {
       return [
         SliverToBoxAdapter(
           child: EmptyState(
             title: s.noExpensesTitle,
-            body: s.noExpensesBody,
+            body: '${s.noExpensesBody} ${s.repeatHint}',
             art: const Coin(size: 72),
           ),
         ),
       ];
     }
-    final days = <DateTime, List<Expense>>{};
+    // One continuous list: a day heading, then that day's expenses, with air between days.
+    final rows = <Object>[];
+    DateTime? day;
     for (final e in g.expenses) {
-      days.putIfAbsent(dayKey(e.spentAt), () => []).add(e);
+      final k = dayKey(e.spentAt);
+      if (k != day) {
+        rows.add(k);
+        day = k;
+      }
+      rows.add(e);
     }
     return [
-      for (final entry in days.entries)
-        SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      SliverList.builder(
+        itemCount: rows.length,
+        itemBuilder: (context, i) {
+          final r = rows[i];
+          if (r is DateTime) return SectionLabel(dayLabel(r, s));
+          final e = r as Expense;
+          final nextIsRow = i + 1 < rows.length && rows[i + 1] is Expense;
+          return Column(
             children: [
-              SectionLabel(dayLabel(entry.key, s)),
-              NNCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    for (var i = 0; i < entry.value.length; i++) ...[
-                      if (i > 0)
-                        Divider(
-                          height: 1,
-                          thickness: 0.5,
-                          indent: 64,
-                          color: NNTheme.of(context).palette.separator,
-                        ),
-                      _ExpenseRow(
-                        group: g,
-                        e: entry.value[i],
-                        onTap: () => _addOrEdit(entry.value[i]),
-                      ),
-                    ],
-                  ],
-                ),
+              _ExpenseRow(
+                group: g,
+                e: e,
+                onTap: () => _addOrEdit(e: e),
               ),
+              if (nextIsRow)
+                Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  indent: 52,
+                  color: p.separator,
+                ),
             ],
-          ),
-        ),
+          );
+        },
+      ),
     ];
   }
 
   List<Widget> _settle(GroupDetail g) {
     final s = context.s;
     final p = NNTheme.of(context).palette;
+    final share = Builder(
+      builder: (ctx) => NNButton(
+        key: const ValueKey('share-summary'),
+        label: s.shareSummary,
+        icon: Icons.ios_share_rounded,
+        kind: ButtonKind.tinted,
+        onTap: () => shareSummary(ctx, g, origin: originOf(ctx)),
+      ),
+    );
     if (g.transfers.isEmpty) {
       return [
         SliverToBoxAdapter(
           child: SettledMoment(title: s.allSettled, body: s.allSettledBody),
         ),
+        SliverToBoxAdapter(child: share),
       ];
     }
     return [
@@ -313,8 +542,19 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
             group: g,
             t: t,
             onPaid: () => _markPaid(t),
+            onRemind: t.to == g.me ? () => _remind(t) : null,
+            payTo: t.from == g.me
+                ? g.member(t.to)?.payTo ?? const []
+                : const [],
+            onPayWith: (p) => _payWith(t, p),
           );
         },
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: NNSpace.md),
+          child: share,
+        ),
       ),
       SliverToBoxAdapter(child: SectionLabel(s.people)),
       SliverToBoxAdapter(
@@ -335,6 +575,46 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   }
 }
 
+class _PendingPill extends StatelessWidget {
+  const _PendingPill({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.s;
+    final p = NNTheme.of(context).palette;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        key: const ValueKey('pending'),
+        margin: const EdgeInsets.only(top: NNSpace.sm),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: ShapeDecoration(
+          shape: const StadiumBorder(),
+          color: p.accentSoft,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_upload_outlined, size: 16, color: p.onAccentSoft),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                s.fill(s.pendingN, {'n': count}),
+                style: NNType.footnote.copyWith(
+                  color: p.onAccentSoft,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The balance first and large, on the page itself: no box around it, plenty of air.
 class _BalanceHero extends StatelessWidget {
   const _BalanceHero({required this.group});
   final GroupDetail group;
@@ -346,8 +626,8 @@ class _BalanceHero extends StatelessWidget {
     final b = group.myBalance;
     final label = b > 0 ? s.youAreOwed : (b < 0 ? s.youOwe : s.allSettled);
     final color = b > 0 ? p.success : (b < 0 ? p.danger : p.text);
-    return NNCard(
-      padding: const EdgeInsets.all(NNSpace.lg),
+    return Padding(
+      padding: const EdgeInsets.only(top: NNSpace.xs, bottom: NNSpace.xs),
       child: Semantics(
         container: true,
         child: Column(
@@ -364,19 +644,12 @@ class _BalanceHero extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: AlignmentDirectional.centerStart,
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(end: b.abs().toDouble()),
-                duration: reduceMotion(context)
-                    ? Duration.zero
-                    : NNMotion.gentleDuration,
-                curve: Curves.easeOutCubic,
-                builder: (context, v, _) => Text(
-                  money(v.round(), group.currency, s.lang),
-                  key: const ValueKey('my-balance'),
-                  style: NNType.amountHero.copyWith(
-                    color: color,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+              child: RollingText(
+                money(b.abs(), group.currency, s.lang),
+                key: const ValueKey('my-balance'),
+                style: NNType.amountHero.copyWith(
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -415,19 +688,21 @@ class _ExpenseRow extends StatelessWidget {
     return Pressable(
       key: ValueKey('expense-${e.id}'),
       onTap: onTap,
-      semanticLabel: '${e.title}, $amount, $sub',
+      semanticLabel: [
+        e.title,
+        amount,
+        sub,
+        if (e.pending) s.savedOffline,
+      ].join(', '),
       excludeChildSemantics: true,
       scale: 0.98,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: NNSpace.md,
-          vertical: NNSpace.sm,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: NNSpace.sm),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               decoration: ShapeDecoration(
                 shape: const CircleBorder(),
                 color: p.accentSoft,
@@ -459,11 +734,29 @@ class _ExpenseRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: NNSpace.xs),
-            Text(
-              amount,
-              style: NNType.headline.copyWith(
-                color: p.text,
-                fontFeatures: const [FontFeature.tabularFigures()],
+            if (e.pending)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 6),
+                child: Icon(
+                  Icons.cloud_upload_outlined,
+                  size: 16,
+                  color: p.text2,
+                ),
+              ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width * 0.42,
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerEnd,
+                child: Text(
+                  amount,
+                  style: NNType.headline.copyWith(
+                    color: p.text,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               ),
             ),
           ],
@@ -474,24 +767,33 @@ class _ExpenseRow extends StatelessWidget {
 }
 
 /// Swipe toward the person being paid to mark it as paid, or use the button. Undo lives in the toast.
+/// When they owe you there is a Remind button; when you owe someone who shared how to pay them,
+/// there is one button per way.
 class _TransferCard extends StatelessWidget {
   const _TransferCard({
     super.key,
     required this.group,
     required this.t,
     required this.onPaid,
+    required this.onRemind,
+    required this.payTo,
+    required this.onPayWith,
   });
   final GroupDetail group;
   final Transfer t;
   final VoidCallback onPaid;
+  final VoidCallback? onRemind;
+  final List<PayTo> payTo;
+  final ValueChanged<PayTo> onPayWith;
 
   @override
   Widget build(BuildContext context) {
     final s = context.s;
     final p = NNTheme.of(context).palette;
-    final from = t.from == group.me ? s.you : group.nameOf(t.from);
-    final to = t.to == group.me ? s.you : group.nameOf(t.to);
+    final sentence = transferText(t, me: group.me, nameOf: group.nameOf, s: s);
     final amount = money(t.amount, group.currency, s.lang);
+    String method(PayTo x) =>
+        x.label?.isNotEmpty == true ? x.label! : s.raw('pay_${x.kind}');
     return Dismissible(
       key: ValueKey('swipe-${t.from}-${t.to}-${t.amount}'),
       direction: DismissDirection.startToEnd,
@@ -517,18 +819,20 @@ class _TransferCard extends StatelessWidget {
       ),
       child: Semantics(
         container: true,
-        label: '$from ${s.pays} $to, $amount',
+        label: '$sentence, $amount',
         customSemanticsActions: {
           CustomSemanticsAction(label: s.markPaid): onPaid,
         },
         child: NNCard(
-          // The button sits under the words, so long names, Arabic and large text never squeeze it.
+          // The buttons sit under the words, so long names, Arabic and large text never squeeze them.
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  Avatar(name: group.nameOf(t.from)),
+                  Avatar(
+                    name: group.nameOf(t.from == group.me ? t.to : t.from),
+                  ),
                   const SizedBox(width: NNSpace.sm),
                   Expanded(
                     child: ExcludeSemantics(
@@ -536,25 +840,12 @@ class _TransferCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: from,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ' ${s.pays} ',
-                                  style: TextStyle(color: p.text2),
-                                ),
-                                TextSpan(
-                                  text: to,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+                            transferSpan(
+                              t,
+                              me: group.me,
+                              nameOf: group.nameOf,
+                              s: s,
+                              soft: p.text2,
                             ),
                             style: NNType.callout.copyWith(color: p.text),
                           ),
@@ -565,6 +856,7 @@ class _TransferCard extends StatelessWidget {
                               amount,
                               style: NNType.title3.copyWith(
                                 color: p.text,
+                                fontFamily: nnDisplayFamily,
                                 fontFeatures: const [
                                   FontFeature.tabularFigures(),
                                 ],
@@ -577,16 +869,46 @@ class _TransferCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: NNSpace.sm),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: NNButton(
-                  key: const ValueKey('mark-paid'),
-                  label: s.markPaid,
-                  kind: ButtonKind.tinted,
-                  expand: false,
-                  onTap: onPaid,
+              if (payTo.isNotEmpty) ...[
+                const SizedBox(height: NNSpace.sm),
+                Wrap(
+                  spacing: NNSpace.xs,
+                  runSpacing: NNSpace.xs,
+                  children: [
+                    for (var i = 0; i < payTo.length; i++)
+                      NNChip(
+                        key: ValueKey('pay-with-$i'),
+                        label: s.fill(s.payWith, {'method': method(payTo[i])}),
+                        icon: Icons.account_balance_wallet_outlined,
+                        selected: false,
+                        onTap: () => onPayWith(payTo[i]),
+                      ),
+                  ],
                 ),
+              ],
+              const SizedBox(height: NNSpace.sm),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: NNSpace.xs,
+                runSpacing: NNSpace.xs,
+                children: [
+                  if (onRemind != null)
+                    NNButton(
+                      key: const ValueKey('remind'),
+                      label: s.remind,
+                      icon: Icons.chat_bubble_outline_rounded,
+                      kind: ButtonKind.plain,
+                      expand: false,
+                      onTap: onRemind,
+                    ),
+                  NNButton(
+                    key: const ValueKey('mark-paid'),
+                    label: s.markPaid,
+                    kind: ButtonKind.tinted,
+                    expand: false,
+                    onTap: onPaid,
+                  ),
+                ],
               ),
             ],
           ),

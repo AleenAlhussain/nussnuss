@@ -7,6 +7,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
+import 'account_sheets.dart';
 
 /// First run: the coin, one line about what this is, and your name. No sign-up, no email.
 class WelcomeScreen extends StatefulWidget {
@@ -150,6 +151,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   label: s.start,
                   busy: _busy,
                   onTap: _start,
+                ),
+                const SizedBox(height: NNSpace.xs),
+                NNButton(
+                  key: const ValueKey('have-account'),
+                  label: s.haveAccount,
+                  kind: ButtonKind.plain,
+                  onTap: _busy ? null : () => showHaveCodeSheet(context),
                 ),
               ],
             ),

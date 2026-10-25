@@ -1,5 +1,6 @@
 // Mirrors packages/core/test/core.test.ts case for case. Change both together.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nussnuss/core/extras.dart';
 import 'package:nussnuss/core/money.dart';
 import 'package:nussnuss/core/split.dart';
 import 'package:nussnuss/core/suggest.dart';
@@ -264,6 +265,157 @@ void main() {
         'hotel',
         'tickets',
       ]);
+    });
+  });
+
+  group('receipt by item', () {
+    const ids = ['a', 's', 'o'];
+    test('items shared by who had them, tax and service in proportion, '
+        'adds up exactly', () {
+      // 100.00 bill: a's burger 40, s and o share a 30 pizza, everyone shares 15 fries; 15 tax.
+      final r = itemizedSplit(10000, const [
+        ReceiptItem(4000, ['a']),
+        ReceiptItem(3000, ['s', 'o']),
+        ReceiptItem(1500, ['a', 's', 'o']),
+      ], ids)!;
+      expect(r.rest, 1500);
+      expect(r.items.fold<int>(0, (x, y) => x + y.value), 10000);
+      expect(r.items, const [
+        SplitItem('a', 5294),
+        SplitItem('s', 2353),
+        SplitItem('o', 2353),
+      ]);
+    });
+    test('no items, or more than the total, is not a split', () {
+      expect(itemizedSplit(1000, const [], ids), isNull);
+      expect(itemizedSplit(1000, const [ReceiptItem(500, [])], ids), isNull);
+      expect(
+        itemizedSplit(1000, const [
+          ReceiptItem(1500, ['a']),
+        ], ids),
+        isNull,
+      );
+      expect(
+        itemizedSplit(1000, const [
+          ReceiptItem(1000, ['o']),
+        ], ids)!.items.map((i) => i.value).toList(),
+        [0, 0, 1000],
+      );
+    });
+  });
+
+  group('pay with', () {
+    test('links open, account details copy, PayPal.me gets the amount', () {
+      expect(
+        payAction(const PayTo('iban', 'AE070331234567890123456'), 4550, 'AED'),
+        const PayCopy('AE070331234567890123456'),
+      );
+      expect(
+        payAction(const PayTo('instapay', 'sara@instapay'), 100, 'EGP'),
+        const PayCopy('sara@instapay'),
+      );
+      expect(
+        payAction(
+          const PayTo('instapay', 'https://ipn.eg/S/sara/instapay/abc'),
+          100,
+          'EGP',
+        ),
+        const PayOpen('https://ipn.eg/S/sara/instapay/abc'),
+      );
+      expect(
+        payAction(const PayTo('paypal', 'https://paypal.me/sara'), 1250, 'USD'),
+        const PayOpen('https://paypal.me/sara/12.50USD'),
+      );
+      expect(
+        payAction(
+          const PayTo('paypal', 'https://paypal.me/sara/5'),
+          1250,
+          'USD',
+        ),
+        const PayOpen('https://paypal.me/sara/5'),
+      );
+      expect(
+        payAction(const PayTo('paypal', 'https://paypal.me/sara'), 1250, 'KWD'),
+        const PayOpen('https://paypal.me/sara/1.250KWD'),
+      );
+      expect(
+        payAction(
+          const PayTo('wise', 'https://wise.com/pay/me/sara'),
+          1,
+          'GBP',
+        ),
+        const PayOpen('https://wise.com/pay/me/sara'),
+      );
+      expect(
+        payAction(const PayTo('stcpay', '+966 50 000 0000'), 1, 'SAR'),
+        const PayCopy('+966 50 000 0000'),
+      );
+    });
+  });
+
+  group('spending by category', () {
+    test('in the group currency, largest first', () {
+      ({ExpenseLike expense, String category}) e(
+        int amount,
+        String category, [
+        String currency = 'AED',
+        double rate = 1,
+      ]) => (
+        expense: ExpenseLike(
+          amount: amount,
+          currency: currency,
+          rate: rate,
+          paidBy: 'a',
+          items: all3,
+        ),
+        category: category,
+      );
+      expect(
+        spendingByCategory([
+          e(1000, 'food'),
+          e(500, 'transport'),
+          e(2000, 'food'),
+          e(1000, 'stay', 'USD', 3.6725),
+        ], 'AED'),
+        [
+          (category: 'stay', amount: 3673),
+          (category: 'food', amount: 3000),
+          (category: 'transport', amount: 500),
+        ],
+      );
+    });
+  });
+
+  group('reading a receipt', () {
+    test('items with prices, quantities, tax and the total; Arabic digits', () {
+      final text = [
+        'SHAWARMA HOUSE',
+        'Tel 04 123 4567',
+        '2 x Chicken shawarma   24.00',
+        'Fries 8.50',
+        'Fresh juice x2 ..... 18',
+        'Subtotal 50.50',
+        'VAT 5% 2.53',
+        'Service 5.00',
+        'TOTAL AED 58.03',
+        'Cash 60.00',
+        'Change 1.97',
+        'شاي كرك ٣٫٥٠',
+      ].join('\n');
+      final r = parseReceipt(text, 'AED');
+      expect(r.items, [
+        (name: 'Chicken shawarma', price: 2400),
+        (name: 'Fries', price: 850),
+        (name: 'Fresh juice', price: 1800),
+        (name: 'شاي كرك', price: 350),
+      ]);
+      expect(r.total, 5803);
+      final k = parseReceipt('Machboos 4.250\nالإجمالي 4.250', 'KWD');
+      expect(k.items, [(name: 'Machboos', price: 4250)]);
+      expect(k.total, 4250);
+      final none = parseReceipt('nothing to see here', 'AED');
+      expect(none.items.isEmpty, isTrue);
+      expect(none.total, isNull);
     });
   });
 }

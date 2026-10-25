@@ -15,7 +15,8 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
   workers: 1,
-  reporter: [['list']],
+  // In CI each failure also becomes an annotation on the run, readable without the raw log.
+  reporter: process.env.CI ? [['list'], ['github']] : [['list']],
   use: { baseURL: 'http://127.0.0.1:3000', locale: 'en-AE', permissions: ['clipboard-read', 'clipboard-write'], launchOptions },
   projects: [
     { name: 'phone', use: { ...devices['iPhone 15'], defaultBrowserType: 'chromium', launchOptions } },

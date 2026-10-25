@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import 'theme.dart';
@@ -205,10 +206,16 @@ class Pressable extends StatefulWidget {
     this.selected,
     this.checked,
     this.excludeChildSemantics = false,
+    this.onLongPress,
+    this.longPressLabel,
   });
 
   final Widget child;
   final VoidCallback? onTap;
+
+  /// A shortcut, never the only way: screen readers get it as a named action ([longPressLabel]).
+  final VoidCallback? onLongPress;
+  final String? longPressLabel;
   final String? semanticLabel;
   final double scale;
   final Haptic haptic;
@@ -245,6 +252,7 @@ class _PressableState extends State<Pressable>
   @override
   Widget build(BuildContext context) {
     final still = reduceMotion(context);
+    final long = widget.onLongPress;
     return Semantics(
       button: widget.checked == null,
       enabled: _enabled,
@@ -252,11 +260,21 @@ class _PressableState extends State<Pressable>
       checked: widget.checked,
       label: widget.semanticLabel,
       excludeSemantics: widget.excludeChildSemantics,
+      customSemanticsActions: long != null && widget.longPressLabel != null
+          ? {CustomSemanticsAction(label: widget.longPressLabel!): long}
+          : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => _down(),
         onTapUp: (_) => _up(),
         onTapCancel: _up,
+        onLongPress: long == null
+            ? null
+            : () {
+                _up();
+                haptic(Haptic.success);
+                long();
+              },
         onTap: _enabled
             ? () {
                 haptic(widget.haptic);
@@ -321,9 +339,19 @@ class GlassIconButton extends StatelessWidget {
 
 /// The one tinted glass control on a screen. A light follows the finger across it, like light on glass.
 class AddButton extends StatefulWidget {
-  const AddButton({super.key, required this.label, required this.onTap});
+  const AddButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.onLongPress,
+    this.longPressLabel,
+  });
   final String label;
-  final VoidCallback onTap;
+
+  /// Gets the button's rectangle on screen, so a sheet can grow out of it.
+  final void Function(Rect origin) onTap;
+  final VoidCallback? onLongPress;
+  final String? longPressLabel;
 
   @override
   State<AddButton> createState() => _AddButtonState();
@@ -331,6 +359,12 @@ class AddButton extends StatefulWidget {
 
 class _AddButtonState extends State<AddButton> {
   Alignment _light = const Alignment(-0.4, -0.6);
+
+  Rect _rect() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return Rect.zero;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
 
   void _move(Offset local) {
     const size = 64.0;
@@ -351,7 +385,9 @@ class _AddButtonState extends State<AddButton> {
       onPointerUp: (_) => setState(() => _light = const Alignment(-0.4, -0.6)),
       child: Pressable(
         key: const ValueKey('add'),
-        onTap: widget.onTap,
+        onTap: () => widget.onTap(_rect()),
+        onLongPress: widget.onLongPress,
+        longPressLabel: widget.longPressLabel,
         semanticLabel: widget.label,
         excludeChildSemantics: true,
         haptic: Haptic.light,
@@ -530,13 +566,34 @@ class GlassTabBar extends StatelessWidget {
 
 /// Opens a glass sheet: grabber, a title with a close button, scrollable content and an optional footer
 /// that stays above the keyboard. Contents are solid fills: never glass on glass.
+///
+/// With [origin] (the add button's rectangle) the sheet grows out of that button as one shape and
+/// shrinks back into it on close; Reduce Motion turns that into a fade.
 Future<T?> showNNSheet<T>(
   BuildContext context, {
   required String title,
   required WidgetBuilder builder,
   WidgetBuilder? footer,
   Key? key,
+  Rect? origin,
 }) {
+  if (origin != null && origin != Rect.zero) {
+    return Navigator.of(context).push<T>(
+      _MorphSheetRoute<T>(
+        origin: origin,
+        tint: NNTheme.of(context).palette.accent,
+        barrierLabel: MaterialLocalizations.of(
+          context,
+        ).modalBarrierDismissLabel,
+        capturedThemes: InheritedTheme.capture(
+          from: context,
+          to: Navigator.of(context).context,
+        ),
+        builder: (ctx) =>
+            _SheetFrame(key: key, title: title, body: builder, footer: footer),
+      ),
+    );
+  }
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
@@ -662,6 +719,180 @@ class _SheetFrame extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A sheet that grows out of the button that opened it: a circle from the button's centre widens
+/// until it uncovers the whole sheet, tinted with the button's colour at first. Drag the top down
+/// or tap outside to close; it shrinks back into the button.
+class _MorphSheetRoute<T> extends PopupRoute<T> {
+  _MorphSheetRoute({
+    required this.origin,
+    required this.tint,
+    required this.builder,
+    required this.barrierLabel,
+    required this.capturedThemes,
+  });
+
+  final Rect origin;
+  final Color tint;
+  final WidgetBuilder builder;
+  final CapturedThemes capturedThemes;
+
+  @override
+  final String barrierLabel;
+
+  @override
+  Color get barrierColor => Colors.black.withValues(alpha: 0.3);
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 420);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final size = MediaQuery.sizeOf(context);
+    final top = MediaQuery.paddingOf(context).top;
+    return capturedThemes.wrap(
+      _DragToClose(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 640,
+              maxHeight: size.height - top,
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: builder(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (reduceMotion(context)) {
+      return FadeTransition(opacity: animation, child: child);
+    }
+    final curve = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return AnimatedBuilder(
+      animation: curve,
+      child: child,
+      builder: (context, child) {
+        final t = curve.value;
+        final size = MediaQuery.sizeOf(context);
+        final c = origin.center;
+        // Far enough to uncover every corner of the screen.
+        final far = [
+          c,
+          Offset(size.width - c.dx, c.dy),
+          Offset(c.dx, size.height - c.dy),
+          Offset(size.width - c.dx, size.height - c.dy),
+        ].map((o) => o.distance).reduce((a, b) => a > b ? a : b);
+        final r = ui.lerpDouble(origin.shortestSide / 2, far, t)!;
+        return ClipPath(
+          clipper: _CircleClipper(c, r),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Opacity(
+                  opacity: ((t - 0.15) / 0.5).clamp(0.0, 1.0),
+                  child: child,
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: (1 - t * 2.2).clamp(0.0, 1.0),
+                    child: CustomPaint(painter: _DotPainter(c, r, tint)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CircleClipper extends CustomClipper<Path> {
+  _CircleClipper(this.center, this.radius);
+  final Offset center;
+  final double radius;
+
+  @override
+  Path getClip(Size size) =>
+      Path()..addOval(Rect.fromCircle(center: center, radius: radius));
+
+  @override
+  bool shouldReclip(_CircleClipper old) =>
+      old.center != center || old.radius != radius;
+}
+
+class _DotPainter extends CustomPainter {
+  _DotPainter(this.center, this.radius, this.color);
+  final Offset center;
+  final double radius;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) =>
+      canvas.drawCircle(center, radius, Paint()..color = color);
+
+  @override
+  bool shouldRepaint(_DotPainter old) =>
+      old.center != center || old.radius != radius || old.color != color;
+}
+
+/// Drag the sheet down past a third of a thumb's length (or flick it) to close it.
+class _DragToClose extends StatefulWidget {
+  const _DragToClose({required this.child});
+  final Widget child;
+
+  @override
+  State<_DragToClose> createState() => _DragToCloseState();
+}
+
+class _DragToCloseState extends State<_DragToClose> {
+  double _dy = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.deferToChild,
+      onVerticalDragUpdate: (d) =>
+          setState(() => _dy = (_dy + d.delta.dy).clamp(0, double.infinity)),
+      onVerticalDragEnd: (d) {
+        if (_dy > 120 || (d.primaryVelocity ?? 0) > 700) {
+          Navigator.of(context).maybePop();
+        } else {
+          setState(() => _dy = 0);
+        }
+      },
+      child: Transform.translate(offset: Offset(0, _dy), child: widget.child),
     );
   }
 }

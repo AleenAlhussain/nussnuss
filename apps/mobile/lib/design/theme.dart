@@ -68,15 +68,27 @@ NNPalette _contrasted(NNPalette p) => NNPalette(
   focus: p.focus,
 );
 
+/// The palette for a look ('default', 'night', 'saffron') in one brightness. Night is always dark.
+NNPalette paletteFor(String look, Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  return switch (look) {
+    'night' => NNLooks.nightDark,
+    'saffron' => dark ? NNLooks.saffronDark : NNLooks.saffronLight,
+    _ => dark ? NNColors.dark : NNColors.light,
+  };
+}
+
 /// Builds the Material theme from the tokens. [highContrast] themes are picked by MaterialApp itself
 /// when the system asks for more contrast.
 ThemeData buildTheme({
   required Brightness brightness,
   required GlassPref glass,
   bool highContrast = false,
+  String look = 'default',
 }) {
+  if (NNLooks.alwaysDark.contains(look)) brightness = Brightness.dark;
   final dark = brightness == Brightness.dark;
-  final base = dark ? NNColors.dark : NNColors.light;
+  final base = paletteFor(look, brightness);
   final p = highContrast ? _contrasted(base) : base;
   final frosted = highContrast || glass == GlassPref.frosted;
   final g = switch ((dark, frosted)) {

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../core/extras.dart';
 import '../core/money.dart';
 import '../core/split.dart';
+import '../core/suggest.dart';
 import '../core/types.dart';
 import '../data/api.dart';
 import '../data/models.dart';
@@ -12,29 +14,64 @@ import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
 import 'keypad.dart';
+import 'paywall.dart';
 
 class ExpenseResult {
-  const ExpenseResult(this.detail, {this.deletedId});
+  const ExpenseResult(this.detail, {this.deletedId, this.queued = false});
   final GroupDetail detail;
   final String? deletedId;
+
+  /// Saved on this device only, waiting for a connection.
+  final bool queued;
 }
 
 Future<ExpenseResult?> showExpenseSheet(
   BuildContext context, {
   required GroupDetail group,
   Expense? editing,
+  Rect? origin,
 }) {
   final s = context.s;
   return showNNSheet<ExpenseResult>(
     context,
     key: const ValueKey('expense-sheet'),
     title: editing == null ? s.addExpense : s.editExpense,
+    origin: origin,
     builder: (_) => ExpenseForm(group: group, editing: editing),
   );
 }
 
-/// Amount on the keypad, what it was for, who paid and how to split it. The split preview updates as you go
-/// and uses the same rules as the server, so what you see is exactly what gets saved.
+/// How the bill is shared. Items is worked out on the device and sent as exact amounts.
+enum SplitChoice { equal, exact, percent, shares, items }
+
+/// One line of a receipt while it is being typed.
+class _Item {
+  _Item() : name = TextEditingController(), price = TextEditingController();
+  final TextEditingController name;
+  final TextEditingController price;
+  final Set<String> members = {};
+
+  void dispose() {
+    name.dispose();
+    price.dispose();
+  }
+}
+
+DateTime _nextPeriod(DateTime d, String every) {
+  if (every == 'week') return d.add(const Duration(days: 7));
+  final last = DateTime(d.year, d.month + 2, 0).day;
+  return DateTime(
+    d.year,
+    d.month + 1,
+    d.day > last ? last : d.day,
+    d.hour,
+    d.minute,
+  );
+}
+
+/// Three taps: the amount, a suggested title (or your own), save. Who paid defaults to you and the
+/// split to everyone equally; Details opens the rest only when someone needs it. The split preview
+/// uses the same rules as the server, so what you see is exactly what gets saved.
 class ExpenseForm extends StatefulWidget {
   const ExpenseForm({super.key, required this.group, this.editing});
   final GroupDetail group;
@@ -47,192 +84,349 @@ class ExpenseForm extends StatefulWidget {
 class _ExpenseFormState extends State<ExpenseForm> {
   late final GroupDetail g = widget.group;
   late final String _id = widget.editing?.id ?? newId();
-  late String _amount;
-  late final TextEditingController _title;
-  late String _category;
-  late String _paidBy;
-  late SplitMode _mode;
-  late Set<String> _included;
-  late Map<String, int> _shares;
-  late Map<String, TextEditingController> _exact;
-  late Map<String, TextEditingController> _percent;
+  late final List<String> _ids = [for (final m in g.members) m.id];
+  String _amount = '';
+  final _title = TextEditingController();
+  final _rate = TextEditingController();
+  String _category = 'other';
+  bool _categoryChosen = false;
+  late String _paidBy = g.me;
+  SplitChoice _mode = SplitChoice.equal;
+  late Set<String> _included = _ids.toSet();
+  late Map<String, int> _shares = {for (final id in _ids) id: 1};
+  late final Map<String, TextEditingController> _exact = {
+    for (final id in _ids) id: TextEditingController(),
+  };
+  late final Map<String, TextEditingController> _percent = {
+    for (final id in _ids) id: TextEditingController(),
+  };
+  final _items = <_Item>[];
+  late String _currency = g.currency;
+  bool _rateLive = false;
+  String _repeat = 'none';
+  bool _details = false;
   String? _error;
   bool _busy = false;
-
-  String get _currency => widget.editing?.currency ?? g.currency;
+  List<Suggestion>? _suggestions;
 
   @override
   void initState() {
     super.initState();
     final e = widget.editing;
-    final ids = [for (final m in g.members) m.id];
-    final value = {
-      for (final i in e?.items ?? const <SplitItem>[]) i.memberId: i.value,
-    };
-    _amount = e == null ? '' : minorToInput(e.amount, _currency);
-    _title = TextEditingController(text: e?.title ?? '');
-    _category = e?.category ?? 'other';
-    _paidBy = e?.paidBy ?? g.me;
-    _mode = e?.mode ?? SplitMode.equal;
-    _included = e == null || e.mode != SplitMode.equal
-        ? ids.toSet()
+    if (e != null) {
+      _fill(e);
+      _details = true;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final s = context.s;
+    _suggestions ??= suggestTitles(
+      recent: [
+        for (final e in g.expenses.take(30))
+          (title: e.title, category: e.category),
+      ],
+      hour: DateTime.now().hour,
+      emoji: g.emoji,
+      label: (k) => s.raw('sug_$k'),
+    );
+  }
+
+  /// Copies an expense into the form: for editing it, or to add the same again.
+  void _fill(Expense e) {
+    final value = {for (final i in e.items) i.memberId: i.value};
+    _currency = e.currency;
+    _amount = minorToInput(e.amount, e.currency);
+    _title.text = e.title;
+    _category = e.category;
+    _categoryChosen = true;
+    _paidBy = _ids.contains(e.paidBy) ? e.paidBy : g.me;
+    _mode = SplitChoice.values.byName(e.mode.name);
+    _rate.text = e.currency == g.currency ? '' : _rateText(e.rate);
+    _included = e.mode != SplitMode.equal
+        ? _ids.toSet()
         : {
-            for (final id in ids)
+            for (final id in _ids)
               if ((value[id] ?? 0) > 0) id,
           };
     _shares = {
-      for (final id in ids)
-        id: e?.mode == SplitMode.shares ? (value[id] ?? 0) : 1,
+      for (final id in _ids)
+        id: e.mode == SplitMode.shares ? (value[id] ?? 0) : 1,
     };
-    _exact = {
-      for (final id in ids)
-        id: TextEditingController(
-          text: e?.mode == SplitMode.exact && (value[id] ?? 0) > 0
-              ? minorToInput(value[id]!, _currency)
-              : '',
-        ),
-    };
-    _percent = {
-      for (final id in ids)
-        id: TextEditingController(
-          text: e?.mode == SplitMode.percent && (value[id] ?? 0) > 0
-              ? minorToInput(value[id]!, 'USD')
-              : '',
-        ),
-    };
+    for (final id in _ids) {
+      _exact[id]!.text = e.mode == SplitMode.exact && (value[id] ?? 0) > 0
+          ? minorToInput(value[id]!, e.currency)
+          : '';
+      _percent[id]!.text = e.mode == SplitMode.percent && (value[id] ?? 0) > 0
+          ? minorToInput(value[id]!, 'USD')
+          : '';
+    }
   }
+
+  String _rateText(double r) => r
+      .toStringAsFixed(6)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
 
   @override
   void dispose() {
     _title.dispose();
+    _rate.dispose();
     for (final c in [..._exact.values, ..._percent.values]) {
       c.dispose();
+    }
+    for (final i in _items) {
+      i.dispose();
     }
     super.dispose();
   }
 
+  bool get _foreign => _currency != g.currency;
   int? get _total => parseAmountExpression(_amount, _currency);
+  double? get _rateValue {
+    if (!_foreign) return 1;
+    final r = double.tryParse(normalizeDigits(_rate.text).replaceAll(',', '.'));
+    return r != null && r > 0 ? r : null;
+  }
 
-  List<SplitItem> get _items => [
-    for (final m in g.members)
-      SplitItem(m.id, switch (_mode) {
-        SplitMode.equal => _included.contains(m.id) ? 1 : 0,
-        SplitMode.shares => _shares[m.id] ?? 0,
-        // Percent is typed like money with two decimals: 33.33 % = 3333 basis points.
-        SplitMode.exact => parseAmount(_exact[m.id]!.text, _currency) ?? 0,
-        SplitMode.percent => parseAmount(_percent[m.id]!.text, 'USD') ?? 0,
-      }),
-  ];
+  String _suggestionLabel(Suggestion x) =>
+      x.title ?? context.s.raw('sug_${x.key}');
+
+  ({List<SplitItem> items, int rest})? get _itemized {
+    final total = _total;
+    if (total == null) return null;
+    return itemizedSplit(total, [
+      for (final i in _items)
+        ReceiptItem(
+          parseAmount(i.price.text, _currency) ?? 0,
+          i.members.toList(),
+        ),
+    ], _ids);
+  }
+
+  SplitMode get _apiMode => _mode == SplitChoice.items
+      ? SplitMode.exact
+      : SplitMode.values.byName(_mode.name);
+
+  List<SplitItem> get _splitItems => switch (_mode) {
+    SplitChoice.items =>
+      _itemized?.items ?? [for (final id in _ids) SplitItem(id, 0)],
+    _ => [
+      for (final id in _ids)
+        SplitItem(id, switch (_mode) {
+          SplitChoice.equal => _included.contains(id) ? 1 : 0,
+          SplitChoice.shares => _shares[id] ?? 0,
+          // Percent is typed like money with two decimals: 33.33 % = 3333 basis points.
+          SplitChoice.exact => parseAmount(_exact[id]!.text, _currency) ?? 0,
+          _ => parseAmount(_percent[id]!.text, 'USD') ?? 0,
+        }),
+    ],
+  };
+
+  bool _valid(int total) =>
+      validateSplit(total, _apiMode, _splitItems, _paidBy, _ids) == null;
 
   Map<String, int> get _owed {
     final total = _total;
     if (total == null) return const {};
-    if (_mode == SplitMode.percent || _mode == SplitMode.exact) {
-      if (validateSplit(total, _mode, _items, _paidBy, [
-            for (final m in g.members) m.id,
-          ]) !=
-          null) {
-        return const {};
-      }
+    if (_mode != SplitChoice.equal && _mode != SplitChoice.shares) {
+      if (!_valid(total)) return const {};
     }
     return owedInExpenseCurrency(
       ExpenseLike(
         amount: total,
         currency: _currency,
         paidBy: _paidBy,
-        mode: _mode,
-        items: _items,
+        mode: _apiMode,
+        items: _splitItems,
       ),
     );
   }
 
+  Future<void> _pickCurrency(String code) async {
+    setState(() {
+      _currency = code;
+      _rateLive = false;
+      if (!_foreign) _rate.clear();
+    });
+    if (!_foreign) return;
+    final session = SessionScope.read(context);
+    if (!session.hasPlus(g)) return;
+    try {
+      final r = await session.api.rate(code, g.currency, groupId: g.id);
+      if (!mounted || _currency != code) return;
+      setState(() {
+        _rate.text = _rateText(r);
+        _rateLive = true;
+      });
+    } on ApiException {
+      // Typed by hand instead.
+    }
+  }
+
+  Future<void> _pickRepeat(String every) async {
+    final session = SessionScope.read(context);
+    if (every != 'none' && !session.hasPlus(g)) {
+      final ok = await showPaywall(context, group: g);
+      if (!mounted || !ok) return;
+    }
+    setState(() => _repeat = every);
+  }
+
   Future<void> _save() async {
-    final s = context.s;
+    final session = SessionScope.read(context);
+    final s = session.s;
     final total = _total;
-    final title = _title.text.trim();
+    final first = _suggestions!.isEmpty ? null : _suggestions!.first;
+    var title = _title.text.trim();
+    var category = _category;
+    if (title.isEmpty && first != null) {
+      title = _suggestionLabel(first);
+      if (!_categoryChosen) category = first.category;
+    }
+    if (title.isEmpty) title = s.raw('cat_$category');
     String? err;
     if (total == null) {
       err = s.errAmount;
-    } else if (title.isEmpty) {
-      err = s.errTitle;
-    } else if (validateSplit(total, _mode, _items, _paidBy, [
-          for (final m in g.members) m.id,
-        ]) !=
-        null) {
+    } else if (_mode == SplitChoice.items && _itemized == null) {
+      err = s.itemsOver;
+    } else if (!_valid(total)) {
       err = s.errSplit;
+    } else if (_rateValue == null) {
+      err = s.errRate;
     }
     if (err != null) {
-      setState(() => _error = err);
+      setState(() {
+        _error = err;
+        if (err == s.errRate || err == s.errSplit || err == s.itemsOver) {
+          _details = true;
+        }
+      });
+      haptic(Haptic.light);
       return;
     }
     setState(() {
       _error = null;
       _busy = true;
     });
-    final api = SessionScope.read(context).api;
     final input = ExpenseInput(
       id: _id,
       title: title,
       amount: total!,
       paidBy: _paidBy,
-      mode: _mode,
-      items: _items,
-      category: _category,
+      mode: _apiMode,
+      items: [
+        for (final i in _splitItems)
+          if (i.value > 0) i,
+      ],
+      category: category,
+      currency: _foreign ? _currency : null,
+      rate: _foreign ? _rateValue : null,
     );
     try {
-      final detail = widget.editing == null
-          ? await api.addExpense(g.id, input)
-          : await api.updateExpense(input);
-      if (mounted) Navigator.of(context).pop(ExpenseResult(detail));
+      final r = await session.repo.saveExpense(
+        g,
+        input,
+        editing: widget.editing != null,
+      );
+      var detail = r.detail;
+      if (_repeat != 'none' && !r.queued) {
+        try {
+          detail = await session.repo.took(
+            await session.api.addRecurring(
+              g.id,
+              input,
+              every: _repeat,
+              startAt: _nextPeriod(DateTime.now(), _repeat),
+            ),
+          );
+        } on ApiException catch (e) {
+          if (mounted) setState(() => _error = e.message);
+        }
+      }
+      session.click();
+      haptic(Haptic.success);
+      if (mounted) {
+        Navigator.of(context).pop(ExpenseResult(detail, queued: r.queued));
+      }
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.offline ? s.offline : e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _delete() async {
-    final s = context.s;
+    final session = SessionScope.read(context);
     final id = widget.editing!.id;
     setState(() => _busy = true);
     try {
-      final detail = await SessionScope.read(context).api.deleteExpense(id);
+      final r = await session.repo.deleteExpense(g, id);
       if (mounted) {
-        Navigator.of(context).pop(ExpenseResult(detail, deletedId: id));
+        Navigator.of(
+          context,
+        ).pop(ExpenseResult(r.detail, deletedId: id, queued: r.queued));
       }
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.offline ? s.offline : e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  String _summary() {
+    final s = context.s;
+    final payer = _paidBy == g.me
+        ? s.youPaid
+        : s.fill(s.paidByName, {'name': g.nameOf(_paidBy)});
+    final split = switch (_mode) {
+      SplitChoice.equal =>
+        _included.length == _ids.length
+            ? s.splitEqualAll
+            : s.fill(s.splitEqualN, {'n': _included.length}),
+      _ => s.raw('mode_${_mode.name}'),
+    };
+    return [
+      payer,
+      split,
+      s.raw('cat_$_category'),
+      if (_foreign) _currency,
+      if (_repeat != 'none') s.raw('every_$_repeat'),
+    ].join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final s = context.s;
+    final session = context.session;
+    final s = session.s;
     final p = NNTheme.of(context).palette;
-    final owed = _owed;
-    final total = _total ?? 0;
-    final items = _items;
-    final assigned = items.fold<int>(0, (a, b) => a + b.value);
-
-    String? remaining;
-    if (_mode == SplitMode.exact && total > 0 && assigned != total) {
-      remaining = s.fill(s.left, {
-        'amount': money(total - assigned, _currency, s.lang),
-      });
-    } else if (_mode == SplitMode.percent && assigned != 10000) {
-      remaining = s.fill(s.percentLeft, {
-        'n': formatNumber(
-          10000 - assigned,
-          'USD',
-        ).replaceAll(RegExp(r'\.00$'), ''),
-      });
-    }
+    final suggestions = _suggestions ?? const <Suggestion>[];
+    final last = widget.editing == null && g.expenses.isNotEmpty
+        ? g.expenses.first
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (last != null)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: NNSpace.xs),
+              child: NNChip(
+                key: const ValueKey('repeat-last'),
+                label: s.fill(s.repeatLast, {'title': last.title}),
+                icon: Icons.replay_rounded,
+                selected: false,
+                onTap: () => setState(() {
+                  _fill(last);
+                  _currency = last.currency;
+                }),
+              ),
+            ),
+          ),
         Keypad(
           value: _amount,
           onChanged: (v) => setState(() => _amount = v),
@@ -240,80 +434,66 @@ class _ExpenseFormState extends State<ExpenseForm> {
           lang: s.lang,
           label: s.amount,
         ),
-        const SizedBox(height: NNSpace.lg),
+        const SizedBox(height: NNSpace.md),
         NNField(
           label: s.whatFor,
-          hint: s.whatForPh,
+          hint: suggestions.isEmpty
+              ? s.whatForPh
+              : _suggestionLabel(suggestions.first),
           controller: _title,
           fieldKey: const ValueKey('title'),
           maxLength: 80,
         ),
-        SectionLabel(s.category),
-        Wrap(
-          spacing: NNSpace.xs,
-          runSpacing: NNSpace.xs,
-          children: [
-            for (final c in categories)
-              NNChip(
-                key: ValueKey('cat-$c'),
-                label: s.raw('cat_$c'),
-                icon: categoryIcon(c),
-                selected: _category == c,
-                onTap: () => setState(() => _category = c),
-              ),
-          ],
-        ),
-        SectionLabel(s.paidBy),
-        Wrap(
-          spacing: NNSpace.xs,
-          runSpacing: NNSpace.xs,
-          children: [
-            for (final m in g.members)
-              NNChip(
-                key: ValueKey('payer-${m.id}'),
-                label: m.isMe ? s.you : m.name,
-                selected: _paidBy == m.id,
-                onTap: () => setState(() => _paidBy = m.id),
-              ),
-          ],
-        ),
-        SectionLabel(s.split),
-        Segmented<SplitMode>(
-          values: SplitMode.values,
-          selected: _mode,
-          label: (m) => s.raw('mode_${m.name}'),
-          onChanged: (m) => setState(() => _mode = m),
-        ),
-        const SizedBox(height: NNSpace.sm),
-        _ShareBar(members: g.members, owed: owed, total: total),
-        const SizedBox(height: NNSpace.sm),
-        NNCard(
-          padding: const EdgeInsets.symmetric(
-            horizontal: NNSpace.md,
-            vertical: NNSpace.xxs,
-          ),
-          child: Column(
-            children: [
-              for (var i = 0; i < g.members.length; i++) ...[
-                if (i > 0)
-                  Divider(height: 1, thickness: 0.5, color: p.separator),
-                _personRow(g.members[i], owed[g.members[i].id]),
-              ],
-            ],
-          ),
-        ),
-        if (remaining != null)
-          Padding(
-            padding: const EdgeInsets.only(top: NNSpace.xs),
-            child: Text(
-              remaining,
-              textAlign: TextAlign.end,
-              style: NNType.footnote.copyWith(
-                color: p.danger,
-                fontWeight: FontWeight.w600,
+        if (suggestions.isNotEmpty) ...[
+          const SizedBox(height: NNSpace.xs),
+          Semantics(
+            container: true,
+            label: s.suggestions,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < suggestions.length; i++)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(
+                        end: NNSpace.xs,
+                      ),
+                      child: NNChip(
+                        key: ValueKey('sug-$i'),
+                        label: _suggestionLabel(suggestions[i]),
+                        icon: categoryIcon(suggestions[i].category),
+                        selected:
+                            _title.text.trim() ==
+                            _suggestionLabel(suggestions[i]),
+                        onTap: () => setState(() {
+                          _title.text = _suggestionLabel(suggestions[i]);
+                          _category = suggestions[i].category;
+                          _categoryChosen = true;
+                        }),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
+        ],
+        const SizedBox(height: NNSpace.md),
+        _DetailsRow(
+          open: _details,
+          title: s.details,
+          summary: _summary(),
+          onTap: () => setState(() => _details = !_details),
+        ),
+        AnimatedSize(
+          duration: reduceMotion(context)
+              ? Duration.zero
+              : NNMotion.standardDuration,
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _details
+              ? _detailsBody()
+              : const SizedBox(width: double.infinity),
+        ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: NNSpace.md),
@@ -346,6 +526,299 @@ class _ExpenseFormState extends State<ExpenseForm> {
     );
   }
 
+  Widget _detailsBody() {
+    final session = context.session;
+    final s = session.s;
+    final p = NNTheme.of(context).palette;
+    final owed = _owed;
+    final total = _total ?? 0;
+    final items = _splitItems;
+    final assigned = items.fold<int>(0, (a, b) => a + b.value);
+    final plus = session.hasPlus(g);
+
+    String? remaining;
+    var remainingBad = true;
+    if (_mode == SplitChoice.exact && total > 0 && assigned != total) {
+      remaining = s.fill(s.left, {
+        'amount': money(total - assigned, _currency, s.lang),
+      });
+    } else if (_mode == SplitChoice.percent && assigned != 10000) {
+      remaining = s.fill(s.percentLeft, {
+        'n': formatNumber(
+          10000 - assigned,
+          'USD',
+        ).replaceAll(RegExp(r'\.00$'), ''),
+      });
+    } else if (_mode == SplitChoice.items && total > 0) {
+      final it = _itemized;
+      if (it == null) {
+        remaining = _items.isEmpty ? null : s.itemsOver;
+      } else if (it.rest > 0) {
+        remaining = s.fill(s.itemsRest, {
+          'amount': money(it.rest, _currency, s.lang),
+        });
+        remainingBad = false;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionLabel(s.category),
+        Wrap(
+          spacing: NNSpace.xs,
+          runSpacing: NNSpace.xs,
+          children: [
+            for (final c in categories)
+              NNChip(
+                key: ValueKey('cat-$c'),
+                label: s.raw('cat_$c'),
+                icon: categoryIcon(c),
+                selected: _category == c,
+                onTap: () => setState(() {
+                  _category = c;
+                  _categoryChosen = true;
+                }),
+              ),
+          ],
+        ),
+        SectionLabel(s.paidBy),
+        Wrap(
+          spacing: NNSpace.xs,
+          runSpacing: NNSpace.xs,
+          children: [
+            for (final m in g.members)
+              NNChip(
+                key: ValueKey('payer-${m.id}'),
+                label: m.isMe ? s.you : m.name,
+                selected: _paidBy == m.id,
+                onTap: () => setState(() => _paidBy = m.id),
+              ),
+          ],
+        ),
+        SectionLabel(s.split),
+        Segmented<SplitChoice>(
+          values: SplitChoice.values,
+          selected: _mode,
+          label: (m) => s.raw('mode_${m.name}'),
+          onChanged: (m) => setState(() {
+            _mode = m;
+            if (m == SplitChoice.items && _items.isEmpty) _items.add(_Item());
+          }),
+        ),
+        const SizedBox(height: NNSpace.sm),
+        _ShareBar(members: g.members, owed: owed, total: total),
+        const SizedBox(height: NNSpace.sm),
+        if (_mode == SplitChoice.items) ..._itemRows(),
+        NNCard(
+          padding: const EdgeInsets.symmetric(
+            horizontal: NNSpace.md,
+            vertical: NNSpace.xxs,
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < g.members.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, thickness: 0.5, color: p.separator),
+                _personRow(g.members[i], owed[g.members[i].id]),
+              ],
+            ],
+          ),
+        ),
+        if (remaining != null)
+          Padding(
+            padding: const EdgeInsets.only(top: NNSpace.xs),
+            child: Text(
+              remaining,
+              key: const ValueKey('remaining'),
+              textAlign: TextAlign.end,
+              style: NNType.footnote.copyWith(
+                color: remainingBad ? p.danger : p.text2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        SectionLabel(s.paidIn),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('currency'),
+          initialValue: _currency,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(NNRadius.row),
+          dropdownColor: p.surface,
+          menuMaxHeight: 420,
+          items: [
+            for (final c in currencies)
+              DropdownMenuItem(
+                value: c.code,
+                child: Text(
+                  '${c.code} · ${c.name(s.lang)}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (v) {
+            if (v != null && v != _currency) _pickCurrency(v);
+          },
+        ),
+        if (_foreign) ...[
+          const SizedBox(height: NNSpace.sm),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.rate,
+                  style: NNType.subhead.copyWith(color: p.text2),
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  key: const ValueKey('rate'),
+                  controller: _rate,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textAlign: TextAlign.end,
+                  onChanged: (_) => setState(() => _rateLive = false),
+                  style: NNType.body.copyWith(
+                    color: p.text,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '1.0',
+                    semanticCounterText: '',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 14,
+                    ),
+                    suffixText: g.currency,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: NNSpace.xxs),
+            child: Text(
+              [
+                s.fill(s.rateLine, {
+                  'from': _currency,
+                  'rate': _rate.text.isEmpty ? '?' : _rate.text,
+                  'to': g.currency,
+                }),
+                if (_rateLive) s.rateLive,
+                if (!plus) '${s.plusFRates}: ${s.needsPlus}',
+              ].join(' · '),
+              key: const ValueKey('rate-line'),
+              style: NNType.footnote.copyWith(color: p.text2),
+            ),
+          ),
+        ],
+        if (widget.editing == null) ...[
+          SectionLabel(s.repeats),
+          Segmented<String>(
+            values: const ['none', 'week', 'month'],
+            selected: _repeat,
+            label: (v) => s.raw('every_$v'),
+            onChanged: _pickRepeat,
+          ),
+        ],
+      ],
+    );
+  }
+
+  List<Widget> _itemRows() {
+    final s = context.s;
+    final p = NNTheme.of(context).palette;
+    return [
+      for (var i = 0; i < _items.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: NNSpace.sm),
+          child: NNCard(
+            key: ValueKey('item-$i'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: ValueKey('item-name-$i'),
+                        controller: _items[i].name,
+                        maxLength: 40,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: s.itemName,
+                          counterText: '',
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: NNSpace.xs),
+                    SizedBox(
+                      width: 112,
+                      child: TextField(
+                        key: ValueKey('item-price-$i'),
+                        controller: _items[i].price,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textAlign: TextAlign.end,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: s.itemPrice,
+                          isDense: true,
+                          semanticCounterText: '',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: NNSpace.xs),
+                Wrap(
+                  spacing: NNSpace.xs,
+                  runSpacing: NNSpace.xs,
+                  children: [
+                    for (final m in g.members)
+                      NNChip(
+                        key: ValueKey('item-$i-${m.id}'),
+                        label: m.isMe ? s.you : m.name,
+                        selected: _items[i].members.contains(m.id),
+                        onTap: () => setState(
+                          () => _items[i].members.contains(m.id)
+                              ? _items[i].members.remove(m.id)
+                              : _items[i].members.add(m.id),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: NNSpace.sm),
+          child: NNButton(
+            key: const ValueKey('add-item'),
+            label: s.addItem,
+            icon: Icons.add_rounded,
+            kind: ButtonKind.tinted,
+            expand: false,
+            onTap: () => setState(() => _items.add(_Item())),
+          ),
+        ),
+      ),
+      if (_items.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: NNSpace.xs),
+          child: Divider(height: 1, color: p.separator),
+        ),
+    ];
+  }
+
   Widget _personRow(Member m, int? owes) {
     final s = context.s;
     final p = NNTheme.of(context).palette;
@@ -355,14 +828,15 @@ class _ExpenseFormState extends State<ExpenseForm> {
         : money(owes, _currency, s.lang);
 
     final Widget control = switch (_mode) {
-      SplitMode.equal => Icon(
+      SplitChoice.equal => Icon(
         _included.contains(m.id)
             ? Icons.check_circle_rounded
             : Icons.radio_button_unchecked_rounded,
         color: _included.contains(m.id) ? p.accent : p.text3,
         size: 26,
       ),
-      SplitMode.shares => Row(
+      SplitChoice.items => const SizedBox.shrink(),
+      SplitChoice.shares => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _StepButton(
@@ -393,10 +867,13 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
         ],
       ),
-      SplitMode.exact || SplitMode.percent => SizedBox(
+      SplitChoice.exact || SplitChoice.percent => SizedBox(
         width: 112,
         child: TextField(
-          controller: _mode == SplitMode.exact ? _exact[m.id] : _percent[m.id],
+          key: ValueKey('split-${m.id}'),
+          controller: _mode == SplitChoice.exact
+              ? _exact[m.id]
+              : _percent[m.id],
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           textAlign: TextAlign.end,
           onChanged: (_) => setState(() {}),
@@ -406,10 +883,10 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
           decoration: InputDecoration(
             isDense: true,
-            hintText: _mode == SplitMode.exact
+            hintText: _mode == SplitChoice.exact
                 ? minorToInput(0, _currency)
                 : '0',
-            suffixText: _mode == SplitMode.percent ? '%' : null,
+            suffixText: _mode == SplitChoice.percent ? '%' : null,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 14,
@@ -442,7 +919,12 @@ class _ExpenseFormState extends State<ExpenseForm> {
       ),
     );
 
-    if (_mode != SplitMode.equal) return Semantics(label: name, child: row);
+    if (_mode != SplitChoice.equal) {
+      return Semantics(
+        label: share.isEmpty ? name : '$name, $share',
+        child: row,
+      );
+    }
     return Pressable(
       key: ValueKey('include-${m.id}'),
       onTap: () => setState(
@@ -456,6 +938,64 @@ class _ExpenseFormState extends State<ExpenseForm> {
       haptic: Haptic.selection,
       scale: 0.98,
       child: row,
+    );
+  }
+}
+
+/// The folded part of the form: one row that says what the defaults are, tap to change them.
+class _DetailsRow extends StatelessWidget {
+  const _DetailsRow({
+    required this.open,
+    required this.title,
+    required this.summary,
+    required this.onTap,
+  });
+  final bool open;
+  final String title;
+  final String summary;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return Pressable(
+      key: const ValueKey('details'),
+      onTap: onTap,
+      semanticLabel: '$title, $summary',
+      excludeChildSemantics: true,
+      haptic: Haptic.selection,
+      scale: 0.99,
+      child: NNCard(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NNSpace.md,
+          vertical: NNSpace.sm,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: NNType.headline.copyWith(color: p.text)),
+                  const SizedBox(height: 2),
+                  Text(
+                    summary,
+                    key: const ValueKey('details-summary'),
+                    style: NNType.footnote.copyWith(color: p.text2),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedRotation(
+              turns: open ? 0.5 : 0,
+              duration: reduceMotion(context)
+                  ? Duration.zero
+                  : NNMotion.standardDuration,
+              child: Icon(Icons.expand_more_rounded, color: p.text2),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

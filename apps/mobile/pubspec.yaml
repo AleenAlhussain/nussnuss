@@ -7,13 +7,24 @@ environment:
   sdk: ^3.8.0
   flutter: ">=3.32.0"
 
-# Kept deliberately small: networking uses dart:io, state uses ChangeNotifier, glass is BackdropFilter.
+# Kept small: networking (and live updates) use dart:io, state uses ChangeNotifier, glass is BackdropFilter.
+# Plugins only where the platform has to do the work.
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.5.0
+  # Session token in the iOS Keychain and Android Keystore.
+  flutter_secure_storage: ^10.0.0
+  # Opens payment links, WhatsApp and the privacy pages in the right app.
+  url_launcher: ^6.3.0
+  # The native share sheet: invite links, the "who owes who" card, exports.
+  share_plus: ^13.0.0
+  # Plus, Trip Pass and Looks through the App Store and Google Play.
+  in_app_purchase: ^3.3.0
+  # The coin's sheen follows the phone's tilt.
+  sensors_plus: ^7.0.0
   # Pinned by flutter_localizations; `any` takes whatever version the Flutter SDK ships with.
   intl: any
 

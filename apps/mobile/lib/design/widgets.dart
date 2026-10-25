@@ -54,24 +54,27 @@ class NNButton extends StatelessWidget {
           width: expand ? double.infinity : null,
           padding: const EdgeInsets.symmetric(horizontal: NNSpace.lg),
           decoration: ShapeDecoration(shape: const StadiumBorder(), color: bg),
-          child: Row(
-            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (busy)
-                SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator.adaptive(
-                    strokeWidth: 2.4,
-                    valueColor: AlwaysStoppedAnimation(fg),
-                  ),
-                )
-              else if (icon != null)
-                Icon(icon, size: 20, color: fg),
-              if (busy || icon != null) const SizedBox(width: NNSpace.xs),
-              // A compact button sits in rows that give it unbounded width, where Flexible would throw.
-              if (expand) Flexible(child: text) else text,
-            ],
+          // A compact button may sit in a row that gives it unbounded width, where Flexible
+          // would throw; where the width is bounded the label shortens instead of overflowing.
+          child: LayoutBuilder(
+            builder: (context, c) => Row(
+              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (busy)
+                  SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator.adaptive(
+                      strokeWidth: 2.4,
+                      valueColor: AlwaysStoppedAnimation(fg),
+                    ),
+                  )
+                else if (icon != null)
+                  Icon(icon, size: 20, color: fg),
+                if (busy || icon != null) const SizedBox(width: NNSpace.xs),
+                if (c.hasBoundedWidth) Flexible(child: text) else text,
+              ],
+            ),
           ),
         ),
       ),
@@ -261,22 +264,30 @@ class NNChip extends StatelessWidget {
           ),
           color: selected ? p.accentSoft : p.surface,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 18, color: fg),
-              const SizedBox(width: 6),
-            ],
-            Text(
+        // In a wrap (bounded) a long label wraps onto a second line; in a scrolling row it doesn't need to.
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final text = Text(
               label,
+              maxLines: c.hasBoundedWidth ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
               style: NNType.subhead.copyWith(
                 color: fg,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               ),
-            ),
-            if (trailing != null) ...[const SizedBox(width: 6), trailing!],
-          ],
+            );
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: fg),
+                  const SizedBox(width: 6),
+                ],
+                if (c.hasBoundedWidth) Flexible(child: text) else text,
+                if (trailing != null) ...[const SizedBox(width: 6), trailing!],
+              ],
+            );
+          },
         ),
       ),
     );
