@@ -326,6 +326,14 @@ class NNStrings {
   String get scanCamera => _m['scanCamera']!;
   String get scanLibrary => _m['scanLibrary']!;
   String get scanFound => _m['scanFound']!;
+  String get glassTinted => _m['glass_tinted']!;
+  String get glassSolid => _m['glass_solid']!;
+  String get search => _m['search']!;
+  String get searchGroups => _m['searchGroups']!;
+  String get noResults => _m['noResults']!;
+  String get searchExpenses => _m['searchExpenses']!;
+  String get pullRefresh => _m['pullRefresh']!;
+  String get recentSearches => _m['recentSearches']!;
   String get catFood => _m['cat_food']!;
   String get catGroceries => _m['cat_groceries']!;
   String get catTransport => _m['cat_transport']!;
@@ -414,7 +422,7 @@ const _en = <String, String>{
   'glass': 'Glass',
   'glass_auto': 'Clear',
   'glass_frosted': 'Frosted',
-  'glassHint': 'Frosted makes bars and sheets solid for easier reading. It turns on by itself with Reduce Transparency.',
+  'glassHint': 'Tinted is the easiest to read on glass. Solid makes bars and sheets opaque; it turns on by itself with Reduce Transparency or Increase Contrast.',
   'deleteAccount': 'Delete my account',
   'deleteAccountBody': 'Removes your account from this and every device. In shared groups your name becomes “Former member” so your friends’ balances still add up.',
   'deleteAccountConfirm': 'Delete account',
@@ -638,6 +646,14 @@ const _en = <String, String>{
   'scanCamera': 'Take a photo',
   'scanLibrary': 'Choose a photo',
   'scanFound': 'Found {n} items',
+  'glass_tinted': 'Tinted',
+  'glass_solid': 'Solid',
+  'search': 'Search',
+  'searchGroups': 'Groups and expenses',
+  'noResults': 'No results for “{q}”',
+  'searchExpenses': 'Expenses',
+  'pullRefresh': 'Pull to refresh',
+  'recentSearches': 'Recent',
   'cat_food': 'Food',
   'cat_groceries': 'Groceries',
   'cat_transport': 'Transport',
@@ -726,7 +742,7 @@ const _ar = <String, String>{
   'glass': 'الزجاج',
   'glass_auto': 'شفاف',
   'glass_frosted': 'مصنفر',
-  'glassHint': 'المصنفر يجعل الأشرطة والنوافذ صلبة لقراءة أسهل. يتفعل تلقائيًا مع خيار تقليل الشفافية.',
+  'glassHint': 'الملوّن أسهل للقراءة على الزجاج. الصلب يجعل الأشرطة والنوافذ معتمة، ويتفعل تلقائيًا مع تقليل الشفافية أو زيادة التباين.',
   'deleteAccount': 'احذف حسابي',
   'deleteAccountBody': 'يحذف حسابك من هذا الجهاز وكل الأجهزة. في المجموعات المشتركة يصبح اسمك "عضو سابق" حتى تبقى حسابات أصحابك صحيحة.',
   'deleteAccountConfirm': 'احذف الحساب',
@@ -950,6 +966,14 @@ const _ar = <String, String>{
   'scanCamera': 'التقط صورة',
   'scanLibrary': 'اختر صورة',
   'scanFound': 'تم العثور على {n} بنود',
+  'glass_tinted': 'ملوّن',
+  'glass_solid': 'صلب',
+  'search': 'بحث',
+  'searchGroups': 'المجموعات والمصاريف',
+  'noResults': 'لا نتائج لـ "{q}"',
+  'searchExpenses': 'المصاريف',
+  'pullRefresh': 'اسحب للتحديث',
+  'recentSearches': 'عمليات البحث الأخيرة',
   'cat_food': 'أكل',
   'cat_groceries': 'مقاضي',
   'cat_transport': 'مواصلات',

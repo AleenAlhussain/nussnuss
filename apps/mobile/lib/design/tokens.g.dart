@@ -182,6 +182,14 @@ class NNLooks {
   static const alwaysDark = <String>{'night'};
 }
 
+/// The soft light behind every screen (accent at the top start, highlight at the top end).
+class NNAmbient {
+  static const accentAlphaLight = 0.09;
+  static const highlightAlphaLight = 0.07;
+  static const accentAlphaDark = 0.22;
+  static const highlightAlphaDark = 0.08;
+}
+
 /// Font family for amounts and big titles, bundled in assets/fonts.
 const nnDisplayFamily = 'ReadexPro';
 
@@ -218,6 +226,32 @@ class NNGlass {
     saturation: 1.00,
     bordered: true,
   );
+
+  /// Tinted (the default): the palette's accentSoft at these opacities.
+  static const tintedLight = NNGlassStyle(
+    fill: Color(0xCCECE9FD),
+    highlight: Color(0x99FFFFFF),
+    shadow: Color(0x1F15121F),
+    blur: 28.0,
+    saturation: 1.80,
+    bordered: false,
+  );
+  static const tintedDark = NNGlassStyle(
+    fill: Color(0xE02B2360),
+    highlight: Color(0x29FFFFFF),
+    shadow: Color(0x80000000),
+    blur: 28.0,
+    saturation: 1.80,
+    bordered: false,
+  );
+  static const tintedAlphaLight = 0.8;
+  static const tintedAlphaDark = 0.88;
+
+  /// Hairline edge on Clear and Tinted glass: white at [edgeHairline…], brighter ([edgeTop…]) at the top-left.
+  static const edgeTopLight = Color(0x8CFFFFFF);
+  static const edgeHairlineLight = Color(0x66FFFFFF);
+  static const edgeTopDark = Color(0x42FFFFFF);
+  static const edgeHairlineDark = Color(0x1FFFFFFF);
 }
 
 /// iOS text styles at the default (Large) Dynamic Type size; Flutter scales them with the system text scale.
@@ -267,9 +301,15 @@ class NNLayout {
 class NNMotion {
   static final standard = SpringDescription.withDampingRatio(mass: 1, stiffness: 322.3, ratio: 0.86);
   static const standardDuration = Duration(milliseconds: 350);
-  static final bouncy = SpringDescription.withDampingRatio(mass: 1, stiffness: 157.9, ratio: 0.70);
-  static const bouncyDuration = Duration(milliseconds: 500);
-  static final gentle = SpringDescription.withDampingRatio(mass: 1, stiffness: 130.5, ratio: 1.00);
-  static const gentleDuration = Duration(milliseconds: 550);
+  static final bouncy = SpringDescription.withDampingRatio(mass: 1, stiffness: 195, ratio: 0.70);
+  static const bouncyDuration = Duration(milliseconds: 450);
+  static final gentle = SpringDescription.withDampingRatio(mass: 1, stiffness: 195, ratio: 1.00);
+  static const gentleDuration = Duration(milliseconds: 450);
+  static final sheet = SpringDescription.withDampingRatio(mass: 1, stiffness: 246.7, ratio: 0.88);
+  static const sheetDuration = Duration(milliseconds: 400);
   static const fade = Duration(milliseconds: 150);
+
+  /// Pressed solid buttons scale down to [pressScale]; pressed glass controls swell to [glassPressScale].
+  static const pressScale = 0.97;
+  static const glassPressScale = 1.04;
 }
