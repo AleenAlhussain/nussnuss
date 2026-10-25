@@ -132,6 +132,8 @@ jobs:
     name: Flutter analyze, test, Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write # publishes the preview build as a pre-release on pushes to v2
     defaults:
       run:
         working-directory: apps/mobile
@@ -198,6 +200,17 @@ jobs:
         with:
           name: flutter-scaffold
           path: flutter-scaffold.tgz
+      - name: Publish the preview build (v2 branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/v2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          gh release delete v2-preview --yes --cleanup-tag 2>/dev/null || true
+          if [ -n "$API_URL" ]; then server="It talks to the API at $API_URL."; else server="No API address is set yet, so Get started will say you are offline. Host the API, set the API_URL repository variable, and the next build works."; fi
+          gh release create v2-preview NussNuss-*.apk ../../flutter-scaffold.tgz --prerelease --target "$GITHUB_SHA" \
+            --title "NussNuss 2.0 preview (build ${{ github.run_number }})" \
+            --notes "Flutter app from the v2 branch, commit ${GITHUB_SHA::7}. $server Signed with a debug key: for testing on a phone, not for Google Play. flutter-scaffold.tgz holds the generated Android and iOS project files and pubspec.lock."
 
   ios:
     name: Flutter iOS build (no signing)
