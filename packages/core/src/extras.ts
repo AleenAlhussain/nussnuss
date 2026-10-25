@@ -1,4 +1,4 @@
-import { minorToInput } from './money.js';
+import { minorToInput, normalizeDigits, parseAmount } from './money.js';
 import { allocate, expenseInGroupCurrency } from './split.js';
 import type { ExpenseLike, SplitItem } from './types.js';
 
@@ -69,4 +69,38 @@ export function spendingByCategory(expenses: (ExpenseLike & { category: string }
     .filter(([, a]) => a > 0)
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category));
+}
+
+const RECEIPT_SKIP = /\b(sub\s*-?total|total|vat|tax|service|svc|tip|gratuity|change|cash|card|visa|master|balance|amount due|paid|discount|round(ing)?|qty|invoice|receipt|tel|phone|date|time|table|order|bill no|trn)\b|المجموع|الإجمالي|الاجمالي|ضريبة|خدمة|نقد|الباقي|المدفوع|خصم|فاتورة|هاتف|تاريخ|طاولة/i;
+const RECEIPT_TOTAL = /\b(grand\s*total|total(\s*due)?|amount\s*due|net\s*total)\b|الإجمالي|الاجمالي|المجموع\s*الكلي|المبلغ\s*المستحق/i;
+const PRICE_AT_END = /^(.*?)[\s:.\-–]*(\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?|\d+(?:[.,]\d{1,3})?)\s*([A-Za-z]{2,3}|د\.إ|ر\.س|ر\.ع|د\.ك|د\.ب|ر\.ق|ج\.م)?\s*$/;
+
+/**
+ * Reads the text of a photographed receipt (from on-device text recognition) into items and the total.
+ * Each line that ends in a price becomes an item ("2 x Burger 30.00" → Burger, 30.00); tax, service,
+ * payment and header lines are skipped; a "Total" line gives the total. Arabic digits are fine.
+ */
+export function parseReceipt(text: string, code: string): { items: { name: string; price: number }[]; total: number | null } {
+  const items: { name: string; price: number }[] = [];
+  let total: number | null = null;
+  for (const raw of normalizeDigits(text).split(/\r?\n/)) {
+    const line = raw.replace(/\s+/g, ' ').trim();
+    if (!line) continue;
+    const m = PRICE_AT_END.exec(line);
+    if (!m) continue;
+    const price = parseAmount(m[2], code);
+    if (!price) continue;
+    const name = m[1]
+      .replace(/^\d+\s*[x×*]\s*/i, '')
+      .replace(/\s*[x×*]\s*\d+$/i, '')
+      .replace(/[\s:.\-–]+$/, '')
+      .trim();
+    if (RECEIPT_TOTAL.test(line) && !/sub\s*-?total/i.test(line)) {
+      total = Math.max(total ?? 0, price);
+      continue;
+    }
+    if (!name || !/\p{L}/u.test(name) || RECEIPT_SKIP.test(name)) continue;
+    items.push({ name: name.slice(0, 60), price });
+  }
+  return { items, total };
 }

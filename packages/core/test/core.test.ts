@@ -12,6 +12,7 @@ import {
   parseAmountExpression,
   simplifyDebts,
   itemizedSplit,
+  parseReceipt,
   payAction,
   spendingByCategory,
   suggestTitles,
@@ -243,5 +244,34 @@ describe('spending by category', () => {
       { category: 'food', amount: 3000 },
       { category: 'transport', amount: 500 },
     ]);
+  });
+});
+
+describe('reading a receipt', () => {
+  test('items with prices, quantities, tax and the total; Arabic digits', () => {
+    const text = [
+      'SHAWARMA HOUSE',
+      'Tel 04 123 4567',
+      '2 x Chicken shawarma   24.00',
+      'Fries 8.50',
+      'Fresh juice x2 ..... 18',
+      'Subtotal 50.50',
+      'VAT 5% 2.53',
+      'Service 5.00',
+      'TOTAL AED 58.03',
+      'Cash 60.00',
+      'Change 1.97',
+      'شاي كرك ٣٫٥٠',
+    ].join('\n');
+    const r = parseReceipt(text, 'AED');
+    expect(r.items).toEqual([
+      { name: 'Chicken shawarma', price: 2400 },
+      { name: 'Fries', price: 850 },
+      { name: 'Fresh juice', price: 1800 },
+      { name: 'شاي كرك', price: 350 },
+    ]);
+    expect(r.total).toBe(5803);
+    expect(parseReceipt('Machboos 4.250\nالإجمالي 4.250', 'KWD')).toEqual({ items: [{ name: 'Machboos', price: 4250 }], total: 4250 });
+    expect(parseReceipt('nothing to see here', 'AED')).toEqual({ items: [], total: null });
   });
 });
