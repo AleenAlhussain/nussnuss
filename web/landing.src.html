@@ -1,0 +1,356 @@
+<title>NussNuss</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Split any bill with friends. No limits, no ads, no sign-up. Arabic and English.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;700&display=swap">
+<style>
+/* Layout: a bill torn in two — copy on one side, a live receipt splitter on the other; plain sections below. */
+:root {
+  --paper: #F7F6FB;
+  --card: #FFFFFF;
+  --ink: #1B1730;
+  --muted: #5C5775;
+  --line: #E2DFEE;
+  --violet: #4F3BD6;
+  --on-violet: #FFFFFF;
+  --violet-soft: #ECE9FD;
+  --on-violet-soft: #3A2AA8;
+  --saffron: #F4B400;
+  --on-saffron: #1B1730;
+  --ok: #0F7B4A;
+  --owe: #B93A0E;
+  --receipt: #FFFDF6;
+  --receipt-ink: #2A2540;
+  --font-display: "Readex Pro", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0F0D1A; --card: #1A1729; --ink: #F3F1FA; --muted: #AAA5C2; --line: #312C48;
+    --violet: #8F7DFF; --on-violet: #120E2B; --violet-soft: #2A2450; --on-violet-soft: #CFC7FF;
+    --saffron: #FFC93D; --on-saffron: #1B1730; --ok: #4ADE95; --owe: #FF8A5C;
+    --receipt: #201C33; --receipt-ink: #EDEAF8; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0F0D1A; --card: #1A1729; --ink: #F3F1FA; --muted: #AAA5C2; --line: #312C48;
+  --violet: #8F7DFF; --on-violet: #120E2B; --violet-soft: #2A2450; --on-violet-soft: #CFC7FF;
+  --saffron: #FFC93D; --on-saffron: #1B1730; --ok: #4ADE95; --owe: #FF8A5C;
+  --receipt: #201C33; --receipt-ink: #EDEAF8; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.6; }
+#page[data-lang="en"] .ar, #page[data-lang="ar"] .en { display: none !important; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.12; }
+h1 { font-size: clamp(2.4rem, 6vw, 4.2rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.15rem; font-weight: 700; }
+#page[data-lang="ar"] h1, #page[data-lang="ar"] h2 { letter-spacing: 0; line-height: 1.3; }
+p { margin: 0; }
+a { color: var(--violet); }
+:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 18px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: var(--ink); text-decoration: none; }
+.mark { width: 30px; height: 26px; position: relative; flex: none; }
+.mark i { position: absolute; top: 0; width: 13px; height: 26px; }
+.mark i:first-child { left: 0; background: var(--violet); border-radius: 13px 0 0 13px; }
+.mark i:last-child { right: 0; top: 3px; background: var(--saffron); border-radius: 0 13px 13px 0; }
+.lang { display: inline-flex; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.lang button { font: 600 0.9rem var(--font-body); border: 0; background: transparent; color: var(--muted); padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--violet); color: var(--on-violet); }
+
+/* hero */
+.hero { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; padding-block: 24px 56px; }
+.hero > * { min-width: 0; }
+.kicker { display: inline-block; font-family: var(--font-display); font-weight: 700; color: var(--on-saffron); background: var(--saffron); padding: 4px 12px; border-radius: 8px; margin-bottom: 18px; font-size: 1rem; }
+.lede { font-size: 1.2rem; color: var(--muted); margin-top: 18px; max-width: 34ch; }
+.promises { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; padding: 0; list-style: none; }
+.promises li { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 0.95rem; }
+.promises li b { color: var(--violet); }
+.ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font: 600 1rem var(--font-body); padding: 13px 20px; border-radius: 12px; text-decoration: none; border: 0; }
+.btn.primary { background: var(--violet); color: var(--on-violet); }
+.btn.store { background: var(--card); color: var(--ink); border: 1px solid var(--line); cursor: default; }
+.btn.store small { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 500; line-height: 1.1; }
+.btn.store span { line-height: 1.2; }
+
+/* receipt splitter */
+.receipt { background: var(--receipt); color: var(--receipt-ink); border-radius: 6px; padding: 26px 24px 22px; font-family: var(--font-mono); box-shadow: 0 1px 0 var(--line), 0 18px 40px rgba(27, 23, 48, 0.12); position: relative; transform: rotate(-1.2deg); }
+#page[data-lang="ar"] .receipt { transform: rotate(1.2deg); }
+.receipt::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 10px; background: linear-gradient(-45deg, transparent 6px, var(--receipt) 0) 0 0 / 14px 10px repeat-x, linear-gradient(45deg, transparent 6px, var(--receipt) 0) 0 0 / 14px 10px repeat-x; }
+.r-head { text-align: center; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.8rem; color: var(--muted); }
+.r-title { text-align: center; font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; margin: 6px 0 14px; }
+.r-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-block: 6px; }
+.r-row label { font-size: 0.85rem; color: var(--muted); font-family: var(--font-body); }
+.r-row input, .r-row select { font: 600 1.05rem var(--font-mono); color: var(--receipt-ink); background: transparent; border: 0; border-bottom: 2px dashed var(--line); padding: 4px 2px; width: 9.5rem; text-align: end; }
+.r-row input:focus, .r-row select:focus { outline: none; border-bottom-color: var(--violet); }
+.stepper { display: inline-flex; align-items: center; gap: 6px; }
+.stepper button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 600 1.1rem var(--font-mono); cursor: pointer; }
+.stepper output { min-width: 2ch; text-align: center; font-weight: 600; font-size: 1.05rem; }
+.tear { border: 0; border-top: 2px dashed var(--line); margin: 14px -24px; position: relative; }
+.tear::before { content: "✂"; position: absolute; top: -12px; inset-inline-start: 10px; color: var(--muted); font-size: 0.9rem; background: var(--receipt); padding-inline: 4px; }
+.shares { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-variant-numeric: tabular-nums; }
+.shares li { display: flex; justify-content: space-between; gap: 10px; }
+.shares li span:first-child { color: var(--muted); }
+.r-total { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-weight: 600; }
+.r-note { margin-top: 12px; font-size: 0.78rem; color: var(--muted); font-family: var(--font-body); line-height: 1.45; }
+
+/* sections */
+section { padding-block: 64px; }
+.band { background: var(--card); border-block: 1px solid var(--line); }
+.sec-head { max-width: 46rem; display: grid; gap: 12px; margin-bottom: 36px; }
+.sec-head p { color: var(--muted); font-size: 1.1rem; }
+.problems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.problem { padding: 22px; border-radius: 16px; background: var(--paper); border: 1px solid var(--line); display: grid; gap: 8px; align-content: start; }
+.problem .was { font-family: var(--font-mono); font-size: 0.85rem; color: var(--owe); text-decoration: line-through; text-decoration-thickness: 2px; }
+.problem .now { font-family: var(--font-mono); font-size: 0.85rem; color: var(--ok); font-weight: 600; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; counter-reset: step; padding: 0; list-style: none; }
+.steps li { display: grid; gap: 10px; align-content: start; }
+.steps li::before { counter-increment: step; content: counter(step); font: 700 1.1rem var(--font-display); width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--violet-soft); color: var(--on-violet-soft); }
+.steps p { color: var(--muted); }
+.shots { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 40px; }
+.phone { width: 230px; max-width: 100%; border-radius: 30px; border: 7px solid var(--ink); overflow: hidden; background: var(--ink); box-shadow: 0 20px 50px rgba(27, 23, 48, 0.18); }
+.phone img { display: block; width: 100%; height: auto; border-radius: 22px; }
+.feats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 40px; }
+.feat { display: grid; gap: 6px; padding-block: 18px; border-top: 1px solid var(--line); }
+.feat p { color: var(--muted); }
+.plans { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; max-width: 820px; }
+.plan { border: 1px solid var(--line); border-radius: 18px; padding: 26px; display: grid; gap: 12px; align-content: start; background: var(--card); }
+.plan.plus { border: 2px solid var(--violet); }
+.price { font: 700 2.2rem var(--font-display); }
+.price small { font: 500 0.95rem var(--font-body); color: var(--muted); }
+.plan ul { margin: 0; padding-inline-start: 1.1em; display: grid; gap: 6px; }
+.tag { justify-self: start; background: var(--saffron); color: var(--on-saffron); font: 700 0.75rem var(--font-body); letter-spacing: 0.06em; padding: 3px 10px; border-radius: 999px; }
+.faq { max-width: 52rem; display: grid; gap: 10px; }
+.faq details { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--card); }
+.faq summary { cursor: pointer; font-weight: 600; font-size: 1.05rem; }
+.faq details p { color: var(--muted); margin-top: 10px; }
+.final { text-align: center; display: grid; gap: 18px; justify-items: center; }
+.final .ctas { justify-content: center; }
+footer { padding-block: 32px 48px; color: var(--muted); font-size: 0.92rem; display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; border-top: 1px solid var(--line); }
+
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; gap: 40px; }
+  .problems, .steps { grid-template-columns: 1fr; }
+  .feats, .plans { grid-template-columns: 1fr; }
+  section { padding-block: 48px; }
+}
+@media (max-width: 420px) {
+  .r-row input, .r-row select { width: 7.5rem; }
+  .receipt { padding-inline: 18px; }
+  .tear { margin-inline: -18px; }
+}
+@media (prefers-reduced-motion: reduce) { .receipt { transform: none !important; } }
+</style>
+
+<div id="page" data-lang="en" dir="ltr">
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="#top" aria-label="NussNuss"><span class="mark" aria-hidden="true"><i></i><i></i></span><span class="en">NussNuss</span><span class="ar">نص نص</span></a>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" id="lang-en" data-set="en" aria-pressed="true">English</button>
+        <button type="button" id="lang-ar" data-set="ar" aria-pressed="false">العربية</button>
+      </div>
+    </header>
+
+    <div class="hero" id="top">
+      <div>
+        <span class="kicker"><span class="en">Let’s go nuss-nuss</span><span class="ar">خلّيها نص نص</span></span>
+        <h1><span class="en">Split any bill. No limits.</span><span class="ar">قسّم أي فاتورة. بلا حدود.</span></h1>
+        <p class="lede"><span class="en">Trips, rent, dinners. Add as many expenses as you like, see who pays whom, and send it to the group chat. Your friends don’t need the app.</span><span class="ar">رحلات، إيجار، عزايم. أضف مصاريف قد ما تبي، شوف مين يدفع لمين، وأرسلها لقروب الواتساب. أصحابك ما يحتاجون التطبيق.</span></p>
+        <ul class="promises">
+          <li><span class="en"><b>No</b> daily limit</span><span class="ar"><b>بلا</b> حد يومي</span></li>
+          <li><span class="en"><b>No</b> ads</span><span class="ar"><b>بلا</b> إعلانات</span></li>
+          <li><span class="en"><b>No</b> sign-up</span><span class="ar"><b>بلا</b> تسجيل</span></li>
+          <li><span class="en">Arabic &amp; English</span><span class="ar">عربي وإنجليزي</span></li>
+        </ul>
+        <div class="ctas">
+          <a class="btn primary" href="{{APP_URL}}" target="_blank" rel="noopener"><span class="en">Try it in your browser</span><span class="ar">جرّبه من المتصفح</span></a>
+          <span class="btn store" aria-disabled="true"><span><small class="en">Coming soon on the</small><small class="ar">قريبًا على</small>App Store</span></span>
+          <span class="btn store" aria-disabled="true"><span><small class="en">Coming soon on</small><small class="ar">قريبًا على</small>Google Play</span></span>
+        </div>
+      </div>
+
+      <form class="receipt" id="splitter" aria-labelledby="r-title" novalidate>
+        <div class="r-head"><span class="en">Try it · split a bill</span><span class="ar">جرّب · قسّم فاتورة</span></div>
+        <div class="r-title" id="r-title"><span class="en">Dinner at the corniche</span><span class="ar">عشاء على الكورنيش</span></div>
+        <div class="r-row"><label for="amt"><span class="en">Total</span><span class="ar">المجموع</span></label><input id="amt" inputmode="decimal" value="100.000" autocomplete="off"></div>
+        <div class="r-row"><label for="cur"><span class="en">Currency</span><span class="ar">العملة</span></label>
+          <select id="cur">
+            <option value="OMR:3">OMR</option><option value="KWD:3">KWD</option><option value="BHD:3">BHD</option>
+            <option value="AED:2">AED</option><option value="SAR:2">SAR</option><option value="QAR:2">QAR</option>
+            <option value="EGP:2">EGP</option><option value="USD:2">USD</option><option value="EUR:2">EUR</option><option value="JPY:0">JPY</option>
+          </select></div>
+        <div class="r-row"><label for="ppl-out"><span class="en">People</span><span class="ar">الأشخاص</span></label>
+          <span class="stepper"><button type="button" id="minus" aria-label="Fewer people">−</button><output id="ppl-out" aria-live="polite">3</output><button type="button" id="plus" aria-label="More people">+</button></span></div>
+        <hr class="tear">
+        <ul class="shares" id="shares" aria-live="polite"></ul>
+        <div class="r-total"><span><span class="en">Adds up to</span><span class="ar">المجموع يطابق</span></span><span id="sum"></span></div>
+        <p class="r-note" id="note"></p>
+      </form>
+    </div>
+  </div>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2><span class="en">Splitting a bill shouldn’t have a waiting room</span><span class="ar">تقسيم الحساب ما يحتاج غرفة انتظار</span></h2>
+        <p><span class="en">We read public reviews of the most popular bill-splitting app on the App Store, Google Play and Trustpilot. The same three complaints kept coming back. NussNuss fixes all three.</span><span class="ar">قرأنا تقييمات الناس لأشهر تطبيق لتقسيم المصاريف على App Store وGoogle Play وTrustpilot. نفس الشكاوى الثلاث تتكرر. نص نص يحلها كلها.</span></p>
+      </div>
+      <div class="problems">
+        <div class="problem"><h3><span class="en">Daily caps and wait screens</span><span class="ar">حد يومي وشاشات انتظار</span></h3>
+          <span class="was"><span class="en">3–5 expenses a day, then wait</span><span class="ar">٣–٥ مصاريف باليوم، وبعدها انتظر</span></span>
+          <span class="now"><span class="en">Unlimited. Instant.</span><span class="ar">بلا حدود. فورًا.</span></span></div>
+        <div class="problem"><h3><span class="en">Everyone has to sign up</span><span class="ar">لازم الكل يسجّل</span></h3>
+          <span class="was"><span class="en">Accounts, phone numbers, invites</span><span class="ar">حسابات، أرقام جوال، دعوات</span></span>
+          <span class="now"><span class="en">Friends open a link</span><span class="ar">أصحابك يفتحون رابط</span></span></div>
+        <div class="problem"><h3><span class="en">A monthly subscription to do maths</span><span class="ar">اشتراك شهري عشان تحسب</span></h3>
+          <span class="was"><span class="en">Pay every month</span><span class="ar">ادفع كل شهر</span></span>
+          <span class="now"><span class="en">Free. Extras are one payment.</span><span class="ar">مجاني. الإضافات بدفعة وحدة.</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head"><h2><span class="en">How it works</span><span class="ar">كيف يشتغل</span></h2></div>
+      <ol class="steps">
+        <li><h3><span class="en">Make a group</span><span class="ar">أنشئ مجموعة</span></h3><p><span class="en">Name it, pick the currency, type your friends’ names. No accounts anywhere.</span><span class="ar">سمّها، اختر العملة، واكتب أسماء أصحابك. بدون أي حسابات.</span></p></li>
+        <li><h3><span class="en">Add what people paid</span><span class="ar">سجّل مين دفع إيش</span></h3><p><span class="en">Split equally, by amounts, by percent or by shares. The numbers always add up to the last fils.</span><span class="ar">بالتساوي، بالمبالغ، بالنسبة أو بالحصص. الأرقام تضبط لآخر فلس.</span></p></li>
+        <li><h3><span class="en">Send who pays whom</span><span class="ar">أرسل مين يدفع لمين</span></h3><p><span class="en">The fewest transfers to settle everyone, sent to WhatsApp with a link to the full breakdown.</span><span class="ar">أقل عدد تحويلات عشان الكل يتصافى، ترسلها على واتساب مع رابط التفاصيل.</span></p></li>
+      </ol>
+      <div class="shots">
+        <div class="phone"><img class="en" src="{{IMG_EN_1}}" alt="A trip group with five expenses and a total of OMR 244.650" width="430" height="932"><img class="ar" src="{{IMG_AR_1}}" alt="مجموعة رحلة فيها خمسة مصاريف بمجموع 244.650 ريال عماني" width="430" height="932"></div>
+        <div class="phone"><img class="en" src="{{IMG_EN_2}}" alt="Who pays whom: three transfers, each with a Mark as paid button" width="430" height="932"><img class="ar" src="{{IMG_AR_2}}" alt="مين يدفع لمين: ثلاث تحويلات مع زر تم الدفع" width="430" height="932"></div>
+        <div class="phone"><img class="en" src="{{IMG_EN_3}}" alt="A shared group opened in a browser, with no app installed" width="430" height="932"><img class="ar" src="{{IMG_AR_3}}" alt="مجموعة مشاركة مفتوحة من المتصفح بدون تطبيق" width="430" height="932"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="sec-head"><h2><span class="en">Small details that matter</span><span class="ar">تفاصيل صغيرة تفرق</span></h2></div>
+      <div class="feats">
+        <div class="feat"><h3><span class="en">Arabic, properly</span><span class="ar">عربي صح</span></h3><p><span class="en">Full right-to-left layout that switches instantly. Type amounts with Arabic or Western digits.</span><span class="ar">واجهة من اليمين لليسار تتبدل فورًا. اكتب المبالغ بالأرقام العربية أو الإنجليزية.</span></p></div>
+        <div class="feat"><h3><span class="en">Fils, baisa and halalas</span><span class="ar">فلس وبيسة وهللة</span></h3><p><span class="en">41 currencies, including the 3-decimal dinars and rials of Kuwait, Bahrain and Oman.</span><span class="ar">41 عملة، منها الدنانير والريالات بثلاث خانات عشرية في الكويت والبحرين وعُمان.</span></p></div>
+        <div class="feat"><h3><span class="en">Private by design</span><span class="ar">خصوصيتك أولًا</span></h3><p><span class="en">Everything stays on your phone. No servers, no accounts, no tracking.</span><span class="ar">كل شي يبقى على جوالك. بلا خوادم، بلا حسابات، بلا تتبع.</span></p></div>
+        <div class="feat"><h3><span class="en">Works offline</span><span class="ar">بدون إنترنت</span></h3><p><span class="en">In the desert, on a plane, at a camp with no signal.</span><span class="ar">في البر، في الطيارة، في كشتة ما فيها شبكة.</span></p></div>
+        <div class="feat"><h3><span class="en">Undo everything</span><span class="ar">تراجع عن أي شي</span></h3><p><span class="en">Marked a payment too early or deleted the wrong expense? One tap brings it back.</span><span class="ar">سجلت دفعة بدري أو حذفت مصروف بالغلط؟ ضغطة وحدة وترجع.</span></p></div>
+        <div class="feat"><h3><span class="en">Never lose a half-typed expense</span><span class="ar">ما يضيع اللي كتبته</span></h3><p><span class="en">Leave the form and come back; what you typed is still there.</span><span class="ar">اطلع من الشاشة وارجع، تلقى اللي كتبته موجود.</span></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="wrap">
+      <div class="sec-head"><h2><span class="en">Free. Really.</span><span class="ar">مجاني. فعلًا.</span></h2><p><span class="en">Everything you need to split bills is free, forever, with no limits. Plus is one payment for extras.</span><span class="ar">كل اللي تحتاجه لتقسيم الحساب مجاني للأبد وبلا حدود. بلس دفعة وحدة لمزايا إضافية.</span></p></div>
+      <div class="plans">
+        <div class="plan"><h3><span class="en">Free</span><span class="ar">مجاني</span></h3><div class="price">0</div>
+          <ul><li><span class="en">Unlimited groups and expenses</span><span class="ar">مجموعات ومصاريف بلا حدود</span></li><li><span class="en">All four ways to split</span><span class="ar">كل طرق التقسيم الأربع</span></li><li><span class="en">Who pays whom, mark as paid</span><span class="ar">مين يدفع لمين، وتم الدفع</span></li><li><span class="en">WhatsApp summary and share link</span><span class="ar">ملخص واتساب ورابط مشاركة</span></li><li><span class="en">Arabic and English, offline</span><span class="ar">عربي وإنجليزي، بدون إنترنت</span></li></ul></div>
+        <div class="plan plus"><span class="tag">PLUS</span><h3><span class="en">NussNuss Plus</span><span class="ar">نص نص بلس</span></h3><div class="price">$4.99 <small><span class="en">once, no subscription</span><span class="ar">مرة وحدة، بدون اشتراك</span></small></div>
+          <ul><li><span class="en">Mixed currencies in one group, with exchange rates</span><span class="ar">عملات مختلفة في نفس المجموعة مع سعر الصرف</span></li><li><span class="en">Export any group to CSV</span><span class="ar">تصدير أي مجموعة إلى CSV</span></li><li><span class="en">Colour themes</span><span class="ar">ألوان ومظاهر</span></li><li><span class="en">Every future Plus feature</span><span class="ar">كل مزايا بلس القادمة</span></li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="sec-head"><h2><span class="en">Questions</span><span class="ar">أسئلة</span></h2></div>
+      <div class="faq">
+        <details><summary><span class="en">Is there really no limit?</span><span class="ar">فعلًا ما فيه حدود؟</span></summary><p><span class="en">Yes. Add as many groups and expenses as you like, with no waiting and no ads. Plus only adds extras.</span><span class="ar">إيه. أضف مجموعات ومصاريف قد ما تبي، بدون انتظار ولا إعلانات. بلس يضيف مزايا إضافية بس.</span></p></details>
+        <details><summary><span class="en">Do my friends need to install it?</span><span class="ar">لازم أصحابي يحمّلون التطبيق؟</span></summary><p><span class="en">No. Send the link and they see the whole breakdown in their browser. If they want, they can save a copy in their own app.</span><span class="ar">لا. أرسل الرابط ويشوفون التفاصيل كاملة من المتصفح. وإذا حبوا يحفظون نسخة في تطبيقهم.</span></p></details>
+        <details><summary><span class="en">Can everyone add expenses to the same group?</span><span class="ar">يقدر الكل يضيف مصاريف لنفس المجموعة؟</span></summary><p><span class="en">Today one person keeps the group and shares updates by link. Live syncing between phones is the next big feature, and it will stay free with no limits.</span><span class="ar">حاليًا شخص واحد يمسك المجموعة ويشارك التحديثات بالرابط. المزامنة المباشرة بين الجوالات هي الميزة الكبيرة الجاية، وبتبقى مجانية وبلا حدود.</span></p></details>
+        <details><summary><span class="en">Where is my data?</span><span class="ar">وين تروح بياناتي؟</span></summary><p><span class="en">On your phone only. We have no servers and no accounts. A group leaves your phone only when you share its link.</span><span class="ar">على جوالك بس. ما عندنا خوادم ولا حسابات. المجموعة ما تطلع من جوالك إلا إذا شاركت رابطها.</span></p></details>
+        <details><summary><span class="en">Is Plus a subscription?</span><span class="ar">بلس اشتراك؟</span></summary><p><span class="en">No. You pay once through the App Store or Google Play, and restore it on a new phone for free.</span><span class="ar">لا. تدفع مرة وحدة عن طريق App Store أو Google Play، وتسترجعه على أي جوال جديد مجانًا.</span></p></details>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap final">
+      <h2><span class="en">Next trip, let’s go nuss-nuss.</span><span class="ar">الرحلة الجاية، خلّيها نص نص.</span></h2>
+      <div class="ctas"><a class="btn primary" href="{{APP_URL}}" target="_blank" rel="noopener"><span class="en">Try it in your browser</span><span class="ar">جرّبه من المتصفح</span></a></div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <footer>
+      <span>© 2026 NussNuss</span>
+      <span><a href="{{PRIVACY_URL}}"><span class="en">Privacy</span><span class="ar">الخصوصية</span></a></span>
+      <span class="en">Made for friends who split things.</span><span class="ar">مصنوع للأصحاب اللي يتقاسمون.</span>
+    </footer>
+  </div>
+</div>
+
+<script>
+(function () {
+  var page = document.getElementById('page');
+  function setLang(l) {
+    page.dataset.lang = l;
+    page.dir = l === 'ar' ? 'rtl' : 'ltr';
+    page.lang = l;
+    document.getElementById('lang-en').setAttribute('aria-pressed', String(l === 'en'));
+    document.getElementById('lang-ar').setAttribute('aria-pressed', String(l === 'ar'));
+    try { localStorage.setItem('nn-landing-lang', l); } catch (e) {}
+    render();
+  }
+  document.querySelectorAll('.lang button').forEach(function (b) { b.addEventListener('click', function () { setLang(b.dataset.set); }); });
+
+  // The same rounding the app uses: integer minor units, largest remainder, extra unit to the first people.
+  function allocate(total, n) {
+    var base = Math.floor(total / n), left = total - base * n, out = [];
+    for (var i = 0; i < n; i++) out.push(base + (i < left ? 1 : 0));
+    return out;
+  }
+  var AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+  function normalize(s) {
+    return s.replace(/[٠-٩]/g, function (d) { return String(AR_DIGITS.indexOf(d)); }).replace(/٫/g, '.').replace(/[,\s]/g, '');
+  }
+  function fmt(minor, dec) {
+    var s = String(Math.abs(minor)).padStart(dec + 1, '0');
+    var i = dec ? s.slice(0, -dec) : s, f = dec ? '.' + s.slice(-dec) : '';
+    return i.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + f;
+  }
+  var people = 3;
+  var names = { en: ['You', 'Sara', 'Omar', 'Lina', 'Khalid', 'Mona', 'Yusuf', 'Noor', 'Ali', 'Huda'], ar: ['أنت', 'سارة', 'عمر', 'لينا', 'خالد', 'منى', 'يوسف', 'نور', 'علي', 'هدى'] };
+  var amt = document.getElementById('amt'), cur = document.getElementById('cur');
+  function render() {
+    var l = page.dataset.lang, parts = cur.value.split(':'), code = parts[0], dec = Number(parts[1]);
+    var s = normalize(amt.value), m = s.match(/^(\d*)(?:\.(\d*))?$/), note = document.getElementById('note');
+    document.getElementById('ppl-out').textContent = people;
+    var list = document.getElementById('shares');
+    list.innerHTML = '';
+    if (!m || (!m[1] && !m[2]) || (m[2] || '').length > dec) {
+      document.getElementById('sum').textContent = '—';
+      note.textContent = l === 'ar' ? ('اكتب مبلغ بحد أقصى ' + dec + ' خانات عشرية') : ('Enter an amount with up to ' + dec + ' decimal places');
+      return;
+    }
+    var total = Number(m[1] || '0') * Math.pow(10, dec) + Number(((m[2] || '') + '000').slice(0, dec) || '0');
+    var shares = allocate(total, people);
+    shares.forEach(function (v, i) {
+      var li = document.createElement('li');
+      var a = document.createElement('span'); a.textContent = names[l][i];
+      var b = document.createElement('span'); b.textContent = code + ' ' + fmt(v, dec);
+      li.appendChild(a); li.appendChild(b); list.appendChild(li);
+    });
+    document.getElementById('sum').textContent = code + ' ' + fmt(shares.reduce(function (x, y) { return x + y; }, 0), dec);
+    var uneven = shares[0] !== shares[shares.length - 1];
+    note.textContent = uneven
+      ? (l === 'ar' ? 'المبلغ ما ينقسم بالضبط، فالفرق الصغير يروح لأول شخص. المجموع يطابق لآخر فلس.' : 'It doesn’t divide exactly, so the smallest unit goes to the first person. The total still matches to the last fils.')
+      : (l === 'ar' ? 'ينقسم بالتساوي تمامًا.' : 'It divides exactly.');
+  }
+  amt.addEventListener('input', render);
+  cur.addEventListener('change', render);
+  document.getElementById('minus').addEventListener('click', function () { people = Math.max(2, people - 1); render(); });
+  document.getElementById('plus').addEventListener('click', function () { people = Math.min(10, people + 1); render(); });
+  document.getElementById('splitter').addEventListener('submit', function (e) { e.preventDefault(); });
+  var start = 'en';
+  try { start = localStorage.getItem('nn-landing-lang') || ((navigator.language || '').indexOf('ar') === 0 ? 'ar' : 'en'); } catch (e) {}
+  setLang(start);
+})();
+</script>

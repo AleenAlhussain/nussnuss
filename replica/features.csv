@@ -1,0 +1,36 @@
+feature,area,priority,original,clone,notes
+Create group with members,groups,must,yes,yes,
+Edit / delete group,groups,must,yes,yes,
+Add expense (amount title payer),expenses,must,yes,yes,
+Edit / delete expense,expenses,must,yes,yes,delete has undo
+Split equally,expenses,must,yes,yes,
+Split by exact amounts,expenses,must,yes,yes,
+Split by percentages,expenses,must,yes,yes,
+Split by shares,expenses,should,yes,yes,
+Balances per member,balances,must,yes,yes,
+Simplify debts (fewest transfers),balances,must,yes,yes,
+Record a payment (settle up),balances,must,yes,yes,one tap + undo
+Expense categories,expenses,could,yes,yes,
+Expense date,expenses,should,yes,partial,date recorded and shown; editing the date not yet
+Multiple currencies,currency,should,yes,yes,41 currencies; per-group currency free
+Currency conversion,currency,could,yes,yes,Plus: per-expense currency with rate
+Export CSV,export,could,yes,yes,Plus
+Works offline,platform,should,yes,yes,
+Web version,platform,could,yes,yes,same codebase
+Push notifications,platform,could,yes,skip,v2: needs a server
+Cloud sync / multi-device,platform,should,yes,skip,v2: Supabase
+Comments on expenses,social,could,yes,skip,v2
+Recurring bills,expenses,could,yes,skip,v2
+Receipt OCR,expenses,could,yes,skip,v2: needs ML
+Pay via Venmo/PayPal/Paytm,payments,could,yes,skip,regulated / region-specific
+No daily limit / no wait screens,fix,must,no,yes,F1
+No ads,fix,must,no,yes,F1
+One-time Plus purchase,fix,should,no,yes,F2 (code done; store product to create)
+No sign-up for anyone,fix,must,no,yes,F3
+Share group by link (view without app),fix,must,no,yes,F3
+Arabic + English with RTL,fix,must,no,yes,F4
+3-decimal Gulf currencies,fix,must,no,yes,F4
+Shareable settle-up summary,fix,must,no,yes,F5
+Draft kept on add-expense,fix,should,no,yes,F8
+Theme colours (Plus),plus,could,no,yes,
+Demo trip for first-time users,fix,could,no,yes,also helps App Review

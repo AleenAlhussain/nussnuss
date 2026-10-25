@@ -1,0 +1,65 @@
+{
+  "avoid": [
+    "Splitwise",
+    "Qatta",
+    "Tricount",
+    "Settle Up",
+    "Splid",
+    "قطة",
+    "قطّة"
+  ],
+  "appstore": {
+    "en-US": {
+      "name": "NussNuss: Split Bills",
+      "subtitle": "No limits. No ads. No sign-up",
+      "promotional_text": "Split trips, rent and dinners with friends. Unlimited expenses, no wait screens, no accounts. Share the result on WhatsApp — friends open it in any browser.",
+      "keywords": "expense,share,trip,roommate,rent,friends,group,owe,iou,dinner,travel,costs,arabic,household,tab,even",
+      "description": "Split any bill with friends, family and roommates — with no limits.\n\nAdd as many expenses as you like. There is no daily cap, no wait screen and no ads, and there never will be.\n\nNO SIGN-UP\nNot for you, not for your friends. Type your name and start. Friends are just names in the group.\n\nSHARE ON WHATSAPP\nSend a clear summary of who pays whom to your group chat. Anyone with the link can open the full breakdown in their browser, with no app and no account.\n\nEVERY WAY TO SPLIT, FREE\nEqually, by exact amounts, by percentages or by shares. A live counter shows what is left, so the numbers always add up.\n\nFEWEST TRANSFERS\nNussNuss works out the smallest number of payments to settle everyone. Tap \"Mark as paid\" when money changes hands, and undo if you tapped too soon.\n\nARABIC AND ENGLISH\nSwitch language instantly, with a full right-to-left layout. 41 currencies, including 3-decimal currencies such as the Kuwaiti dinar, Bahraini dinar and Omani rial. Type numbers with Arabic or Western digits.\n\nPRIVATE BY DESIGN\nEverything stays on your phone. We have no servers and no accounts. A group only leaves your phone when you share its link.\n\nWORKS OFFLINE\nIn the desert, on a plane, anywhere.\n\nNUSSNUSS PLUS — ONE PAYMENT, NO SUBSCRIPTION\nThe app is free with no limits. Plus is a single purchase that adds mixed currencies in one group with exchange rates, CSV export, colour themes, and every future Plus feature.",
+      "whats_new": "First release.",
+      "support_url": "https://nussnuss.app/support",
+      "privacy_url": "https://nussnuss.app/privacy",
+      "category": "Finance",
+      "secondary_category": "Travel",
+      "age_rating": "4+"
+    },
+    "ar-SA": {
+      "name": "نص نص: تقسيم الحساب",
+      "subtitle": "بلا حدود ولا إعلانات ولا تسجيل",
+      "promotional_text": "قسّم مصاريف الرحلات والسكن والعزايم مع أصحابك. مصاريف بلا حدود، بلا انتظار، وبلا حسابات. شارك النتيجة على واتساب وأصحابك يفتحونها من المتصفح.",
+      "keywords": "فاتورة,مصاريف,رحلة,سكن,إيجار,قروب,دين,سفر,ميزانية,عشاء",
+      "description": "قسّم أي فاتورة مع أصحابك وعائلتك وزملاء السكن — بلا حدود.\n\nأضف مصاريف قد ما تبي. ما فيه حد يومي، ولا شاشة انتظار، ولا إعلانات، ولن يكون.\n\nبلا تسجيل\nلا أنت ولا أصحابك تحتاجون حساب. اكتب اسمك وابدأ. أصحابك مجرد أسماء في المجموعة.\n\nشاركها على واتساب\nأرسل ملخص واضح لمين يدفع لمين في قروبكم. أي أحد عنده الرابط يفتح التفاصيل كاملة من المتصفح، بدون تطبيق وبدون حساب.\n\nكل طرق التقسيم مجانًا\nبالتساوي، أو بالمبالغ، أو بالنسبة، أو بالحصص. عداد مباشر يوضح الباقي عشان الأرقام دايمًا تضبط.\n\nأقل عدد تحويلات\nنص نص يحسب أقل عدد من الدفعات عشان الكل يتصافى. اضغط \"تم الدفع\" لما توصل الفلوس، وتقدر تتراجع إذا استعجلت.\n\nعربي وإنجليزي\nبدّل اللغة فورًا مع واجهة من اليمين لليسار. 41 عملة، منها العملات بثلاث خانات عشرية مثل الدينار الكويتي والدينار البحريني والريال العماني. اكتب الأرقام بالعربي أو بالإنجليزي.\n\nخصوصيتك أولًا\nكل شي يبقى على جوالك. ما عندنا خوادم ولا حسابات. المجموعة ما تطلع من جوالك إلا إذا شاركت رابطها.\n\nيشتغل بدون إنترنت\nفي البر، في الطيارة، في أي مكان.\n\nنص نص بلس — دفعة وحدة بدون اشتراك\nالتطبيق مجاني وبلا حدود. بلس شراء واحد يضيف عملات مختلفة في نفس المجموعة مع سعر الصرف، وتصدير CSV، وألوان، وكل مزايا بلس القادمة.",
+      "whats_new": "الإصدار الأول."
+    }
+  },
+  "googleplay": {
+    "en-US": {
+      "title": "NussNuss: Split Bills",
+      "short_description": "Split bills with friends. No limits, no ads, no sign-up. Arabic & English.",
+      "full_description": "@appstore.en-US.description"
+    },
+    "ar": {
+      "title": "نص نص: تقسيم الحساب",
+      "short_description": "قسّم الفواتير مع أصحابك. بلا حدود ولا إعلانات ولا تسجيل. عربي وإنجليزي.",
+      "full_description": "@appstore.ar-SA.description"
+    }
+  },
+  "in_app_product": {
+    "id": "nussnuss_plus_lifetime",
+    "type": "non-consumable (App Store) / one-time product (Google Play)",
+    "reference_name": "NussNuss Plus (lifetime)",
+    "price_usd": 4.99,
+    "display_name": {
+      "en": "NussNuss Plus",
+      "ar": "نص نص بلس"
+    },
+    "description": {
+      "en": "One payment. Mixed currencies, CSV export, themes.",
+      "ar": "دفعة وحدة. عملات مختلفة، تصدير CSV، ألوان."
+    }
+  },
+  "review_notes": "No login is needed. On first launch type any name and tap Start, then tap \"Try a demo trip\" to see a filled group. Plus is a one-time non-consumable purchase; Restore is on the Plus screen. The app collects no data and has no server.",
+  "privacy": {
+    "appstore_label": "Data Not Collected",
+    "play_data_safety": "No data collected; no data shared. Purchases are processed by Google Play and RevenueCat."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "NussNuss",
+  "avoid": ["Splitwise", "Qatta", "Tricount", "Settle Up", "Splid"],
+  "domains": ["splitwise.com", "qatta.app"],
+  "colors": ["#1cc29f", "#5bc5a7"]
+}

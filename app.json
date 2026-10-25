@@ -1,0 +1,114 @@
+{
+  "expo": {
+    "name": "NussNuss",
+    "slug": "nussnuss",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "nussnuss",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F6FB"
+    },
+    "ios": {
+      "bundleIdentifier": "app.nussnuss",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "associatedDomains": [
+        "applinks:nussnuss.app"
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "package": "app.nussnuss",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#4F3BD6",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "nussnuss.app"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "NussNuss — split bills",
+      "shortName": "NussNuss",
+      "lang": "en",
+      "themeColor": "#4F3BD6",
+      "backgroundColor": "#F7F6FB",
+      "description": "Split any bill with friends. No limits, no ads, no sign-up. Arabic and English.",
+      "output": "single"
+    },
+    "plugins": [
+      [
+        "expo-localization",
+        {
+          "supportsRTL": false,
+          "supportedLocales": {
+            "ios": [
+              "en",
+              "ar"
+            ],
+            "android": [
+              "en",
+              "ar"
+            ]
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "shareBaseUrl": "https://nussnuss.app/app/",
+      "revenuecat": {
+        "ios": "",
+        "android": ""
+      },
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "experiments": {
+      "baseUrl": "/app"
+    }
+  }
+}
