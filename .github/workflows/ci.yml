@@ -195,7 +195,9 @@ jobs:
           name: nussnuss-android-apk
           path: apps/mobile/NussNuss-*.apk
       - name: Keep the generated project files and lockfile
-        run: tar -czf ../../flutter-scaffold.tgz pubspec.lock .metadata android ios --exclude='android/.gradle' --exclude='android/app/build' --exclude='ios/Pods' --exclude='ios/.symlinks' --exclude='ios/Flutter/ephemeral'
+        run: |
+          items=$(ls -d pubspec.lock .metadata android ios 2>/dev/null)
+          tar -czf ../../flutter-scaffold.tgz --exclude='.gradle' --exclude='build' --exclude='Pods' --exclude='.symlinks' --exclude='ephemeral' --exclude='.cxx' $items
       - uses: actions/upload-artifact@v4
         with:
           name: flutter-scaffold
