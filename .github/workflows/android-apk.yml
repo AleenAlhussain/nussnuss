@@ -1,0 +1,78 @@
+# Builds an installable Android APK on GitHub's free runners and publishes it as a GitHub Release,
+# so it can be downloaded straight to a phone from the repo's "Releases" page.
+# Runs on every push to main, or by hand: Actions → "Android APK" → Run workflow.
+#
+# The APK is signed with the project's debug key: fine for installing and testing on phones,
+# not for Google Play (the store build is the .aab from `eas build -p android --profile production`).
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Check the code
+        run: |
+          npx tsc --noEmit
+          npx jest
+
+      - name: Generate the Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 1
+
+      - name: Build the release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Name the APK
+        id: apk
+        run: |
+          VERSION=$(node -p "require('./app.json').expo.version")
+          FILE="NussNuss-${VERSION}-build${{ github.run_number }}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$FILE"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -la "$FILE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NussNuss-apk
+          path: ${{ steps.apk.outputs.file }}
+          retention-days: 30
+
+      - name: Publish as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "apk-${{ steps.apk.outputs.version }}-${{ github.run_number }}" \
+            "${{ steps.apk.outputs.file }}" \
+            --title "NussNuss ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})" \
+            --notes "Android APK for testing. On your phone: download the .apk, open it, and allow installing from this source when asked."
