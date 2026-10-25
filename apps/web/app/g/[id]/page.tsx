@@ -1,31 +1,26 @@
 'use client';
 
-import {
-  Airplane,
-  Basket,
-  Car,
-  Coffee,
-  House,
-  Receipt,
-  ShareNetwork,
-  ShoppingBag,
-  Sparkle,
-  Tag,
-} from '@phosphor-icons/react';
+import { Airplane, Basket, Car, CloudArrowUp, Coffee, DotsThree, House, Receipt, ShareNetwork, ShoppingBag, Sparkle, Tag } from '@phosphor-icons/react';
 import { expenseInGroupCurrency, type Transfer } from '@nussnuss/core';
 import { AnimatePresence, motion } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { ExpenseSheet } from '@/components/expense-sheet';
+import { ExpenseSheet, isPlusError, repeatInput, type Every } from '@/components/expense-sheet';
 import { BarButton, Screen } from '@/components/glass';
+import { CircleSheet, CirclesCard, GroupOptions, NewCircleSheet } from '@/components/group-options';
 import { ShareSheet } from '@/components/group-sheets';
+import { usePaywall } from '@/components/paywall';
+import { Rolling } from '@/components/rolling';
 import { SettlePlan } from '@/components/settle';
 import { useToast } from '@/components/toast';
 import { Empty, Segmented } from '@/components/ui';
-import { api, ApiError, newId, type Expense, type ExpenseInput, type GroupDetail } from '@/lib/api';
+import { api, ApiError, newId, type Circle, type Expense, type ExpenseInput, type GroupDetail } from '@/lib/api';
 import { spring } from '@/lib/feel';
 import { dayKey, dayLabel, money } from '@/lib/format';
+import { useLiveVersion } from '@/lib/live';
 import { useSession } from '@/lib/session';
+import { play } from '@/lib/sound';
+import { cacheGroup, cachedGroup, flush, isOffline, submit, usePending, withPending } from '@/lib/sync';
 
 const CAT_ICON: Record<string, ComponentType<{ size?: number; weight?: 'regular' | 'fill' }>> = {
   food: Coffee,
@@ -38,24 +33,31 @@ const CAT_ICON: Record<string, ComponentType<{ size?: number; weight?: 'regular'
   other: Tag,
 };
 
-function BalanceHero({ g }: { g: GroupDetail }) {
+function BalanceHero({ g, pending }: { g: GroupDetail; pending: number }) {
   const { t, prefs } = useSession();
   const mine = g.balances[g.me] ?? 0;
   const label = mine > 0 ? t('youAreOwed') : mine < 0 ? t('youOwe') : t('allSettled');
   const tone = mine > 0 ? 'text-success' : mine < 0 ? 'text-danger' : 'text-text';
   return (
-    <section className="flex flex-col gap-1 rounded-card bg-surface p-5" aria-label={label}>
+    <section className="flex flex-col gap-1 px-1 pb-2" aria-label={label}>
       <span className="t-subhead font-medium text-text-2">{label}</span>
-      <motion.span key={mine} initial={{ opacity: 0.4, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={spring} className={`t-amount-hero ${tone}`} data-testid="my-balance">
-        {money(Math.abs(mine), g.currency, prefs.lang)}
-      </motion.span>
-      <span className="t-footnote text-text-2 num" data-testid="group-total">
-        {t('total')} · {money(g.total, g.currency, prefs.lang)}
+      <Rolling text={money(Math.abs(mine), g.currency, prefs.lang)} className={`t-amount-hero ${tone}`} testId="my-balance" />
+      <span className="flex flex-wrap items-center gap-2 t-footnote text-text-2">
+        <span className="num" data-testid="group-total">
+          {t('total')} · {money(g.total, g.currency, prefs.lang)}
+        </span>
+        {pending ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 font-semibold text-on-accent-soft" data-testid="pending">
+            <CloudArrowUp size={14} weight="bold" />
+            {t('pendingN', { n: pending })}
+          </span>
+        ) : null}
       </span>
     </section>
   );
 }
 
+/** One continuous list with day headings: the balance first and large, then everything that happened. */
 function ExpenseList({ g, onOpen }: { g: GroupDetail; onOpen: (e: Expense) => void }) {
   const { t, prefs } = useSession();
   const lang = prefs.lang;
@@ -75,19 +77,20 @@ function ExpenseList({ g, onOpen }: { g: GroupDetail; onOpen: (e: Expense) => vo
   };
 
   if (!g.expenses.length) return <Empty icon={<Receipt size={36} />} title={t('noExpensesTitle')} body={t('noExpensesBody')} />;
+  // overflow-clip, not hidden: hidden would make the list its own scroll box and break the sticky day headings.
   return (
-    <div className="flex flex-col gap-5">
+    <div className="overflow-clip rounded-card bg-surface">
       {days.map((d) => (
-        <section key={d.key} className="flex flex-col gap-2">
-          <h2 className="t-subhead font-semibold text-text-2 ps-1">{d.label}</h2>
-          <ul className="overflow-hidden rounded-card bg-surface">
+        <section key={d.key}>
+          <h2 className="sticky top-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar))] z-10 bg-surface/95 px-4 pb-1 pt-3 t-footnote font-semibold text-text-2 backdrop-blur">{d.label}</h2>
+          <ul>
             <AnimatePresence initial={false}>
               {d.items.map((e) => {
                 const Icon = CAT_ICON[e.category] ?? Tag;
                 const shareCount = e.items.filter((i) => i.value > 0).length;
                 return (
-                  <motion.li key={e.id} layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={spring} className="border-b border-separator/60 last:border-0">
-                    <button type="button" onClick={() => onOpen(e)} className="focus-ring flex w-full items-center gap-3 px-4 py-3 text-start active:bg-surface-2" data-testid="expense-row">
+                  <motion.li key={e.id} layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={spring}>
+                    <button type="button" onClick={() => onOpen(e)} className="focus-ring flex w-full scroll-mt-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar)+3rem)] items-center gap-3 px-4 py-3 text-start active:bg-surface-2" data-testid="expense-row">
                       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-row bg-accent-soft text-on-accent-soft" aria-hidden>
                         <Icon size={22} />
                       </span>
@@ -110,73 +113,142 @@ function ExpenseList({ g, onOpen }: { g: GroupDetail; onOpen: (e: Expense) => vo
   );
 }
 
+/** Placeholder rows shaped like the screen, shown while the first copy loads. */
+function GroupSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <div className="flex flex-col gap-2 px-1">
+        <div className="h-4 w-24 animate-pulse rounded bg-surface" />
+        <div className="h-14 w-56 animate-pulse rounded-control bg-surface" />
+        <div className="h-3 w-32 animate-pulse rounded bg-surface" />
+      </div>
+      <div className="h-10 animate-pulse rounded-control bg-surface" />
+      <div className="flex flex-col gap-px overflow-hidden rounded-card">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 bg-surface px-4 py-3">
+            <div className="h-11 w-11 animate-pulse rounded-row bg-surface-2" />
+            <div className="flex flex-1 flex-col gap-2">
+              <div className="h-3.5 w-2/3 animate-pulse rounded bg-surface-2" />
+              <div className="h-3 w-1/3 animate-pulse rounded bg-surface-2" />
+            </div>
+            <div className="h-4 w-16 animate-pulse rounded bg-surface-2" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const nextPeriod = (every: 'week' | 'month') => {
+  const d = new Date();
+  if (every === 'week') d.setDate(d.getDate() + 7);
+  else d.setMonth(d.getMonth() + 1);
+  return d.toISOString();
+};
+
 export default function GroupPage() {
   const { id } = useParams<{ id: string }>();
-  const { ready, me, t } = useSession();
+  const { ready, me, t, prefs, refreshPlan } = useSession();
   const router = useRouter();
   const toast = useToast();
+  const paywall = usePaywall();
   const [g, setG] = useState<GroupDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [tab, setTab] = useState<'expenses' | 'settle'>('expenses');
   const [sheet, setSheet] = useState<{ open: boolean; editing: Expense | null }>({ open: false, editing: null });
-  const [sharing, setSharing] = useState(false);
+  const [panel, setPanel] = useState<null | 'share' | 'options' | 'new-circle' | { circle: Circle }>(null);
+  const pending = usePending(id);
   const version = useRef(0);
+
+  const apply = useCallback((d: GroupDetail) => {
+    version.current = d.version;
+    setG(d);
+  }, []);
 
   const load = useCallback(async () => {
     try {
       const d = await api.group(id);
-      version.current = d.version;
-      setG(d);
+      await cacheGroup(d);
+      apply(withPending(d));
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setMissing(true);
     }
-  }, [id]);
+  }, [id, apply]);
 
   useEffect(() => {
     if (ready && !me) router.replace('/');
-    if (ready && me) load();
-  }, [ready, me, load, router]);
+    if (!ready || !me) return;
+    // The copy on this device first, so the screen opens at once, then the server's.
+    cachedGroup(id).then((c) => {
+      if (c) setG((cur) => cur ?? withPending(c));
+    });
+    flush().finally(load);
+  }, [ready, me, id, load, router]);
 
-  // Friends' changes arrive while the screen is open: a light check every 8 s while visible.
+  useLiveVersion(g ? id : null, version.current, () => load());
+
+  // Back online: send what waited, then show the server's copy.
   useEffect(() => {
-    if (!g) return;
-    const tick = async () => {
-      if (document.visibilityState !== 'visible') return;
-      try {
-        const c = await api.changes(id, version.current);
-        if (c.version !== version.current) load();
-      } catch {}
-    };
-    const h = setInterval(tick, 8000);
-    const onVis = () => tick();
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      clearInterval(h);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, [g, id, load]);
+    const on = () => flush(undefined, apply).finally(load);
+    window.addEventListener('online', on);
+    return () => window.removeEventListener('online', on);
+  }, [load, apply]);
 
-  const apply = (d: GroupDetail) => {
-    version.current = d.version;
-    setG(d);
+  const after = (queued: boolean) => {
+    if (queued) toast(t('savedOffline'));
   };
 
-  const save = async (input: ExpenseInput) => {
+  const save = async (input: ExpenseInput, every: Every) => {
     if (!g) return;
     try {
-      if (sheet.editing) apply(await api.updateExpense(sheet.editing.id, input));
-      else apply((await api.addExpense(g.id, { ...input, id: newId() })).detail);
+      const editing = sheet.editing;
+      const r = editing
+        ? await submit({ kind: 'update', groupId: g.id, expenseId: editing.id, input, title: input.title }, g)
+        : await submit({ kind: 'add', groupId: g.id, input: { ...input, id: newId() }, title: input.title }, g);
+      apply(r.detail);
       setSheet({ open: false, editing: null });
+      play('tap', prefs.sounds);
+      if (every !== 'none' && !editing) {
+        try {
+          apply(await api.addRecurring(g.id, { title: input.title, amount: input.amount, paidBy: input.paidBy, mode: input.mode, items: input.items, category: input.category, every, startAt: nextPeriod(every) }));
+          toast(t('repeatSaved'));
+        } catch (e) {
+          if (isPlusError(e)) paywall.open({ groupId: g.id });
+          else toast(isOffline(e) ? t('offline') : (e as Error).message);
+        }
+      } else after(r.queued);
     } catch (e) {
-      toast(e instanceof ApiError && e.status === 0 ? t('offline') : (e as Error).message);
+      toast((e as Error).message);
+    }
+  };
+
+  const repeat = async (e: Expense) => {
+    if (!g) return;
+    const input = repeatInput(e);
+    setSheet({ open: false, editing: null });
+    try {
+      const r = await submit({ kind: 'add', groupId: g.id, input, title: input.title }, g);
+      apply(r.detail);
+      play('tap', prefs.sounds);
+      toast(r.queued ? t('savedOffline') : t('repeated'), {
+        label: t('undo'),
+        run: () =>
+          submit({ kind: 'delete', groupId: g.id, expenseId: input.id, title: input.title }, r.detail)
+            .then((x) => apply(x.detail))
+            .catch(() => toast(t('error'))),
+      });
+    } catch (err) {
+      toast((err as Error).message);
     }
   };
 
   const remove = async (e: Expense) => {
+    if (!g) return;
     setSheet({ open: false, editing: null });
     try {
-      apply(await api.deleteExpense(e.id));
-      toast(t('deleted'), { label: t('undo'), run: () => api.restoreExpense(e.id).then(apply).catch(() => toast(t('error'))) });
+      const r = await submit({ kind: 'delete', groupId: g.id, expenseId: e.id, title: e.title }, g);
+      apply(r.detail);
+      toast(r.queued ? t('savedOffline') : t('deleted'), r.queued ? undefined : { label: t('undo'), run: () => api.restoreExpense(e.id).then(apply).catch(() => toast(t('error'))) });
     } catch {
       toast(t('error'));
     }
@@ -184,10 +256,12 @@ export default function GroupPage() {
 
   const pay = async (tr: Transfer) => {
     if (!g) return;
+    const pid = newId();
     try {
-      const r = await api.pay(g.id, tr);
+      const r = await submit({ kind: 'pay', groupId: g.id, payment: { id: pid, ...tr }, title: t('markPaid') }, g);
       apply(r.detail);
-      toast(t('paidRecorded'), { label: t('undo'), run: () => api.unpay(r.id).then(apply).catch(() => toast(t('error'))) });
+      if (r.detail.transfers.length === 0) play('chime', prefs.sounds);
+      toast(r.queued ? t('savedOffline') : t('paidRecorded'), r.queued ? undefined : { label: t('undo'), run: () => api.unpay(pid).then(apply).catch(() => toast(t('error'))) });
     } catch {
       toast(t('error'));
     }
@@ -203,31 +277,42 @@ export default function GroupPage() {
   if (!g) {
     return (
       <Screen title="" back="/" testId="group">
-        <div className="h-40 animate-pulse rounded-card bg-surface" />
-        <div className="h-64 animate-pulse rounded-card bg-surface" />
+        <GroupSkeleton />
       </Screen>
     );
   }
 
   const lastPayer = g.expenses[0]?.paidBy;
+  const last = g.expenses[0];
   return (
     <Screen
       title={`${g.emoji} ${g.name}`}
       back="/"
       testId="group"
       onAdd={() => setSheet({ open: true, editing: null })}
+      onAddHold={last ? () => repeat(last) : undefined}
       addLabel={t('addExpense')}
       actions={
-        <BarButton label={t('share')} onClick={() => setSharing(true)} testId="share">
-          <ShareNetwork size={22} />
-        </BarButton>
+        <>
+          <BarButton label={t('share')} onClick={() => setPanel('share')} testId="share">
+            <ShareNetwork size={22} />
+          </BarButton>
+          <BarButton label={t('groupMore')} onClick={() => setPanel('options')} testId="group-more">
+            <DotsThree size={24} weight="bold" />
+          </BarButton>
+        </>
       }
-      header={<BalanceHero g={g} />}
+      header={<BalanceHero g={g} pending={pending} />}
     >
+      <CirclesCard g={g} onOpen={(c) => setPanel({ circle: c })} />
       <Segmented
         label={t('expenses')}
         value={tab}
-        onChange={setTab}
+        onChange={(v) => {
+          setTab(v);
+          // A new tab starts at its top, like switching tabs on iOS.
+          if (window.scrollY > 0) window.scrollTo({ top: 0 });
+        }}
         testId="tab"
         options={[
           { key: 'expenses', label: `${t('expenses')} (${g.expenses.length})` },
@@ -235,8 +320,39 @@ export default function GroupPage() {
         ]}
       />
       {tab === 'expenses' ? <ExpenseList g={g} onOpen={(e) => setSheet({ open: true, editing: e })} /> : <SettlePlan group={g} onPay={pay} />}
-      <ExpenseSheet open={sheet.open} editing={sheet.editing} onClose={() => setSheet({ open: false, editing: null })} group={g} lastPayer={lastPayer} onSave={save} onDelete={remove} />
-      <ShareSheet open={sharing} onClose={() => setSharing(false)} group={g} />
+      <ExpenseSheet
+        open={sheet.open}
+        editing={sheet.editing}
+        onClose={() => setSheet({ open: false, editing: null })}
+        group={g}
+        lastPayer={lastPayer}
+        onSave={save}
+        onDelete={remove}
+        onRepeat={repeat}
+      />
+      <ShareSheet open={panel === 'share'} onClose={() => setPanel(null)} group={g} />
+      <GroupOptions
+        open={panel === 'options'}
+        onClose={() => setPanel(null)}
+        group={g}
+        onChange={(d) => {
+          apply(d);
+          refreshPlan();
+        }}
+        onOpenCircle={(c) => setPanel({ circle: c })}
+        onNewCircle={() => setPanel('new-circle')}
+      />
+      <NewCircleSheet
+        open={panel === 'new-circle'}
+        g={g}
+        onClose={() => setPanel(null)}
+        onCreated={(d) => {
+          apply(d);
+          const c = d.circles?.[d.circles.length - 1];
+          setPanel(c ? { circle: c } : null);
+        }}
+      />
+      <CircleSheet circle={panel && typeof panel === 'object' ? panel.circle : null} g={g} onClose={() => setPanel(null)} onChange={apply} />
     </Screen>
   );
 }

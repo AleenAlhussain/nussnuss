@@ -33,6 +33,8 @@ export default defineConfig({
         DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://nussnuss:nussnuss@127.0.0.1:5432/nussnuss_test',
         WEB_ORIGIN: 'http://127.0.0.1:3000,http://localhost:3000',
         RATE_LIMIT_PER_MINUTE: '100000',
+        // Test servers only: lets the tests switch Plus on without a store. Never set in production.
+        ALLOW_DEV_PURCHASES: 'true',
       },
     },
     { command: 'npm run start', url: 'http://127.0.0.1:3000', reuseExistingServer: true, timeout: 60_000 },

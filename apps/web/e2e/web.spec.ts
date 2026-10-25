@@ -29,10 +29,12 @@ async function start(page: Page, name: string) {
   await page.getByTestId('name').fill(name);
   await page.getByTestId('start').click();
   await expect(page.getByTestId('groups')).toBeVisible();
+  // First run goes straight to making the first group.
+  await expect(page.getByTestId('new-group-sheet')).toBeVisible();
 }
 
 async function newGroup(page: Page, name: string, people: string[]) {
-  await page.getByTestId('add').click();
+  if (!(await page.getByTestId('new-group-sheet').isVisible())) await page.getByTestId('add').click();
   await expect(page.getByTestId('new-group-sheet')).toBeVisible();
   await page.getByTestId('group-name').fill(name);
   await page.getByTestId('group-currency').selectOption('OMR');
@@ -58,9 +60,10 @@ test('welcome, first group, expenses with the keypad, settle up, undo', async ({
   await expect(page.getByText('This is how your friends will see you.')).toBeVisible();
   await page.getByTestId('name').fill('Talal');
   await page.getByTestId('start').click();
-  await expect(page.getByText('No groups yet')).toBeVisible();
+  await expect(page.getByTestId('new-group-sheet')).toBeVisible();
   await still(page);
-  await page.screenshot({ path: `${SHOTS}/02-groups-empty.png` });
+  await page.screenshot({ path: `${SHOTS}/02-first-group.png` });
+  await a11y(page, 'new group');
 
   await newGroup(page, 'Salalah trip', ['Sara', 'Omar']);
   await expect(page.getByText('Nothing spent yet')).toBeVisible();
@@ -71,6 +74,7 @@ test('welcome, first group, expenses with the keypad, settle up, undo', async ({
   await typeAmount(page, '100+20.5');
   await expect(page.getByTestId('amount-sum')).toHaveText('= OMR 120.500');
   await page.getByTestId('title').fill('Chalet');
+  await page.getByTestId('details').click();
   await page.getByTestId('cat-stay').click();
   await still(page);
   await page.screenshot({ path: `${SHOTS}/03-add-expense.png` });
@@ -84,6 +88,7 @@ test('welcome, first group, expenses with the keypad, settle up, undo', async ({
   await page.getByTestId('add').click();
   await typeAmount(page, '30');
   await page.getByTestId('title').fill('Fuel');
+  await page.getByTestId('details').click();
   await page.getByTestId('payer').nth(1).click();
   await page.getByTestId('mode-shares').click();
   await page.getByRole('button', { name: 'Omar +' }).click();
@@ -141,7 +146,7 @@ test('a friend joins from the link without the app, in Arabic', async ({ page, b
   await still(page);
   await page.screenshot({ path: `${SHOTS}/07-share.png` });
 
-  const friend = await browser.newContext({ locale: 'ar', viewport: { width: 390, height: 844 } });
+  const friend = await browser.newContext({ locale: 'ar', viewport: { width: 390, height: 844 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const fp = await friend.newPage();
   await fp.goto(link);
   await expect(fp.getByTestId('join')).toBeVisible();

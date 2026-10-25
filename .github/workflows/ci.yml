@@ -88,6 +88,8 @@ jobs:
       DATABASE_URL: postgres://nussnuss:nussnuss@127.0.0.1:5432/nussnuss_test
       NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
       NEXT_TELEMETRY_DISABLED: 1
+      # Test build only: shows the "turn on for testing" Plus button the tests use. Never in a release build.
+      NEXT_PUBLIC_DEV_PURCHASES: 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

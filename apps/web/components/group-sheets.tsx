@@ -1,15 +1,27 @@
 'use client';
 
 import { CURRENCIES } from '@nussnuss/core';
-import { Copy, WhatsappLogo, X } from '@phosphor-icons/react';
+import { Copy, ShareFat, WhatsappLogo, X } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { api, type GroupDetail } from '@/lib/api';
+import type { TKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { Sheet } from './glass';
 import { useToast } from './toast';
-import { Button, Field } from './ui';
+import { Button, Chip, Field } from './ui';
 
-const EMOJIS = ['🏝️', '🏕️', '✈️', '🏠', '🍽️', '☕', '🎉', '⚽', '🚗', '🛒', '🎓', '💼'];
+const EMOJIS = ['🏝️', '🏕️', '✈️', '🏠', '🍽️', '☕', '🎉', '⚽', '🚗', '🛒', '🎓', '💼', '🌙', '🎁', '💍'];
+
+/** Starting points: each sets the emoji (which also tunes the title suggestions) and a name. */
+const TEMPLATES: { key: string; emoji: string; name?: TKey }[] = [
+  { key: 'trip', emoji: '✈️' },
+  { key: 'flat', emoji: '🏠', name: 'tplName_flat' },
+  { key: 'dinner', emoji: '🍽️', name: 'tplName_dinner' },
+  { key: 'iftar', emoji: '🌙', name: 'tplName_iftar' },
+  { key: 'eid', emoji: '🎁', name: 'tplName_eid' },
+  { key: 'wedding', emoji: '💍', name: 'tplName_wedding' },
+  { key: 'office', emoji: '💼', name: 'tplName_office' },
+];
 
 function guessCurrency(): string {
   try {
@@ -24,6 +36,7 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
   const { t, prefs, me } = useSession();
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState(EMOJIS[0]);
+  const [tpl, setTpl] = useState<string | null>(null);
   const [cur, setCur] = useState('AED');
   const [people, setPeople] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
@@ -34,6 +47,7 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
     if (open) {
       setName('');
       setEmoji(EMOJIS[0]);
+      setTpl(null);
       setCur(guessCurrency());
       setPeople([]);
       setDraft('');
@@ -67,12 +81,22 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
     }
   };
 
+  const pickTemplate = (k: (typeof TEMPLATES)[number]) => {
+    const prev = TEMPLATES.find((x) => x.key === tpl);
+    const prevName = prev?.name ? t(prev.name) : '';
+    // A name the person typed themselves is never replaced.
+    if (!name.trim() || name === prevName) setName(k.name ? t(k.name) : '');
+    setEmoji(k.emoji);
+    setTpl(k.key);
+  };
+
   return (
     <Sheet
       open={open}
       onClose={onClose}
       title={t('newGroup')}
       testId="new-group-sheet"
+      morph
       footer={
         <div className="flex flex-col gap-2">
           {error ? <p className="text-center t-footnote text-danger" role="alert">{error}</p> : null}
@@ -83,8 +107,19 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
       }
     >
       <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <span className="t-footnote font-medium text-text-2 ps-1">{t('whatKind')}</span>
+          <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label={t('whatKind')}>
+            {TEMPLATES.map((k) => (
+              <Chip key={k.key} selected={tpl === k.key} onClick={() => pickTemplate(k)} testId={`tpl-${k.key}`}>
+                <span aria-hidden>{k.emoji}</span>
+                {t(`tpl_${k.key}` as TKey)}
+              </Chip>
+            ))}
+          </div>
+        </div>
         <Field label={t('groupName')} placeholder={t('groupNamePh')} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} data-testid="group-name" data-autofocus />
-        <div role="radiogroup" aria-label="Emoji" className="grid grid-cols-6 gap-2">
+        <div role="radiogroup" aria-label="Emoji" className="grid grid-cols-5 gap-2 sm:grid-cols-8">
           {EMOJIS.map((e) => (
             <button
               key={e}
@@ -185,6 +220,7 @@ export function ShareSheet({ open, onClose, group }: { open: boolean; onClose: (
     }
   };
   const message = `${t('shareMessage', { name: group.name })} ${link ?? ''}`;
+  const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
     <Sheet open={open} onClose={onClose} title={t('shareTitle')} testId="share-sheet">
@@ -196,6 +232,18 @@ export function ShareSheet({ open, onClose, group }: { open: boolean; onClose: (
         <Button block icon={<WhatsappLogo size={22} weight="fill" />} disabled={!link} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener')}>
           {t('sendWhatsApp')}
         </Button>
+        {canShare ? (
+          <Button
+            block
+            variant="secondary"
+            icon={<ShareFat size={20} />}
+            disabled={!link}
+            data-testid="native-share"
+            onClick={() => navigator.share({ title: group.name, text: t('shareMessage', { name: group.name }), url: link ?? undefined }).catch(() => {})}
+          >
+            {t('share')}
+          </Button>
+        ) : null}
         <Button block variant="secondary" icon={<Copy size={20} />} disabled={!link} onClick={copy} data-testid="copy-link">
           {t('copyLink')}
         </Button>

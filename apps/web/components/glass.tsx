@@ -44,6 +44,7 @@ export function Screen({
   back,
   actions,
   onAdd,
+  onAddHold,
   addLabel,
   tabs = true,
   children,
@@ -54,6 +55,8 @@ export function Screen({
   back?: string;
   actions?: ReactNode;
   onAdd?: () => void;
+  /** Press and hold on the add button (repeat the last expense). */
+  onAddHold?: () => void;
   addLabel?: string;
   tabs?: boolean;
   children: ReactNode;
@@ -130,13 +133,13 @@ export function Screen({
         {children}
       </main>
 
-      {tabs || onAdd ? <TabBar compact={down} onAdd={onAdd} addLabel={addLabel} showTabs={tabs} /> : null}
+      {tabs || onAdd ? <TabBar compact={down} onAdd={onAdd} onAddHold={onAddHold} addLabel={addLabel} showTabs={tabs} /> : null}
     </div>
   );
 }
 
 /** Floating glass capsule with the two tabs, and a separate tinted add button, like the iOS 26 tab bar. */
-function TabBar({ compact, onAdd, addLabel, showTabs }: { compact: boolean; onAdd?: () => void; addLabel?: string; showTabs: boolean }) {
+function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: boolean; onAdd?: () => void; onAddHold?: () => void; addLabel?: string; showTabs: boolean }) {
   const path = usePathname();
   const { t } = useSession();
   const tabs = [
@@ -178,29 +181,63 @@ function TabBar({ compact, onAdd, addLabel, showTabs }: { compact: boolean; onAd
         ) : (
           <span />
         )}
-        {onAdd ? <AddButton onClick={onAdd} label={addLabel ?? t('addExpense')} /> : null}
+        {onAdd ? <AddButton onClick={onAdd} onHold={onAddHold} label={addLabel ?? t('addExpense')} /> : null}
       </div>
     </nav>
   );
 }
 
-/** The one tinted glass control on the screen. A light follows the pointer across it, like light on glass. */
-function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
+/** The add button and the sheet it opens share this id, so the button grows into the sheet. */
+export const ADD_MORPH = 'add-morph';
+
+/**
+ * The one tinted glass control on the screen. A light follows the pointer across it, like light on glass.
+ * Press and hold runs `onHold` (repeat the last expense); a normal press opens the sheet.
+ */
+function AddButton({ onClick, onHold, label }: { onClick: () => void; onHold?: () => void; label: string }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [light, setLight] = useState({ x: 30, y: 20 });
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const cancel = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
   return (
     <motion.button
       ref={ref}
       type="button"
       aria-label={label}
       data-testid="add"
+      layoutId={ADD_MORPH}
       whileTap={{ scale: 0.92 }}
       transition={bouncy}
+      style={{ borderRadius: 999 }}
+      onPointerDown={() => {
+        held.current = false;
+        if (!onHold) return;
+        cancel();
+        timer.current = setTimeout(() => {
+          held.current = true;
+          haptic('success');
+          onHold();
+        }, 500);
+      }}
+      onPointerUp={cancel}
+      onPointerLeave={cancel}
+      onPointerCancel={cancel}
+      onContextMenu={(e) => {
+        if (onHold) e.preventDefault();
+      }}
       onPointerMove={(e) => {
         const r = ref.current?.getBoundingClientRect();
         if (r) setLight({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
       }}
       onClick={() => {
+        if (held.current) {
+          held.current = false;
+          return;
+        }
         haptic('light');
         onClick();
       }}
@@ -237,6 +274,7 @@ export function Sheet({
   children,
   footer,
   testId,
+  morph,
 }: {
   open: boolean;
   onClose: () => void;
@@ -244,6 +282,8 @@ export function Sheet({
   children: ReactNode;
   footer?: ReactNode;
   testId?: string;
+  /** Grow out of the add button (and shrink back into it) instead of sliding up. */
+  morph?: boolean;
 }) {
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
@@ -304,9 +344,10 @@ export function Sheet({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            initial={{ y: '100%', opacity: 0.6 }}
+            layoutId={morph ? ADD_MORPH : undefined}
+            initial={morph ? { opacity: 1 } : { y: '100%', opacity: 0.6 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0.6 }}
+            exit={morph ? { opacity: 1 } : { y: '100%', opacity: 0.6 }}
             transition={spring}
             drag="y"
             dragControls={drag}
@@ -319,6 +360,10 @@ export function Sheet({
             className="glass relative flex max-h-[92dvh] w-full flex-col rounded-t-sheet sm:mb-0 sm:max-w-lg sm:rounded-sheet"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
+            {morph ? (
+              // The accent of the button fades into the glass of the sheet as it grows.
+              <motion.span aria-hidden className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] bg-accent" initial={{ opacity: 1 }} animate={{ opacity: 0 }} exit={{ opacity: 1 }} transition={{ duration: 0.28 }} />
+            ) : null}
             <div className="flex cursor-grab touch-none justify-center pt-2 active:cursor-grabbing" onPointerDown={(e) => drag.start(e)}>
               <span data-grabber className="h-1.5 w-10 rounded-full bg-text-3/50" />
             </div>

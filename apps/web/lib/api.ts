@@ -1,4 +1,4 @@
-import type { SplitMode, Transfer } from '@nussnuss/core';
+import type { PayTo, SplitMode, Transfer } from '@nussnuss/core';
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 const TOKEN_KEY = 'nn:token';
@@ -7,6 +7,7 @@ export interface Me {
   id: string;
   name: string;
   locale: 'en' | 'ar';
+  payTo: PayTo[];
 }
 export interface GroupSummary {
   id: string;
@@ -25,6 +26,7 @@ export interface Member {
   name: string;
   claimed: boolean;
   isMe: boolean;
+  payTo?: PayTo[];
 }
 export interface Expense {
   id: string;
@@ -62,7 +64,64 @@ export interface GroupDetail {
   total: number;
   balances: Record<string, number>;
   transfers: Transfer[];
+  remindEvery?: 'off' | 'week';
+  tripPassUntil?: string | null;
+  circles?: Circle[];
+  recurring?: Recurring[];
 }
+export interface CircleRound {
+  round: number;
+  receiver: string;
+  dueOn: string;
+  paid: string[];
+  late: string[];
+}
+export interface Circle {
+  id: string;
+  name: string;
+  amount: number;
+  every: 'week' | 'month';
+  startOn: string;
+  turns: string[];
+  pot: number;
+  status: 'upcoming' | 'running' | 'done';
+  current: number | null;
+  rounds: CircleRound[];
+}
+export interface Recurring {
+  id: string;
+  title: string;
+  amount: number;
+  paidBy: string;
+  mode: SplitMode;
+  items: { memberId: string; value: number }[];
+  category: string;
+  every: 'week' | 'month';
+  nextAt: string;
+}
+export interface Plan {
+  plus: boolean;
+  plusUntil: string | null;
+  tripPasses: { groupId: string; until: string }[];
+  looks: string[];
+}
+export interface Security {
+  recoveryCode: boolean;
+  recoveryCreatedAt: string | null;
+  identities: { provider: 'apple' | 'google'; email: string | null }[];
+  passkeys: { id: string; createdAt: string }[];
+  sessions: { id: string; device: string | null; lastSeenAt: string; current: boolean }[];
+  providers: { apple: boolean; google: boolean; passkeys: boolean };
+}
+export interface Notice {
+  id: string;
+  kind: string;
+  groupId: string | null;
+  data: { to?: string; amount?: number; currency?: string; group?: string; emoji?: string };
+  createdAt: string;
+  read: boolean;
+}
+export type Session = { token: string; user: Me };
 export interface InvitePreview {
   group: { id: string; name: string; emoji: string; currency: string };
   members: { id: string; name: string; claimed: boolean }[];
@@ -77,15 +136,27 @@ export interface ExpenseInput {
   mode: SplitMode;
   items: { memberId: string; value: number }[];
   category: string;
+  spentAt?: string;
 }
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The server says this needs Plus (403 with `plus: true`): show the paywall. */
+    public plus = false,
   ) {
     super(message);
   }
+}
+
+/** A short device name for the signed-in devices list. */
+export function deviceName(): string {
+  if (typeof navigator === 'undefined') return 'Web';
+  const ua = navigator.userAgent;
+  const os = /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Web';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${browser} on ${os}`;
 }
 
 export function getToken(): string | null {
@@ -117,14 +188,45 @@ async function call<T>(method: string, path: string, body?: unknown, auth = true
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, typeof data?.message === 'string' ? data.message : 'Something went wrong.');
+  if (!res.ok) {
+    const msg = Array.isArray(data?.message) ? data.message[0] : data?.message;
+    throw new ApiError(res.status, typeof msg === 'string' ? msg : 'Something went wrong.', data?.plus === true);
+  }
   return data as T;
 }
 
+/** Authorised GET of a file (CSV, JSON export) as a Blob. */
+async function download(path: string): Promise<Blob> {
+  const token = getToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw new ApiError(0, 'offline');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, typeof data?.message === 'string' ? data.message : 'Something went wrong.', data?.plus === true);
+  }
+  return res.blob();
+}
+
+/** Hands a Blob to the person as a file. */
+export function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 export const api = {
-  anonymous: (name: string, locale: string) => call<{ token: string; user: Me }>('POST', '/auth/anonymous', { name, locale }, false),
+  anonymous: (name: string, locale: string) => call<Session>('POST', '/auth/anonymous', { name, locale, device: deviceName() }, false),
   me: () => call<Me>('GET', '/me'),
-  patchMe: (b: Partial<{ name: string; locale: string }>) => call<Me>('PATCH', '/me', b),
+  patchMe: (b: Partial<{ name: string; locale: string; payTo: PayTo[] }>) => call<Me>('PATCH', '/me', b),
   deleteMe: () => call<void>('DELETE', '/me'),
   groups: () => call<GroupSummary[]>('GET', '/groups'),
   createGroup: (b: { name: string; emoji: string; currency: string; members: string[] }) => call<GroupDetail>('POST', '/groups', b),
@@ -135,11 +237,49 @@ export const api = {
   updateExpense: (id: string, b: ExpenseInput) => call<GroupDetail>('PATCH', `/expenses/${id}`, b),
   deleteExpense: (id: string) => call<GroupDetail>('DELETE', `/expenses/${id}`),
   restoreExpense: (id: string) => call<GroupDetail>('POST', `/expenses/${id}/restore`),
-  pay: (groupId: string, t: Transfer) => call<{ id: string; detail: GroupDetail }>('POST', `/groups/${groupId}/payments`, t),
+  pay: (groupId: string, t: Transfer & { id?: string }) => call<{ id: string; detail: GroupDetail }>('POST', `/groups/${groupId}/payments`, t),
   unpay: (id: string) => call<GroupDetail>('DELETE', `/payments/${id}`),
   invite: (groupId: string) => call<{ token: string; expiresAt: string }>('POST', `/groups/${groupId}/invites`),
   preview: (token: string) => call<InvitePreview>('GET', `/invites/${token}`, undefined, false),
   join: (token: string, b: { memberId: string } | { name: string }) => call<GroupDetail>('POST', `/invites/${token}/join`, b),
+
+  // Accounts
+  security: () => call<Security>('GET', '/me/security'),
+  makeRecovery: () => call<{ code: string }>('POST', '/me/recovery'),
+  /** 8-character codes come from another device; longer ones are recovery codes. */
+  signInWithCode: (code: string) => {
+    const plain = code.replace(/[\s-]/g, '');
+    return call<Session>('POST', plain.length <= 8 ? '/auth/link' : '/auth/recover', { code, device: deviceName() }, false);
+  },
+  makeLink: () => call<{ code: string; expiresAt: string }>('POST', '/me/link'),
+  identity: (provider: 'apple' | 'google', token: string, name?: string) =>
+    call<Session | { linked: true; user: Me }>('POST', `/auth/${provider}`, { token, name, device: deviceName() }),
+  passkeyRegisterOptions: () => call<{ challengeId: string; options: Record<string, unknown> }>('POST', '/me/passkeys/options'),
+  passkeyRegister: (challengeId: string, response: unknown) => call<{ id: string }>('POST', '/me/passkeys', { challengeId, response }),
+  passkeyRemove: (id: string) => call<void>('DELETE', `/me/passkeys/${id}`),
+  passkeyLoginOptions: () => call<{ challengeId: string; options: Record<string, unknown> }>('POST', '/auth/passkey/options', undefined, false),
+  passkeyLogin: (challengeId: string, response: unknown) => call<Session>('POST', '/auth/passkey', { challengeId, response, device: deviceName() }, false),
+  endSession: (id: string) => call<void>('DELETE', `/me/sessions/${id}`),
+  exportMine: () => download('/me/export'),
+
+  // Plus
+  plan: () => call<Plan>('GET', '/me/plan'),
+  devPurchase: (productId: string, groupId?: string) => call<Plan>('POST', '/purchases/dev', { productId, groupId }),
+  addRecurring: (groupId: string, b: Omit<ExpenseInput, 'id' | 'currency' | 'rate'> & { every: 'week' | 'month'; startAt?: string }) =>
+    call<GroupDetail>('POST', `/groups/${groupId}/recurring`, b),
+  stopRecurring: (id: string) => call<GroupDetail>('DELETE', `/recurring/${id}`),
+  rate: (from: string, to: string, groupId: string) => call<{ rate: number; at: string }>('GET', `/rates?from=${from}&to=${to}&groupId=${groupId}`),
+  exportCsv: (groupId: string) => download(`/groups/${groupId}/export.csv`),
+  reminders: (groupId: string, every: 'off' | 'week') => call<GroupDetail>('PATCH', `/groups/${groupId}/reminders`, { every }),
+  notifications: () => call<Notice[]>('GET', '/me/notifications'),
+  markRead: (ids?: string[]) => call<void>('POST', '/me/notifications/read', ids ? { ids } : {}),
+
+  // Money circles
+  addCircle: (groupId: string, b: { name: string; amount: number; every: 'week' | 'month'; startOn: string; turns: string[] }) =>
+    call<GroupDetail>('POST', `/groups/${groupId}/circles`, b),
+  circlePaid: (id: string, round: number, memberId: string, paid: boolean) =>
+    call<GroupDetail>('POST', `/circles/${id}/${paid ? 'paid' : 'unpaid'}`, { round, memberId }),
+  deleteCircle: (id: string) => call<GroupDetail>('DELETE', `/circles/${id}`),
 };
 
 export const newId = () =>

@@ -319,6 +319,10 @@ class NNStrings {
   String get more => _m['more']!;
   String get loading => _m['loading']!;
   String get tryAgain => _m['tryAgain']!;
+  String get paysYou => _m['paysYou']!;
+  String get youPayTo => _m['youPayTo']!;
+  String get circleYouGet => _m['circleYouGet']!;
+  String get createCircle => _m['createCircle']!;
   String get catFood => _m['cat_food']!;
   String get catGroceries => _m['cat_groceries']!;
   String get catTransport => _m['cat_transport']!;
@@ -624,6 +628,10 @@ const _en = <String, String>{
   'more': 'More',
   'loading': 'Loading',
   'tryAgain': 'Try again',
+  'paysYou': '{name} pays you',
+  'youPayTo': 'You pay {name}',
+  'circleYouGet': 'You get the pot',
+  'createCircle': 'Start the circle',
   'cat_food': 'Food',
   'cat_groceries': 'Groceries',
   'cat_transport': 'Transport',
@@ -929,6 +937,10 @@ const _ar = <String, String>{
   'more': 'المزيد',
   'loading': 'جاري التحميل',
   'tryAgain': 'حاول مرة ثانية',
+  'paysYou': '{name} يدفع لك',
+  'youPayTo': 'أنت تدفع لـ {name}',
+  'circleYouGet': 'أنت تستلم',
+  'createCircle': 'ابدأ الجمعية',
   'cat_food': 'أكل',
   'cat_groceries': 'مقاضي',
   'cat_transport': 'مواصلات',
