@@ -207,10 +207,24 @@ jobs:
           fi
       - name: Build the APK
         run: |
+          set -o pipefail
           flutter build apk --release \
             --dart-define=API_URL=${{ vars.API_URL }} \
-            --dart-define=WEB_URL=${{ vars.WEB_URL }}
+            --dart-define=WEB_URL=${{ vars.WEB_URL }} 2>&1 | tee "$RUNNER_TEMP/build.log"
           cp build/app/outputs/flutter-apk/app-release.apk "NussNuss-2.0-build${{ github.run_number }}.apk"
+      - name: Show build errors as annotations
+        if: failure()
+        shell: python3 {0}
+        run: |
+          # Gradle's "What went wrong" and compiler errors, readable without opening the raw log.
+          import os, re
+          path = os.path.join(os.environ["RUNNER_TEMP"], "build.log")
+          if os.path.exists(path):
+              text = open(path, encoding="utf-8", errors="replace").read()
+              parts = re.findall(r"\* What went wrong:.*?(?=\* Try:|\Z)", text, re.S)
+              parts += [l for l in text.splitlines() if re.search(r"(^e: |error:|Error:|FAILURE)", l)][:30]
+              out = "\n".join(parts)[:20000] or text[-6000:]
+              print("::error title=build::" + out.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
       - uses: actions/upload-artifact@v4
         with:
           name: nussnuss-android-apk
@@ -229,7 +243,6 @@ jobs:
 
   ios:
     name: Flutter iOS build (no signing)
-    needs: flutter
     runs-on: macos-latest
     timeout-minutes: 45
     defaults:
@@ -242,4 +255,18 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign --dart-define=API_URL=${{ vars.API_URL }} --dart-define=WEB_URL=${{ vars.WEB_URL }}
+      - name: Build for iPhone
+        run: |
+          set -o pipefail
+          flutter build ios --release --no-codesign --dart-define=API_URL=${{ vars.API_URL }} --dart-define=WEB_URL=${{ vars.WEB_URL }} 2>&1 | tee "$RUNNER_TEMP/build.log"
+      - name: Show build errors as annotations
+        if: failure()
+        shell: python3 {0}
+        run: |
+          import os, re
+          path = os.path.join(os.environ["RUNNER_TEMP"], "build.log")
+          if os.path.exists(path):
+              text = open(path, encoding="utf-8", errors="replace").read()
+              lines = [l for l in text.splitlines() if re.search(r"(error:|Error |\[!\]|CocoaPods|requires a higher minimum|Failed)", l)][:40]
+              out = "\n".join(lines)[:20000] or text[-6000:]
+              print("::error title=ios build::" + out.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
