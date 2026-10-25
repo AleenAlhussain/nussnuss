@@ -5,11 +5,10 @@ The same app as the web, built natively with Flutter. It talks to the NestJS API
 ## Run
 
 ```sh
-flutter create --platforms=android,ios --org app.nussnuss --project-name nussnuss .   # first time only
 flutter run --dart-define=API_URL=http://10.0.2.2:4000 --dart-define=WEB_URL=http://localhost:3000
 ```
 
-`flutter create` only adds the files that are missing. The committed manifests, the Arabic app name (نص نص) and the app icons are kept.
+The Android and iOS projects are committed, including the Arabic app name (نص نص), the icons and release signing (put your upload key in `android/key.properties`).
 
 `API_URL` defaults to the API on your computer (`10.0.2.2` from the Android emulator, `127.0.0.1` from the iOS simulator). `WEB_URL` is where invite links open, so friends can join from the browser.
 

@@ -31,11 +31,10 @@ npm run dev:api     # http://localhost:4000, runs the database migrations on sta
 npm run dev:web     # http://localhost:3000
 ```
 
-The Flutter app (Flutter stable; the Android and iOS project folders are generated on first run):
+The Flutter app (Flutter stable):
 
 ```sh
 cd apps/mobile
-flutter create --platforms=android,ios --org app.nussnuss --project-name nussnuss .
 flutter run --dart-define=API_URL=http://10.0.2.2:4000    # Android emulator talking to the API on your machine
 ```
 

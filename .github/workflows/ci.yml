@@ -153,8 +153,6 @@ jobs:
           cache: true
       - name: Versions
         run: flutter --version
-      - name: Generate the Android and iOS projects (keeps the committed manifests, names and icons)
-        run: flutter create --platforms=android,ios --org app.nussnuss --project-name nussnuss .
       - run: flutter pub get
       - name: Formatting
         run: dart format --output=none --set-exit-if-changed $(find lib test -name '*.dart' ! -name '*.g.dart')
@@ -182,8 +180,6 @@ jobs:
               for b in blocks[:10]:
                   b = b[:20000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
                   print("::error title=flutter test::" + b)
-      - name: Android SDK levels
-        run: grep -RhoE '(compileSdk|minSdk|targetSdk)[^\n]*' android/app/build.gradle* || true
       - name: Build the APK
         run: |
           flutter build apk --release \
@@ -194,14 +190,6 @@ jobs:
         with:
           name: nussnuss-android-apk
           path: apps/mobile/NussNuss-*.apk
-      - name: Keep the generated project files and lockfile
-        run: |
-          items=$(ls -d pubspec.lock .metadata android ios 2>/dev/null)
-          tar -czf ../../flutter-scaffold.tgz --exclude='.gradle' --exclude='build' --exclude='Pods' --exclude='.symlinks' --exclude='ephemeral' --exclude='.cxx' $items
-      - uses: actions/upload-artifact@v4
-        with:
-          name: flutter-scaffold
-          path: flutter-scaffold.tgz
       - name: Publish the preview build (v2 branch)
         if: github.event_name == 'push' && github.ref == 'refs/heads/v2'
         env:
@@ -210,9 +198,9 @@ jobs:
         run: |
           gh release delete v2-preview --yes --cleanup-tag 2>/dev/null || true
           if [ -n "$API_URL" ]; then server="It talks to the API at $API_URL."; else server="No API address is set yet, so Get started will say you are offline. Host the API, set the API_URL repository variable, and the next build works."; fi
-          gh release create v2-preview NussNuss-*.apk ../../flutter-scaffold.tgz --prerelease --target "$GITHUB_SHA" \
+          gh release create v2-preview NussNuss-*.apk --prerelease --target "$GITHUB_SHA" \
             --title "NussNuss 2.0 preview (build ${{ github.run_number }})" \
-            --notes "Flutter app from the v2 branch, commit ${GITHUB_SHA::7}. $server Signed with a debug key: for testing on a phone, not for Google Play. flutter-scaffold.tgz holds the generated Android and iOS project files and pubspec.lock."
+            --notes "Flutter app from the v2 branch, commit ${GITHUB_SHA::7}. $server Signed with a debug key: for testing on a phone, not for Google Play."
 
   ios:
     name: Flutter iOS build (no signing)
@@ -228,12 +216,5 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: flutter create --platforms=ios --org app.nussnuss --project-name nussnuss .
-      - name: App name and languages
-        run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName NussNuss" ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations array" ios/Runner/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations:0 string en" ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations:1 string ar" ios/Runner/Info.plist
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign --dart-define=API_URL=${{ vars.API_URL }} --dart-define=WEB_URL=${{ vars.WEB_URL }}
