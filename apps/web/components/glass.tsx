@@ -152,7 +152,8 @@ function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: bo
       className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', paddingInline: 'max(16px, env(safe-area-inset-left, 0px))' }}
     >
-      <div className="flex w-full items-end justify-between gap-3" style={{ maxWidth: 'var(--nn-layout-max-content)' }}>
+      {/* A container, so the tab labels step aside (icons only) when large text would push the add button off screen. */}
+      <div className="@container flex w-full items-end justify-between gap-3" style={{ maxWidth: 'var(--nn-layout-max-content)' }}>
         {showTabs ? (
           <motion.div
             initial={false}
@@ -172,7 +173,7 @@ function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: bo
                 )}
               >
                 <tab.icon size={22} weight={tab.on ? 'fill' : 'regular'} />
-                <motion.span initial={false} animate={{ width: compact && !tab.on ? 0 : 'auto', opacity: compact && !tab.on ? 0 : 1 }} className="overflow-hidden whitespace-nowrap">
+                <motion.span initial={false} animate={{ width: compact && !tab.on ? 0 : 'auto', opacity: compact && !tab.on ? 0 : 1 }} className="overflow-hidden whitespace-nowrap @max-[21.5rem]:sr-only">
                   {tab.label}
                 </motion.span>
               </Link>

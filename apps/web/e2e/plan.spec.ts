@@ -318,3 +318,29 @@ test('install and app links: manifest, association files, privacy in Arabic', as
   await expect(page.getByRole('heading', { name: 'ما نحتفظ به' })).toBeVisible();
   await a11y(page, 'privacy');
 });
+
+test('large text: at 200% nothing spills sideways on the main screens', async ({ page }) => {
+  const done = guard(page);
+  await start(page, 'Abdulrahman');
+  await group(page, 'Weekend in Hatta with the whole family', ['Mohammed', 'Fatima']);
+  await page.getByTestId('add').click();
+  await amount(page, '1250');
+  await page.getByTestId('save-expense').click();
+  const big = async (where: string) => {
+    await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+    await still(page);
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(over, `${where} is ${over}px wider than the screen`).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `${SHOTS}/p11-large-${where}.png` });
+  };
+  await big('group');
+  await page.getByTestId('tab-settle').click();
+  await big('settle');
+  await page.getByTestId('add').click();
+  await page.getByTestId('details').click();
+  await big('add');
+  await page.keyboard.press('Escape');
+  await page.goto('/settings');
+  await big('settings');
+  done();
+});

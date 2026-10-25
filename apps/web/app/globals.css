@@ -69,7 +69,9 @@ body {
 /* iOS text styles */
 @utility t-large-title {
   font-family: var(--nn-type-large-title-family);
-  font-size: var(--nn-type-large-title-size);
+  /* Grows with the text size, up to a size that still fits a phone (as iOS caps large titles). */
+  font-size: min(var(--nn-type-large-title-size), 11vw);
+  overflow-wrap: anywhere;
   line-height: var(--nn-type-large-title-line);
   font-weight: var(--nn-type-large-title-weight);
   letter-spacing: var(--nn-type-large-title-tracking);
