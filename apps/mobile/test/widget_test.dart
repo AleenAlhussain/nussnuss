@@ -139,10 +139,13 @@ void main() {
       ),
     );
 
+    // MaterialApp cross-fades theme changes, so let each one finish before looking.
     await tester.pumpWidget(host(GlassPref.clear));
+    await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsOneWidget);
 
     await tester.pumpWidget(host(GlassPref.frosted));
+    await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsNothing);
 
     tester.platformDispatcher.accessibilityFeaturesTestValue =

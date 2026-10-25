@@ -35,6 +35,12 @@ class NNButton extends StatelessWidget {
       ButtonKind.danger => (p.dangerSoft, p.danger),
     };
     final enabled = onTap != null && !busy;
+    final text = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: NNType.headline.copyWith(color: fg),
+    );
     return Pressable(
       onTap: enabled ? onTap : null,
       semanticLabel: label,
@@ -63,14 +69,8 @@ class NNButton extends StatelessWidget {
               else if (icon != null)
                 Icon(icon, size: 20, color: fg),
               if (busy || icon != null) const SizedBox(width: NNSpace.xs),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: NNType.headline.copyWith(color: fg),
-                ),
-              ),
+              // A compact button sits in rows that give it unbounded width, where Flexible would throw.
+              if (expand) Flexible(child: text) else text,
             ],
           ),
         ),
