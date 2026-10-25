@@ -619,7 +619,9 @@ class GlassTabBar extends StatelessWidget {
       final tp = TextPainter(
         text: TextSpan(
           text: item.label,
-          style: _labelStyle(const Color(0xFF000000)),
+          style: DefaultTextStyle.of(
+            context,
+          ).style.merge(_labelStyle(const Color(0xFF000000))),
         ),
         textDirection: Directionality.of(context),
         textScaler: scaler,

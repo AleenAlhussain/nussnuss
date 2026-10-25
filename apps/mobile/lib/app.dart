@@ -113,6 +113,10 @@ class _NussNussAppState extends State<NussNussApp> with WidgetsBindingObserver {
               look,
               highContrast: true,
             ),
+            // Everything shares the theme's text style, including what floats above the pages
+            // (the tab bar and toasts live in the root overlay, outside any page's Material).
+            builder: (context, child) =>
+                Material(type: MaterialType.transparency, child: child),
             // Launched from a link, the platform names the link as the first route; the root
             // screen reads the invite from the session instead of pushing a route for it.
             onGenerateInitialRoutes: (_) => [_rootRoute()],
