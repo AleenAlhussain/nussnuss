@@ -131,7 +131,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
         for (final e in g.expenses.take(30))
           (title: e.title, category: e.category),
       ],
-      hour: DateTime.now().hour,
+      hour: suggestionClock().hour,
       emoji: g.emoji,
       label: (k) => s.raw('sug_$k'),
     );

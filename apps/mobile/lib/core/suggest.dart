@@ -1,5 +1,9 @@
 // Dart port of packages/core/src/suggest.ts. Change both together.
 
+/// The time suggestions are based on. Tests that compare screen images pin it, so a title suggested
+/// at lunch does not turn into dinner when the tests run in the evening.
+DateTime Function() suggestionClock = DateTime.now;
+
 /// Words the apps translate: `sug_$key` in the i18n files.
 const suggestionKeys = [
   'breakfast',

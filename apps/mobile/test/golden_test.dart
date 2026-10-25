@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nussnuss/core/suggest.dart';
 
 import 'widget_test.dart'
     show leave, pumpApp, startWithGroup, tapKey, typeAmount;
@@ -57,6 +58,9 @@ Future<void> _shot(WidgetTester tester, String name) async {
 
 void main() {
   setUpAll(_loadFonts);
+  // Suggestions follow the time of day: pin it to lunchtime so the images do not depend on when CI runs.
+  setUp(() => suggestionClock = () => DateTime(2026, 10, 25, 13));
+  tearDown(() => suggestionClock = DateTime.now);
 
   for (final MapEntry(key: mode, value: prefs) in _modes.entries) {
     testWidgets('screens · $mode', (tester) async {
