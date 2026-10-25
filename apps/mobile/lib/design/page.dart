@@ -658,7 +658,8 @@ class _NNPageState extends State<NNPage> with SingleTickerProviderStateMixin {
   }
 }
 
-/// A fixed-height pinned header ([child] null: empty space that lets taps through).
+/// A fixed-height pinned header ([child] null: empty space that lets taps through). The child
+/// always fills the whole height: a pinned header must paint as much as it lays out.
 class _Fixed extends SliverPersistentHeaderDelegate {
   _Fixed(this.height, this.child);
   final double height;
@@ -672,7 +673,7 @@ class _Fixed extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrink, bool overlaps) =>
-      child ?? const SizedBox.shrink();
+      SizedBox(height: height, child: child);
 
   @override
   bool shouldRebuild(_Fixed old) => old.height != height || old.child != child;
