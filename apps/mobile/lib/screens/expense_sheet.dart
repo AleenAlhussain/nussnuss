@@ -46,10 +46,16 @@ enum SplitChoice { equal, exact, percent, shares, items }
 
 /// One line of a receipt while it is being typed.
 class _Item {
-  _Item() : name = TextEditingController(), price = TextEditingController();
+  /// Everyone is on a new line until someone is taken off, as on the web.
+  _Item(Iterable<String> everyone, {String name = '', String price = ''})
+    : name = TextEditingController(text: name),
+      price = TextEditingController(text: price),
+      members = {...everyone};
   final TextEditingController name;
   final TextEditingController price;
-  final Set<String> members = {};
+  final Set<String> members;
+
+  bool get isEmpty => name.text.trim().isEmpty && price.text.trim().isEmpty;
 
   void dispose() {
     name.dispose();
@@ -102,6 +108,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
     for (final id in _ids) id: TextEditingController(),
   };
   final _items = <_Item>[];
+  bool _scanning = false;
+  String? _scanNote;
+  bool _scanFailed = false;
   late String _currency = g.currency;
   bool _rateLive = false;
   String _repeat = 'none';
@@ -620,10 +629,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
           values: SplitChoice.values,
           selected: _mode,
           label: (m) => s.raw('mode_${m.name}'),
-          onChanged: (m) => setState(() {
-            _mode = m;
-            if (m == SplitChoice.items && _items.isEmpty) _items.add(_Item());
-          }),
+          onChanged: _pickMode,
         ),
         const SizedBox(height: NNSpace.sm),
         _ShareBar(members: g.members, owed: owed, total: total),
@@ -826,16 +832,129 @@ class _ExpenseFormState extends State<ExpenseForm> {
             icon: Icons.add_rounded,
             kind: ButtonKind.tinted,
             expand: false,
-            onTap: () => setState(() => _items.add(_Item())),
+            onTap: () => setState(() => _items.add(_Item(_ids))),
           ),
         ),
       ),
+      NNButton(
+        key: const ValueKey('scan-receipt'),
+        label: _scanning ? s.scanning : s.scanReceipt,
+        icon: Icons.document_scanner_outlined,
+        kind: ButtonKind.plain,
+        busy: _scanning,
+        onTap: _scanning ? null : _chooseScan,
+      ),
+      if (_scanNote != null)
+        Padding(
+          padding: const EdgeInsets.only(top: NNSpace.xs),
+          child: Semantics(
+            liveRegion: true,
+            child: Text(
+              _scanNote!,
+              key: const ValueKey('scan-note'),
+              style: NNType.footnote.copyWith(
+                color: _scanFailed ? p.danger : p.text2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      const SizedBox(height: NNSpace.sm),
       if (_items.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(bottom: NNSpace.xs),
           child: Divider(height: 1, color: p.separator),
         ),
     ];
+  }
+
+  /// Items is part of Plus, like on the web.
+  Future<void> _pickMode(SplitChoice m) async {
+    final session = SessionScope.read(context);
+    if (m == SplitChoice.items && !session.hasPlus(g)) {
+      final ok = await showPaywall(context, group: g);
+      if (!mounted || !ok) return;
+    }
+    setState(() {
+      _mode = m;
+      if (m == SplitChoice.items && _items.isEmpty) _items.add(_Item(_ids));
+    });
+  }
+
+  /// Camera or photo library, then the scan.
+  Future<void> _chooseScan() async {
+    final s = context.s;
+    final camera = await showNNSheet<bool>(
+      context,
+      key: const ValueKey('scan-sheet'),
+      title: s.scanReceipt,
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NNButton(
+            key: const ValueKey('scan-camera'),
+            label: s.scanCamera,
+            icon: Icons.photo_camera_outlined,
+            onTap: () => Navigator.of(ctx).pop(true),
+          ),
+          const SizedBox(height: NNSpace.sm),
+          NNButton(
+            key: const ValueKey('scan-library'),
+            label: s.scanLibrary,
+            icon: Icons.photo_library_outlined,
+            kind: ButtonKind.tinted,
+            onTap: () => Navigator.of(ctx).pop(false),
+          ),
+        ],
+      ),
+    );
+    if (camera == null || !mounted) return;
+    await _scan(camera: camera);
+  }
+
+  /// Reads the receipt into lines: the empty lines make way for what was read, everyone is on each
+  /// line, and an empty amount takes the receipt's total (a typed one stays, and the difference
+  /// shows as tax and service).
+  Future<void> _scan({required bool camera}) async {
+    final session = SessionScope.read(context);
+    final s = session.s;
+    setState(() {
+      _scanning = true;
+      _scanNote = null;
+    });
+    String? text;
+    try {
+      text = await session.device.scanReceiptText(camera: camera);
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+    if (!mounted || text == null) return;
+    final read = parseReceipt(text, _currency);
+    if (read.items.isEmpty) {
+      setState(() {
+        _scanNote = s.scanFailed;
+        _scanFailed = true;
+      });
+      haptic(Haptic.light);
+      return;
+    }
+    setState(() {
+      for (final i in _items.where((i) => i.isEmpty).toList()) {
+        _items.remove(i);
+        i.dispose();
+      }
+      for (final it in read.items) {
+        _items.add(
+          _Item(_ids, name: it.name, price: minorToInput(it.price, _currency)),
+        );
+      }
+      if (_total == null && read.total != null) {
+        _amount = minorToInput(read.total!, _currency);
+      }
+      _scanNote = s.fill(s.scanFound, {'n': read.items.length});
+      _scanFailed = false;
+    });
+    haptic(Haptic.success);
   }
 
   Widget _personRow(Member m, int? owes) {

@@ -323,6 +323,9 @@ class NNStrings {
   String get youPayTo => _m['youPayTo']!;
   String get circleYouGet => _m['circleYouGet']!;
   String get createCircle => _m['createCircle']!;
+  String get scanCamera => _m['scanCamera']!;
+  String get scanLibrary => _m['scanLibrary']!;
+  String get scanFound => _m['scanFound']!;
   String get catFood => _m['cat_food']!;
   String get catGroceries => _m['cat_groceries']!;
   String get catTransport => _m['cat_transport']!;
@@ -632,6 +635,9 @@ const _en = <String, String>{
   'youPayTo': 'You pay {name}',
   'circleYouGet': 'You get the pot',
   'createCircle': 'Start the circle',
+  'scanCamera': 'Take a photo',
+  'scanLibrary': 'Choose a photo',
+  'scanFound': 'Found {n} items',
   'cat_food': 'Food',
   'cat_groceries': 'Groceries',
   'cat_transport': 'Transport',
@@ -941,6 +947,9 @@ const _ar = <String, String>{
   'youPayTo': 'أنت تدفع لـ {name}',
   'circleYouGet': 'أنت تستلم',
   'createCircle': 'ابدأ الجمعية',
+  'scanCamera': 'التقط صورة',
+  'scanLibrary': 'اختر صورة',
+  'scanFound': 'تم العثور على {n} بنود',
   'cat_food': 'أكل',
   'cat_groceries': 'مقاضي',
   'cat_transport': 'مواصلات',

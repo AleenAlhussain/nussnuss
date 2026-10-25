@@ -25,6 +25,9 @@ dependencies:
   in_app_purchase: ^3.3.0
   # The coin's sheen follows the phone's tilt.
   sensors_plus: ^7.0.0
+  # Scan a receipt: a photo from the camera or library, read on the phone (no upload).
+  image_picker: ^1.1.0
+  google_mlkit_text_recognition: ">=0.15.0 <1.0.0"
   # Pinned by flutter_localizations; `any` takes whatever version the Flutter SDK ships with.
   intl: any
 

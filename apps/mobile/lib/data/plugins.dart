@@ -5,6 +5,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:share_plus/share_plus.dart';
@@ -73,6 +75,33 @@ class PluginDevice implements Device {
   @override
   Future<void> copy(String text) =>
       Clipboard.setData(ClipboardData(text: text));
+
+  /// The photo stays on the phone: text recognition runs on the device (ML Kit, Latin script).
+  @override
+  Future<String?> scanReceiptText({required bool camera}) async {
+    final XFile? photo;
+    try {
+      photo = await ImagePicker().pickImage(
+        source: camera ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 2400,
+        imageQuality: 90,
+      );
+    } on Exception {
+      return '';
+    }
+    if (photo == null) return null;
+    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    try {
+      final read = await recognizer.processImage(
+        InputImage.fromFilePath(photo.path),
+      );
+      return read.text;
+    } on Exception {
+      return '';
+    } finally {
+      await recognizer.close();
+    }
+  }
 
   @override
   Stream<Offset> tilt() {

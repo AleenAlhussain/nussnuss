@@ -33,8 +33,12 @@
 	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>NussNuss uses the camera to read a receipt so you can split it by item. The photo stays on your phone.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>NussNuss tilts the light on its coin as you move your phone. Nothing is recorded.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>NussNuss reads a receipt from a photo you choose so you can split it by item. The photo stays on your phone.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

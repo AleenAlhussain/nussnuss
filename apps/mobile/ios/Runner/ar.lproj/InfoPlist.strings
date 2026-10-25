@@ -1,0 +1,5 @@
+/* Arabic purpose strings: shown by iOS when NussNuss asks for the camera, photos or motion. */
+"CFBundleDisplayName" = "نص نص";
+"NSCameraUsageDescription" = "يستخدم نص نص الكاميرا لقراءة الفاتورة حتى تقسمها بالبنود. الصورة تبقى على جوالك.";
+"NSPhotoLibraryUsageDescription" = "يقرأ نص نص الفاتورة من صورة تختارها حتى تقسمها بالبنود. الصورة تبقى على جوالك.";
+"NSMotionUsageDescription" = "يحرّك نص نص الضوء على العملة مع حركة جوالك. لا يُسجَّل أي شيء.";

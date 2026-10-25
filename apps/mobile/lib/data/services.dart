@@ -25,6 +25,10 @@ abstract class Device {
   /// Puts text on the clipboard.
   Future<void> copy(String text);
 
+  /// Takes a photo of a receipt (or picks one from the library) and reads its text on the phone.
+  /// Null when the person cancels; empty when nothing could be read.
+  Future<String?> scanReceiptText({required bool camera});
+
   /// The phone's tilt from the accelerometer, roughly -1…1 on each axis. Empty where there is none.
   Stream<Offset> tilt();
 }
@@ -34,6 +38,10 @@ class QuietDevice implements Device {
   final shared = <({String? text, List<SharedFile> files})>[];
   final opened = <Uri>[];
   final copied = <String>[];
+
+  /// What [scanReceiptText] reads; null acts as a cancelled photo.
+  String? receiptText;
+  final scans = <bool>[];
 
   /// What [open] answers; tests flip it to check the fallbacks.
   bool canOpen = true;
@@ -53,6 +61,12 @@ class QuietDevice implements Device {
 
   @override
   Future<void> copy(String text) async => copied.add(text);
+
+  @override
+  Future<String?> scanReceiptText({required bool camera}) async {
+    scans.add(camera);
+    return receiptText;
+  }
 
   @override
   Stream<Offset> tilt() => const Stream.empty();

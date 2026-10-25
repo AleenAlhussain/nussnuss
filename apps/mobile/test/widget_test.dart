@@ -278,10 +278,25 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('split by item is part of Plus', (tester) async {
+    await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    await tapKey(tester, 'add');
+    await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-SplitChoice.items');
+    expect(byKey('paywall'), findsOneWidget);
+    await tapIt(tester, byKey('sheet-close').last);
+    // Still split equally: nothing changed without Plus.
+    expect(byKey('add-item'), findsNothing);
+    await tapKey(tester, 'sheet-close');
+    await leave(tester);
+  });
+
   testWidgets('split a receipt by item, with tax shared by item', (
     tester,
   ) async {
-    final app = await pumpApp(tester);
+    final server = FakeServer()..plus = true;
+    final app = await pumpApp(tester, server: server);
     await startWithGroup(tester, friends: const ['Sara']);
     await tapKey(tester, 'add');
     await typeAmount(tester, '110');
@@ -290,11 +305,12 @@ void main() {
     final g = app.server.groupNamed('Salalah trip');
     final sara = g.members[1]['id']! as String;
     final me = g.members[0]['id']! as String;
+    // Everyone is on a new line; take people off to say who had what.
     await tester.enterText(byKey('item-price-0'), '60');
-    await tapKey(tester, 'item-0-$me');
+    await tapKey(tester, 'item-0-$sara');
     await tapKey(tester, 'add-item');
     await tester.enterText(byKey('item-price-1'), '40');
-    await tapKey(tester, 'item-1-$sara');
+    await tapKey(tester, 'item-1-$me');
     await tester.pumpAndSettle();
     expect(
       tester.widget<Text>(byKey('remaining')).data,
@@ -303,6 +319,86 @@ void main() {
     await tapKey(tester, 'save-expense');
     // I had 60 + 6 of the tax; Sara owes me 44.
     expect(balance(tester), 'AED 44.00');
+    await leave(tester);
+  });
+
+  testWidgets('scan a receipt into lines, with its total as the amount', (
+    tester,
+  ) async {
+    final server = FakeServer()..plus = true;
+    final app = await pumpApp(tester, server: server);
+    await startWithGroup(tester, friends: const ['Sara']);
+    app.device.receiptText = [
+      'SHAWARMA HOUSE',
+      'Tel 04 123 4567',
+      '2 x Chicken shawarma   24.00',
+      'Fries 8.50',
+      'Fresh juice x2 ..... 18',
+      'Subtotal 50.50',
+      'VAT 5% 2.53',
+      'Service 5.00',
+      'TOTAL AED 58.03',
+      'Cash 60.00',
+      'Change 1.97',
+      'شاي كرك ٣٫٥٠',
+    ].join('\n');
+    await tapKey(tester, 'add');
+    await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-SplitChoice.items');
+    await tapKey(tester, 'scan-receipt');
+    expect(byKey('scan-sheet'), findsOneWidget);
+    await tapKey(tester, 'scan-camera');
+    expect(app.device.scans, [true]);
+
+    // The empty first line made way for the four read from the receipt, everyone on each.
+    for (final (i, name, price) in [
+      (0, 'Chicken shawarma', '24.00'),
+      (1, 'Fries', '8.50'),
+      (2, 'Fresh juice', '18.00'),
+      (3, 'شاي كرك', '3.50'),
+    ]) {
+      expect(
+        tester.widget<TextField>(byKey('item-name-$i')).controller!.text,
+        name,
+      );
+      expect(
+        tester.widget<TextField>(byKey('item-price-$i')).controller!.text,
+        price,
+      );
+    }
+    expect(byKey('item-name-4'), findsNothing);
+    expect(find.text('Found 4 items'), findsOneWidget);
+    // No amount was typed, so the receipt's total is the amount; the rest is tax and service.
+    expect(tester.widget<Text>(byKey('amount')).data, '58.03');
+    expect(
+      tester.widget<Text>(byKey('remaining')).data,
+      'AED 4.03 tax and service, shared by item',
+    );
+    await tapKey(tester, 'save-expense');
+    // Each had half of every line; the odd cent of the tax stays with me, so Sara owes 29.01.
+    expect(balance(tester), 'AED 29.01');
+
+    // A photo with no prices on it says so and leaves the lines as they are.
+    app.device.receiptText = 'a blurry photo';
+    await tapKey(tester, 'add');
+    await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-SplitChoice.items');
+    await tapKey(tester, 'scan-receipt');
+    await tapKey(tester, 'scan-library');
+    expect(app.device.scans, [true, false]);
+    expect(
+      tester.widget<Text>(byKey('scan-note')).data,
+      'Couldn’t read that receipt. Add the items by hand.',
+    );
+    expect(byKey('item-price-0'), findsOneWidget);
+    expect(byKey('item-price-1'), findsNothing);
+
+    // Cancelling the photo changes nothing.
+    app.device.receiptText = null;
+    await tapKey(tester, 'scan-receipt');
+    await tapKey(tester, 'scan-camera');
+    expect(byKey('item-price-1'), findsNothing);
+    await tapKey(tester, 'sheet-close');
     await leave(tester);
   });
 
