@@ -1,0 +1,26 @@
+name: nussnuss
+description: NussNuss (نص نص) — split bills with friends. Flutter app for iOS and Android.
+publish_to: none
+version: 2.0.0+20
+
+environment:
+  sdk: ^3.8.0
+  flutter: ">=3.32.0"
+
+# Kept deliberately small: networking uses dart:io, state uses ChangeNotifier, glass is BackdropFilter.
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  shared_preferences: ^2.5.0
+  # Pinned by flutter_localizations; `any` takes whatever version the Flutter SDK ships with.
+  intl: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,208 @@
+# NussNuss 2.0 CI: every push checks the shared rules, the API against a real Postgres, the web app in a
+# real browser, both Docker images, and the Flutter app (analyze, tests, Android APK, iOS build).
+name: CI
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  shared:
+    name: Core rules, tokens, generated Dart
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Core tests and token contrast checks
+        run: npm test
+      - name: Generated Dart (tokens, currencies, strings) is up to date
+        run: |
+          npm run tokens
+          node apps/mobile/tool/generate.mjs
+          git diff --exit-code -- apps/mobile/lib || (echo "::error::Run 'npm run tokens && node apps/mobile/tool/generate.mjs' and commit the result." && exit 1)
+      - name: Type-check the API and the web app
+        run: |
+          npm run typecheck -w @nussnuss/api
+          npm run typecheck -w @nussnuss/web
+
+  api:
+    name: API end-to-end (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nussnuss
+          POSTGRES_PASSWORD: nussnuss
+          POSTGRES_DB: nussnuss_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nussnuss -d nussnuss_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://nussnuss:nussnuss@127.0.0.1:5432/nussnuss_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - run: npm run test:api
+
+  web:
+    name: Web end-to-end (Playwright + axe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nussnuss
+          POSTGRES_PASSWORD: nussnuss
+          POSTGRES_DB: nussnuss_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nussnuss -d nussnuss_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://nussnuss:nussnuss@127.0.0.1:5432/nussnuss_test
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run test:web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-screens
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker images and compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start Postgres, API and web
+        run: docker compose up --build --detach --wait --wait-timeout 180
+      - name: Smoke test through the running containers
+        run: |
+          curl -fsS http://localhost:4000/health
+          curl -fsS -o /dev/null -w 'web %{http_code}\n' http://localhost:3000/
+          TOKEN=$(curl -fsS -X POST http://localhost:4000/auth/anonymous -H 'Content-Type: application/json' \
+            -d '{"name":"CI","locale":"en"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+          curl -fsS -X POST http://localhost:4000/groups -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"name":"Smoke","currency":"AED","members":["Sara"]}' | node -pe 'const g=JSON.parse(require("fs").readFileSync(0)); if (g.members.length !== 2) process.exit(1); "group ok: " + g.name'
+      - name: Logs
+        if: failure()
+        run: docker compose logs --no-color
+      - run: docker compose down --volumes
+        if: always()
+
+  flutter:
+    name: Flutter analyze, test, Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Versions
+        run: flutter --version
+      - name: Generate the Android and iOS projects (keeps the committed manifests, names and icons)
+        run: flutter create --platforms=android,ios --org app.nussnuss --project-name nussnuss .
+      - run: flutter pub get
+      - name: Formatting
+        run: dart format --output=none --set-exit-if-changed $(find lib test -name '*.dart' ! -name '*.g.dart')
+      - run: flutter analyze
+      - name: TypeScript results for the Dart parity test
+        working-directory: .
+        run: |
+          npm ci
+          npm run build -w @nussnuss/core
+          node apps/mobile/tool/parity.mjs 300 > apps/mobile/test/parity.json
+      - run: flutter test
+      - name: Android SDK levels
+        run: grep -RhoE '(compileSdk|minSdk|targetSdk)[^\n]*' android/app/build.gradle* || true
+      - name: Build the APK
+        run: |
+          flutter build apk --release \
+            --dart-define=API_URL=${{ vars.API_URL }} \
+            --dart-define=WEB_URL=${{ vars.WEB_URL }}
+          cp build/app/outputs/flutter-apk/app-release.apk "NussNuss-2.0-build${{ github.run_number }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nussnuss-android-apk
+          path: apps/mobile/NussNuss-*.apk
+      - name: Keep the generated project files and lockfile
+        run: tar -czf ../../flutter-scaffold.tgz pubspec.lock .metadata android ios --exclude='android/.gradle' --exclude='android/app/build' --exclude='ios/Pods' --exclude='ios/.symlinks' --exclude='ios/Flutter/ephemeral'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-scaffold
+          path: flutter-scaffold.tgz
+
+  ios:
+    name: Flutter iOS build (no signing)
+    needs: flutter
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter create --platforms=ios --org app.nussnuss --project-name nussnuss .
+      - name: App name and languages
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName NussNuss" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations array" ios/Runner/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations:0 string en" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations:1 string ar" ios/Runner/Info.plist
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign --dart-define=API_URL=${{ vars.API_URL }} --dart-define=WEB_URL=${{ vars.WEB_URL }}

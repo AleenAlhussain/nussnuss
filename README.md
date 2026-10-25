@@ -1,54 +1,73 @@
-# NussNuss (نص نص)
+# NussNuss (نص نص) 2.0
 
-Split any bill with friends. No limits, no ads, no sign-up. Arabic and English.
-One Expo (React Native) codebase for iPhone, Android and the web.
+Split bills with friends, fairly. One group per trip, flat or dinner; add what each person paid; NussNuss works out who owes whom with the fewest transfers. Friends join from a link, with no app and no sign-up. Arabic and English, right-to-left done properly, 41 currencies with the right decimals (KWD has three, JPY none).
 
-> دليل النشر والربح بالعربي موجود في المستند المرفق مع المحادثة. الخطوات التقنية بالتفصيل في `replica/deploy.md`.
+| Part | What | Where |
+| --- | --- | --- |
+| Web app | Next.js 16, React 19, Tailwind 4, Motion | `apps/web` |
+| Mobile app | Flutter (iOS and Android) | `apps/mobile` |
+| API | NestJS 12, Drizzle ORM, Postgres 16 | `apps/api` |
+| Money rules | Splits, rounding, balances, fewest transfers (TypeScript, ported to Dart) | `packages/core`, `apps/mobile/lib/core` |
+| Design tokens | One JSON file that generates the web CSS and the Flutter Dart | `packages/tokens` |
+| Version 1 | The original Expo app, kept for reference | `legacy/expo` |
 
 ## Run it
 
-```bash
-npm install
-npx expo start            # scan the QR code with Expo Go, or press w for the browser
+With Docker, everything in one command:
+
+```sh
+cp .env.example .env        # change the passwords before you put this on a server
+docker compose up --build
 ```
-In Expo Go the Plus purchase shows "not set up" (it needs a store build); everything else works.
 
-## Check it
+The web app is on http://localhost:3000 and the API on http://localhost:4000.
 
-```bash
-npm run check             # typecheck, 18 unit tests, brand sweep, store-listing lint, parity score
-npm run build:site        # web build → site/ (landing page at /, app at /app/, privacy.html)
-npx playwright test       # 7 end-to-end tests + accessibility scans against site/
+Without Docker you need Node 22 and a Postgres 16 with a `nussnuss` database (user and password `nussnuss`):
+
+```sh
+npm ci
+npm run build:packages
+npm run dev:api     # http://localhost:4000, runs the database migrations on start
+npm run dev:web     # http://localhost:3000
 ```
-If Playwright can't download its browser, set `CHROME_PATH` to any Chromium.
 
-## Android APK for testing
+The Flutter app (Flutter stable; the Android and iOS project folders are generated on first run):
 
-Push this project to a GitHub repo: `.github/workflows/android-apk.yml` builds an installable APK on
-GitHub's runners (about 15–20 minutes) and publishes it under the repo's **Releases**. Or, with an Expo
-account: `npx eas-cli@latest build -p android --profile preview`.
+```sh
+cd apps/mobile
+flutter create --platforms=android,ios --org app.nussnuss --project-name nussnuss .
+flutter run --dart-define=API_URL=http://10.0.2.2:4000    # Android emulator talking to the API on your machine
+```
 
-## Ship it
+## Tests
 
-See `replica/deploy.md`: developer accounts, RevenueCat product `nussnuss_plus_lifetime` (entitlement
-`plus`), `eas build`, `eas submit`, hosting `site/`, store listing (`replica/launch/listing.json`) and
-screenshots (`replica/launch/screenshots/`).
+| Command | Checks |
+| --- | --- |
+| `npm test` | Money rules (13 cases) and that every token color pair meets WCAG contrast |
+| `npm run test:api` | The API against a real Postgres (`nussnuss_test` database) |
+| `npm run test:web` | The web app in Chromium with Playwright, on a phone and a desktop size, with axe accessibility checks |
+| `flutter test` (in `apps/mobile`) | The Dart money rules, Dart and TypeScript agreeing on 300 random groups, and the app flow with tap-target, label and contrast guidelines |
 
-## Where things are
+GitHub Actions runs all of these on every push, builds both Docker images and starts them together, and builds the Android APK and an unsigned iOS build. The APK is attached to each run as a download.
 
-| path | what |
-|---|---|
-| `App.tsx` | providers, navigation stack, deep links |
-| `src/screens/` | the 8 screens (welcome, home, group editor, group, expense, settings, Plus, shared view) |
-| `src/split.ts` | splitting, balances, fewest-transfers plan (pure, unit-tested) |
-| `src/money.ts` | 41 currencies, 0/2/3 decimals, Arabic digit parsing |
-| `src/share.ts` | share links (group compressed into the `#` fragment), WhatsApp summary, CSV |
-| `src/store.tsx` | on-device storage, drafts, demo trip |
-| `src/purchases.ts` | one-time Plus purchase through RevenueCat |
-| `src/ui.tsx`, `src/components.tsx` | design system primitives (RTL-aware) |
-| `src/design/tokens.json` | colours (light, dark, 3 Plus themes), spacing, type |
-| `web/landing.src.html` | landing page source |
-| `replica/` | research, plan, design, tests, bugs, parity, launch kit, deploy guide, tools |
+## Design
 
-Navigation is a small in-app stack rather than Expo Router on purpose: the web build is a single page
-that works from any path, which keeps share links working on any static host.
+NussNuss follows Apple's 2025 design language without becoming an iOS copy:
+
+- **Liquid Glass only on the navigation layer.** The tab bar, the add button, the bar buttons and the sheets are glass; content cards are solid. Glass never sits on glass.
+- **The rim of light.** Glass panes have a 1px highlight along the top edge and a shadow painted only outside the shape, so the pane itself stays clean.
+- **Frosted, by choice or by need.** Settings has a Frosted option that makes every glass surface solid. It turns on by itself with Reduce Transparency or Increase Contrast in the browser, and with Increase Contrast on iPhone.
+- **Springs, not curves.** Motion uses the same three springs everywhere (standard, bouncy, gentle), defined once in the tokens. Reduce Motion swaps them for short fades.
+- **The coin.** The brand mark is one coin in two fair halves. When a group is settled, the halves snap together.
+- **Platform manners.** 44pt touch targets on iOS and 48dp on Android, the native back gesture on each, system fonts, and Arabic that mirrors the layout while numbers stay readable.
+
+Change a color, size or spring in `packages/tokens/tokens.json`, then run `npm run tokens` to regenerate both platforms.
+
+## Before the stores
+
+These need the owner's own accounts, so they are not automated here:
+
+1. Host the API and database (any Docker host with Postgres), then set the repository variables `API_URL` and `WEB_URL` so CI builds the apps against it.
+2. A Google Play developer account and an upload key for signing the Android App Bundle.
+3. An Apple Developer account for signing and TestFlight.
+4. A privacy policy page and the store listings.

@@ -1,0 +1,48 @@
+# NussNuss: Postgres + API + web with one command.
+#   docker compose up --build        → web on http://localhost:3000, API on http://localhost:4000
+# For production, set strong values in a .env file next to this one (see .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nussnuss}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nussnuss}
+      POSTGRES_DB: ${POSTGRES_DB:-nussnuss}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-nussnuss} -d ${POSTGRES_DB:-nussnuss}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-nussnuss}:${POSTGRES_PASSWORD:-nussnuss}@db:5432/${POSTGRES_DB:-nussnuss}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      RUN_MIGRATIONS: 'true'
+    ports:
+      - '4000:4000'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '3000:3000'
+
+volumes:
+  db-data:

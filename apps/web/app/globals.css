@@ -1,0 +1,153 @@
+@import 'tailwindcss';
+
+/* Token roles from packages/tokens (loaded in layout.tsx) mapped into Tailwind, so components say bg-surface, text-text-2. */
+@theme inline {
+  --color-bg: var(--nn-bg);
+  --color-surface: var(--nn-surface);
+  --color-surface-2: var(--nn-surface-2);
+  --color-separator: var(--nn-separator);
+  --color-text: var(--nn-text);
+  --color-text-2: var(--nn-text-2);
+  --color-text-3: var(--nn-text-3);
+  --color-accent: var(--nn-accent);
+  --color-on-accent: var(--nn-on-accent);
+  --color-accent-soft: var(--nn-accent-soft);
+  --color-on-accent-soft: var(--nn-on-accent-soft);
+  --color-highlight: var(--nn-highlight);
+  --color-on-highlight: var(--nn-on-highlight);
+  --color-success: var(--nn-success);
+  --color-success-soft: var(--nn-success-soft);
+  --color-danger: var(--nn-danger);
+  --color-danger-soft: var(--nn-danger-soft);
+  --color-focus: var(--nn-focus);
+  --radius-sheet: var(--nn-radius-sheet);
+  --radius-card: var(--nn-radius-card);
+  --radius-row: var(--nn-radius-row);
+  --radius-control: var(--nn-radius-control);
+  --font-sans: var(--nn-font);
+  --font-rounded: var(--nn-font-rounded);
+}
+
+html {
+  background: var(--nn-bg);
+  color: var(--nn-text);
+  font-family: var(--nn-font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+}
+html[lang='ar'] {
+  font-family: var(--nn-font-ar);
+}
+body {
+  min-height: 100dvh;
+  background: var(--nn-bg);
+  margin: 0;
+}
+
+/* iOS text styles */
+@utility t-large-title {
+  font-size: var(--nn-type-large-title-size);
+  line-height: var(--nn-type-large-title-line);
+  font-weight: var(--nn-type-large-title-weight);
+  letter-spacing: var(--nn-type-large-title-tracking);
+}
+@utility t-title-1 {
+  font-size: var(--nn-type-title-1-size);
+  line-height: var(--nn-type-title-1-line);
+  font-weight: var(--nn-type-title-1-weight);
+  letter-spacing: var(--nn-type-title-1-tracking);
+}
+@utility t-title-2 {
+  font-size: var(--nn-type-title-2-size);
+  line-height: var(--nn-type-title-2-line);
+  font-weight: var(--nn-type-title-2-weight);
+  letter-spacing: var(--nn-type-title-2-tracking);
+}
+@utility t-title-3 {
+  font-size: var(--nn-type-title-3-size);
+  line-height: var(--nn-type-title-3-line);
+  font-weight: var(--nn-type-title-3-weight);
+}
+@utility t-headline {
+  font-size: var(--nn-type-headline-size);
+  line-height: var(--nn-type-headline-line);
+  font-weight: var(--nn-type-headline-weight);
+  letter-spacing: var(--nn-type-headline-tracking);
+}
+@utility t-body {
+  font-size: var(--nn-type-body-size);
+  line-height: var(--nn-type-body-line);
+  letter-spacing: var(--nn-type-body-tracking);
+}
+@utility t-subhead {
+  font-size: var(--nn-type-subhead-size);
+  line-height: var(--nn-type-subhead-line);
+  letter-spacing: var(--nn-type-subhead-tracking);
+}
+@utility t-footnote {
+  font-size: var(--nn-type-footnote-size);
+  line-height: var(--nn-type-footnote-line);
+  letter-spacing: var(--nn-type-footnote-tracking);
+}
+@utility t-caption {
+  font-size: var(--nn-type-caption-size);
+  line-height: var(--nn-type-caption-line);
+}
+@utility t-amount-hero {
+  font-family: var(--nn-font-rounded);
+  font-size: clamp(2.5rem, 12vw, var(--nn-type-amount-hero-size));
+  line-height: 1.1;
+  font-weight: var(--nn-type-amount-hero-weight);
+  letter-spacing: var(--nn-type-amount-hero-tracking);
+  font-variant-numeric: tabular-nums;
+}
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Liquid Glass, web edition. Only the floating layer uses it: bars, the tab bar, the add button, sheets.
+ * Tokens switch it to frosted for Reduce Transparency, Increase Contrast, no backdrop-filter, or the Frosted setting.
+ * Nothing glass is ever placed on glass: children of .glass use fills (.on-glass-fill) instead.
+ */
+@utility glass {
+  background: var(--nn-glass-fill);
+  -webkit-backdrop-filter: blur(var(--nn-glass-blur)) saturate(var(--nn-glass-saturate));
+  backdrop-filter: blur(var(--nn-glass-blur)) saturate(var(--nn-glass-saturate));
+  box-shadow:
+    inset 0 1px 0 var(--nn-glass-highlight),
+    inset 0 0 0 1px var(--nn-glass-border),
+    var(--nn-glass-shadow);
+}
+@utility on-glass-fill {
+  background: color-mix(in srgb, var(--nn-text) 7%, transparent);
+}
+
+/* Apple's scroll edge effect: content softly fades as it slides under the top bar. */
+@utility scroll-edge {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--nn-layout-top-bar));
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--nn-layout-top-bar));
+}
+
+@utility focus-ring {
+  outline: none;
+  &:focus-visible {
+    outline: 3px solid var(--nn-focus);
+    outline-offset: 2px;
+  }
+}
+
+/* Touch targets are at least 44 × 44 points everywhere (HIG). */
+@utility tap {
+  min-width: var(--nn-space-touch);
+  min-height: var(--nn-space-touch);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

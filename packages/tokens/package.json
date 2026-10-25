@@ -1,0 +1,20 @@
+{
+  "name": "@nussnuss/tokens",
+  "version": "2.0.0-dev",
+  "description": "NussNuss design tokens: one file for the web (CSS) and Flutter (Dart).",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./dist/tokens.css",
+    "./motion": {
+      "types": "./dist/motion.d.ts",
+      "default": "./dist/motion.js"
+    },
+    "./tokens.json": "./tokens.json"
+  },
+  "files": ["dist", "tokens.json"],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs"
+  }
+}
