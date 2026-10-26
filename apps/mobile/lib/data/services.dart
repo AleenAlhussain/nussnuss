@@ -29,6 +29,10 @@ abstract class Device {
   /// Null when the person cancels; empty when nothing could be read.
   Future<String?> scanReceiptText({required bool camera});
 
+  /// A photo for the person's avatar from the library, already small (at most 256 px, JPEG at
+  /// quality 80) so it uploads fast. Null when the person cancels.
+  Future<Uint8List?> pickAvatarPhoto();
+
   /// The phone's tilt from the accelerometer, roughly -1…1 on each axis. Empty where there is none.
   Stream<Offset> tilt();
 }
@@ -42,6 +46,9 @@ class QuietDevice implements Device {
   /// What [scanReceiptText] reads; null acts as a cancelled photo.
   String? receiptText;
   final scans = <bool>[];
+
+  /// What [pickAvatarPhoto] hands back; null acts as a cancelled pick.
+  Uint8List? avatarPhoto;
 
   /// What [open] answers; tests flip it to check the fallbacks.
   bool canOpen = true;
@@ -67,6 +74,9 @@ class QuietDevice implements Device {
     scans.add(camera);
     return receiptText;
   }
+
+  @override
+  Future<Uint8List?> pickAvatarPhoto() async => avatarPhoto;
 
   @override
   Stream<Offset> tilt() => const Stream.empty();

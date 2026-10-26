@@ -13,6 +13,7 @@ import 'models.dart';
 import 'offline.dart';
 import 'services.dart';
 import 'store.dart';
+import 'timing.dart';
 
 export 'store.dart';
 
@@ -34,6 +35,7 @@ class Session extends ChangeNotifier {
        device = device ?? QuietDevice(),
        purchases = purchases ?? NoStore() {
     repo = Repo(api: api, store: store)..addListener(notifyListeners);
+    timings = Timings(api);
   }
 
   final Api api;
@@ -49,6 +51,9 @@ class Session extends ChangeNotifier {
   /// Live updates for an open group; null falls back to a slow poll.
   final LiveUpdates? live;
   late final Repo repo;
+
+  /// Anonymous task timings (see [Timings]).
+  late final Timings timings;
 
   static const _tokenKey = 'nn:token';
   static const _langKey = 'nn:lang';
@@ -73,7 +78,7 @@ class Session extends ChangeNotifier {
   /// An invite link that opened the app, waiting to be shown.
   String? pendingInvite;
 
-  /// A group to open as soon as the groups list shows (after joining from a link).
+  /// A group to open as soon as Home shows (after joining from a link).
   String? openGroupId;
 
   void openInvite(String token) {
@@ -81,7 +86,7 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Opens a group inside the Groups tab, from anywhere (a notification, a link).
+  /// Opens a group inside the Home tab, from anywhere (a notification, a link).
   void openGroup(String id) {
     openGroupId = id;
     notifyListeners();
@@ -114,6 +119,9 @@ class Session extends ChangeNotifier {
 
   /// Bumped whenever groups change, so lists know to refresh.
   int revision = 0;
+
+  /// New things in Activity, for the badge on its tab. Home and Activity keep it up to date.
+  final unread = ValueNotifier<int>(0);
 
   NNStrings get s => NNStrings.of(lang);
 
@@ -255,6 +263,22 @@ class Session extends ChangeNotifier {
   Future<void> setPayTo(List<PayTo> list) async {
     await _remember(await api.patchMe(payTo: list));
     notifyListeners();
+  }
+
+  /// Name and look in one go (the profile sheet). Photos go through [setPhoto].
+  Future<void> setProfile({String? name, AvatarLook? avatar}) async {
+    await _remember(await api.patchMe(name: name, avatar: avatar));
+    touch();
+  }
+
+  Future<void> setPhoto(String base64) async {
+    await _remember(await api.setPhoto(base64));
+    touch();
+  }
+
+  Future<void> removePhoto() async {
+    await _remember(await api.removePhoto());
+    touch();
   }
 
   void touch() {

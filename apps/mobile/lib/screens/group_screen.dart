@@ -18,6 +18,7 @@ import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
+import 'common.dart';
 import 'expense_sheet.dart';
 import 'group_options.dart';
 import 'group_sheets.dart';
@@ -29,9 +30,17 @@ enum _Tab { expenses, settle }
 /// Friends' changes arrive live (server-sent events), with a slow poll as a fallback; with no
 /// connection it shows the copy on this device and keeps what you add until it can send it.
 class GroupScreen extends StatefulWidget {
-  const GroupScreen({super.key, required this.groupId, this.initial});
+  const GroupScreen({
+    super.key,
+    required this.groupId,
+    this.initial,
+    this.addOnOpen = false,
+  });
   final String groupId;
   final GroupDetail? initial;
+
+  /// Opens "Add expense" as soon as the group is there (Home's + picked this group).
+  final bool addOnOpen;
 
   @override
   State<GroupScreen> createState() => _GroupScreenState();
@@ -69,8 +78,21 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
       final cached = await _session.repo.cachedGroup(widget.groupId);
       if (mounted && cached != null && _g == null) setState(() => _g = cached);
     }
+    if (widget.addOnOpen && _g != null) _addWhenShown();
     await _load();
+    if (widget.addOnOpen) _addWhenShown();
     _listen();
+  }
+
+  bool _added = false;
+
+  /// Home's + chose this group: the expense sheet comes up over it once it is on screen.
+  void _addWhenShown() {
+    if (_added || _g == null || !mounted) return;
+    _added = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _addOrEdit();
+    });
   }
 
   void _listen() {
@@ -186,12 +208,24 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   Future<void> _addOrEdit({Expense? e, Rect? origin}) async {
     final g = _g;
     if (g == null) return;
+    final timings = _session.timings;
+    // add_expense runs from the + to the save (Home's + may have started it already).
+    if (e == null && !timings.running('add_expense')) {
+      timings.start('add_expense');
+    }
     final r = await showExpenseSheet(
       context,
       group: g,
       editing: e,
       origin: origin,
     );
+    if (e == null) {
+      if (r == null) {
+        timings.cancel('add_expense');
+      } else {
+        timings.finish('add_expense');
+      }
+    }
     if (r == null || !mounted) return;
     _apply(r.detail);
     final deleted = r.deletedId;
@@ -249,6 +283,7 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     if (g == null) return false;
     try {
       final r = await _session.repo.pay(g, t);
+      _session.timings.finish('settle');
       if (!mounted) return true;
       _apply(r.detail);
       final s = _session.s;
@@ -269,44 +304,18 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
   Future<void> _remind(Transfer t) async {
     final g = _g!;
     final s = _session.s;
-    final text = s.fill(s.remindMessage, {
-      'name': g.nameOf(t.from),
-      'amount': money(t.amount, g.currency, s.lang),
-      'group': g.name,
-    });
-    final opened = await _session.device.open(
-      Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}'),
+    await sendReminder(
+      _session,
+      s.fill(s.remindMessage, {
+        'name': g.nameOf(t.from),
+        'amount': money(t.amount, g.currency, s.lang),
+        'group': g.name,
+      }),
     );
-    if (!opened) await _session.device.share(text: text);
   }
 
-  Future<void> _payWith(Transfer t, PayTo p) async {
-    final g = _g!;
-    final s = _session.s;
-    final method = p.label?.isNotEmpty == true
-        ? p.label!
-        : s.raw('pay_${p.kind}');
-    final action = payAction(p, t.amount, g.currency);
-    Future<void> copy(String text) async {
-      await _session.device.copy(text);
-      haptic(Haptic.success);
-      if (mounted) {
-        _toast('${s.fill(s.payCopied, {'method': method})} ${s.payThenMark}');
-      }
-    }
-
-    switch (action) {
-      case PayOpen(:final url):
-        final ok = await _session.device.open(Uri.parse(url));
-        if (!ok) {
-          await copy(url);
-        } else if (mounted) {
-          _toast(s.payThenMark);
-        }
-      case PayCopy(:final text):
-        await copy(text);
-    }
-  }
+  Future<void> _payWith(Transfer t, PayTo p) =>
+      payWithMethod(context, p, amount: t.amount, currency: _g!.currency);
 
   Future<void> _options() async {
     final g = _g;
@@ -377,7 +386,8 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
     final last = g.expenses.isEmpty ? null : g.expenses.first;
     return NNPage(
       key: const ValueKey('group'),
-      title: '${g.emoji} ${g.name}'.trim(),
+      title: g.name,
+      titleLeading: CoverTile(cover: g.cover, size: 40),
       leading: back,
       actions: [
         GlassIconButton(
@@ -453,7 +463,11 @@ class _GroupScreenState extends State<GroupScreen> with WidgetsBindingObserver {
               values: _Tab.values,
               selected: _tab,
               label: (t) => t == _Tab.expenses ? s.expenses : s.settleUp,
-              onChanged: (t) => setState(() => _tab = t),
+              onChanged: (t) {
+                // settle runs from opening the settle-up list to marking something paid.
+                if (t == _Tab.settle) _session.timings.start('settle');
+                setState(() => _tab = t);
+              },
             ),
           ),
         ),
@@ -684,7 +698,8 @@ class _BalanceHero extends StatelessWidget {
     final p = NNTheme.of(context).palette;
     final b = group.myBalance;
     final label = b > 0 ? s.youAreOwed : (b < 0 ? s.youOwe : s.allSettled);
-    final color = b > 0 ? p.success : (b < 0 ? p.danger : p.text);
+    // Owing is not an error: it is in the text colour, never red.
+    final color = b > 0 ? p.success : p.text;
     return Padding(
       padding: const EdgeInsets.only(top: NNSpace.xs, bottom: NNSpace.xs),
       child: Semantics(
@@ -779,7 +794,7 @@ class _ExpenseRow extends StatelessWidget {
                 children: [
                   Text(
                     e.title,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: NNType.body.copyWith(color: p.text),
                   ),
@@ -806,15 +821,11 @@ class _ExpenseRow extends StatelessWidget {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.sizeOf(context).width * 0.42,
               ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: AlignmentDirectional.centerEnd,
-                child: Text(
-                  amount,
-                  style: NNType.headline.copyWith(
-                    color: p.text,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+              child: AmountText(
+                amount,
+                style: NNType.headline.copyWith(
+                  color: p.text,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -962,6 +973,9 @@ class _TransferCardState extends State<_TransferCard>
                 children: [
                   Avatar(
                     name: group.nameOf(t.from == group.me ? t.to : t.from),
+                    look: group
+                        .member(t.from == group.me ? t.to : t.from)
+                        ?.avatar,
                   ),
                   const SizedBox(width: NNSpace.sm),
                   Expanded(
@@ -979,18 +993,16 @@ class _TransferCardState extends State<_TransferCard>
                             ),
                             style: NNType.callout.copyWith(color: p.text),
                           ),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
+                          // The names on the first line, the amount on its own line.
+                          AmountText(
+                            amount,
                             alignment: AlignmentDirectional.centerStart,
-                            child: Text(
-                              amount,
-                              style: NNType.title3.copyWith(
-                                color: p.text,
-                                fontFamily: nnDisplayFamily,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
+                            style: NNType.title3.copyWith(
+                              color: p.text,
+                              fontFamily: nnDisplayFamily,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                           ),
                         ],
@@ -1068,7 +1080,7 @@ class _BalanceRow extends StatelessWidget {
         .replaceAll('{amount}', '')
         .trim();
     final amount = b == 0 ? null : money(b.abs(), group.currency, s.lang);
-    final color = b > 0 ? p.success : (b < 0 ? p.danger : p.text2);
+    final color = balanceColor(p, b);
     return MergeSemantics(
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 56),
@@ -1077,7 +1089,7 @@ class _BalanceRow extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, c) => Row(
               children: [
-                Avatar(name: m.name, size: 32),
+                Avatar(name: m.name, look: m.avatar, size: 32),
                 const SizedBox(width: NNSpace.sm),
                 Expanded(
                   child: Text(
@@ -1102,18 +1114,12 @@ class _BalanceRow extends StatelessWidget {
                         ),
                       ),
                       if (amount != null)
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: Text(
-                            amount,
-                            key: ValueKey('balance-${m.id}'),
-                            style: NNType.headline.copyWith(
-                              color: color,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
+                        AmountText(
+                          amount,
+                          key: ValueKey('balance-${m.id}'),
+                          style: NNType.headline.copyWith(
+                            color: color,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                     ],
@@ -1153,7 +1159,7 @@ class _SearchFieldState extends State<_SearchField> {
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: p.surface,
-        shape: StadiumBorder(side: BorderSide(color: p.separator)),
+        shape: const StadiumBorder(),
       ),
       child: SearchFieldBody(
         controller: widget.controller,
@@ -1162,7 +1168,7 @@ class _SearchFieldState extends State<_SearchField> {
         onChanged: widget.onChanged,
         fieldKey: const ValueKey('expense-search'),
         clearKey: const ValueKey('expense-search-clear'),
-        ring: p.focus,
+        ring: p.accent,
       ),
     );
   }

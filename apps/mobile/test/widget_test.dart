@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nussnuss/app.dart';
+import 'package:nussnuss/core/identity.dart';
 import 'package:nussnuss/core/suggest.dart';
 import 'package:nussnuss/data/api.dart';
 import 'package:nussnuss/data/services.dart';
@@ -528,11 +531,14 @@ void main() {
     expect(find.text('Taxi'), findsOneWidget);
     expect(byKey('pending'), findsOneWidget);
     expect(balance(tester), 'AED 20.00');
+    // Home says so too.
+    await goBack(tester);
+    expect(byKey('pending-home'), findsOneWidget);
 
     app.server.offline = false;
     await app.session.repo.sync();
     await tester.pumpAndSettle();
-    expect(byKey('pending'), findsNothing);
+    expect(byKey('pending-home'), findsNothing);
     expect(app.server.groupNamed('Salalah trip').expenses, hasLength(1));
     await leave(tester);
   });
@@ -544,10 +550,11 @@ void main() {
     final app = await pumpApp(tester);
     await startWithGroup(tester);
     await goBack(tester);
-    // With narrow space the other tab shows only its icon, so tap it by key.
-    await tapKey(tester, 'tab-1');
-    expect(byKey('settings'), findsOneWidget);
-    // The status card is at the top; the list builds lazily, so look before scrolling away.
+    await tapKey(tester, 'tab-2');
+    expect(byKey('you'), findsOneWidget);
+    // The profile comes first; keeping the account follows the appearance and Plus.
+    expect(byKey('profile'), findsOneWidget);
+    await reveal(tester, byKey('account-status'));
     expect(
       find.text('Keep your groups if you lose this phone'),
       findsOneWidget,
@@ -630,7 +637,7 @@ void main() {
     await tapKey(tester, 'who-${g.members[1]['id']}');
     await tapKey(tester, 'join');
     expect(byKey('group'), findsOneWidget);
-    expect(find.text('${g.emoji} Salalah trip'), findsWidgets);
+    expect(find.text('Salalah trip'), findsWidgets);
     await leave(tester);
   });
 
@@ -649,8 +656,13 @@ void main() {
       await tapKey(tester, 'more');
       await tapIt(tester, byKey('sheet-close').last);
       await goBack(tester);
+      expect(byKey('groups'), findsOneWidget);
+      expect(tester.takeException(), isNull);
       await tapKey(tester, 'tab-1');
-      expect(byKey('settings'), findsOneWidget);
+      expect(byKey('activity'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tapKey(tester, 'tab-2');
+      expect(byKey('you'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await leave(tester);
     });
@@ -732,7 +744,7 @@ void main() {
     expect(app.session.glass, GlassPref.tinted);
     await startWithGroup(tester);
     await goBack(tester);
-    await tapKey(tester, 'tab-1');
+    await tapKey(tester, 'tab-2');
     await reveal(tester, byKey('settings-glass'));
     for (final g in GlassPref.values) {
       expect(byKey('seg-$g'), findsOneWidget);
@@ -762,39 +774,36 @@ void main() {
     // The tab bar floats over the group too.
     expect(byKey('tab-0'), findsOneWidget);
 
-    // Settings and back: the group is still open under Groups.
-    await tapKey(tester, 'tab-1');
-    expect(byKey('settings'), findsOneWidget);
+    // You and back: the group is still open under Home.
+    await tapKey(tester, 'tab-2');
+    expect(byKey('you'), findsOneWidget);
     await tapKey(tester, 'tab-0');
     expect(byKey('group'), findsOneWidget);
 
-    // Already at the top of the group: tapping Groups goes back to the list.
+    // Already at the top of the group: tapping Home goes back to Home's first page.
     await tapKey(tester, 'tab-0');
     expect(byKey('group'), findsNothing);
     expect(byKey('groups'), findsOneWidget);
     expect(find.text('Salalah trip'), findsOneWidget);
 
-    // Scrolled down in Settings: tapping Settings scrolls back to the top.
-    await tapKey(tester, 'tab-1');
+    // Scrolled down in You: tapping You scrolls back to the top.
+    await tapKey(tester, 'tab-2');
     ScrollPosition position() => tester
         .state<ScrollableState>(
           find
-              .descendant(
-                of: byKey('settings'),
-                matching: find.byType(Scrollable),
-              )
+              .descendant(of: byKey('you'), matching: find.byType(Scrollable))
               .first,
         )
         .position;
-    await tester.drag(byKey('settings'), const Offset(0, -600));
+    await tester.drag(byKey('you'), const Offset(0, -600));
     await tester.pumpAndSettle();
     expect(position().pixels, greaterThan(100));
-    await tapKey(tester, 'tab-1');
+    await tapKey(tester, 'tab-2');
     expect(position().pixels, 0);
     await leave(tester);
   });
 
-  testWidgets('a notification opens its group inside the Groups tab', (
+  testWidgets('a notification opens its group inside the Home tab', (
     tester,
   ) async {
     final server = FakeServer();
@@ -837,7 +846,7 @@ void main() {
     await startWithGroup(tester);
     await addExpense(tester, '120', 'Chalet');
     await goBack(tester);
-    await tapKey(tester, 'add');
+    await tapKey(tester, 'new-group');
     await tester.enterText(byKey('group-name'), 'Our flat');
     await tester.enterText(byKey('person-name'), 'Huda');
     await tapKey(tester, 'add-person');
@@ -978,6 +987,326 @@ void main() {
     await tester.drag(byKey('groups'), const Offset(0, 60));
     await tester.pumpAndSettle();
     expect(count('GET /groups'), groups + 1);
+    await leave(tester);
+  });
+
+  testWidgets('Home: the overall balance, the next step and the people '
+      'strip, from the overview', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await addExpense(tester, '120', 'Chalet');
+    await goBack(tester);
+
+    // 120 paid, 40 each: Sara and Omar owe me 40 each.
+    expect(find.text('Overall, you get back'), findsOneWidget);
+    expect(
+      tester.widget<RollingText>(byKey('overall-balance')).text,
+      'AED 80.00',
+    );
+    expect(find.text('In 1 group'), findsOneWidget);
+    expect(byKey('next-step'), findsOneWidget);
+    expect(
+      tester.widget<Text>(byKey('next-line')).data,
+      endsWith('owes you AED 40.00'),
+    );
+    for (final name in ['Sara', 'Omar']) {
+      expect(
+        find.descendant(of: byKey('people-strip'), matching: find.text(name)),
+        findsOneWidget,
+      );
+    }
+    await meetsStandards(tester);
+    // The group card says what happened last, in words.
+    await reveal(tester, find.textContaining('You added Chalet'));
+    expect(find.textContaining('You added Chalet'), findsOneWidget);
+
+    // Remind from the next step: WhatsApp with the amount and the group.
+    await tapKey(tester, 'next-remind');
+    expect(app.device.opened.last.host, 'wa.me');
+    expect(
+      app.device.opened.last.queryParameters['text'],
+      contains('AED 40.00'),
+    );
+
+    // Marked as paid right there: the overall balance follows.
+    await tapKey(tester, 'next-mark-paid');
+    expect(find.text('Marked as paid'), findsOneWidget);
+    expect(
+      tester.widget<RollingText>(byKey('overall-balance')).text,
+      'AED 40.00',
+    );
+    expect(app.server.groupNamed('Salalah trip').payments, hasLength(1));
+
+    // "See all" lists everyone.
+    await tapKey(tester, 'see-all-people');
+    expect(byKey('people'), findsOneWidget);
+    expect(find.text('Sara'), findsOneWidget);
+    Navigator.of(tester.element(byKey('people'))).pop();
+    await tester.pumpAndSettle();
+
+    // The jobs the redesign measures were timed and sent.
+    expect([
+      for (final t in app.server.timings) t['job'],
+    ], containsAll(<String>['add_expense', 'find_balance']));
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets("Home's + adds an expense: straight into the only group, or "
+      'pick one', (tester) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    await tapKey(tester, 'add');
+    expect(byKey('group'), findsOneWidget);
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await typeAmount(tester, '30');
+    await tapKey(tester, 'save-expense');
+    expect(balance(tester), 'AED 20.00');
+    await goBack(tester);
+
+    await tapKey(tester, 'new-group');
+    await tester.enterText(byKey('group-name'), 'Our flat');
+    await tester.enterText(byKey('person-name'), 'Huda');
+    await tapKey(tester, 'add-person');
+    await tapKey(tester, 'create-group');
+    await goBack(tester);
+    await tapKey(tester, 'add');
+    expect(byKey('group-picker'), findsOneWidget);
+    expect(byKey('pick-new-group'), findsOneWidget);
+    await tapKey(tester, 'pick-${app.server.groupNamed('Our flat').id}');
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await tapKey(tester, 'sheet-close');
+    expect(byKey('group'), findsOneWidget);
+    await leave(tester);
+  });
+
+  testWidgets('a person: settle everything in one go, with Undo', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await addExpense(tester, '120', 'Chalet');
+    await goBack(tester);
+    final g = app.server.groupNamed('Salalah trip');
+
+    await tapIt(
+      tester,
+      find.descendant(of: byKey('people-strip'), matching: find.text('Sara')),
+    );
+    expect(byKey('person'), findsOneWidget);
+    expect(find.text('Overall, Sara owes you'), findsOneWidget);
+    expect(
+      tester.widget<RollingText>(byKey('person-amount')).text,
+      'AED 40.00',
+    );
+    expect(byKey('shared-group-${g.id}'), findsOneWidget);
+    await reveal(tester, find.text('Chalet'));
+    expect(find.text('+AED 40.00'), findsOneWidget);
+    await meetsStandards(tester);
+
+    await tapKey(tester, 'remind-all');
+    expect(
+      app.device.opened.last.queryParameters['text'],
+      contains('you owe me AED 40.00'),
+    );
+
+    await tapKey(tester, 'settle-all');
+    expect(byKey('settle-sheet'), findsOneWidget);
+    expect(byKey('settle-row-${g.id}'), findsOneWidget);
+    await tapKey(tester, 'settle-confirm');
+    expect(find.text('Settled with Sara'), findsOneWidget);
+    expect(find.text('You and Sara are even'), findsOneWidget);
+    expect(byKey('settle-all'), findsNothing);
+    expect(g.payments, hasLength(1));
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(g.payments, isEmpty);
+    expect(find.text('Overall, Sara owes you'), findsOneWidget);
+    // settle ran from opening Sara to settling up.
+    expect([for (final t in app.server.timings) t['job']], contains('settle'));
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('Activity: what friends did, what it means for you, and Mark '
+      'all read', (tester) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    await addExpense(tester, '30', 'Chalet');
+    app.server.claim('Salalah trip', 'Sara');
+    app.server.addExpenseBy('Salalah trip', 'Sara', 'Lunch', 4500);
+    await goBack(tester);
+
+    await tapKey(tester, 'tab-1');
+    expect(byKey('activity'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Sara added Lunch', findRichText: true), findsOneWidget);
+    expect(find.textContaining('your share AED 22.50'), findsOneWidget);
+    expect(find.text('You added Chalet', findRichText: true), findsOneWidget);
+    expect(find.textContaining('you lent AED 15.00'), findsOneWidget);
+    // Only Sara's is new: the dot, the count and the badge on the tab.
+    expect(find.text('1 new'), findsOneWidget);
+    expect(byKey('tab-badge-1'), findsOneWidget);
+
+    await tapKey(tester, 'mark-all-read');
+    expect(app.server.calls, contains('POST /activity/seen'));
+    expect(byKey('tab-badge-1'), findsNothing);
+    expect(byKey('mark-all-read'), findsNothing);
+
+    // A row opens its group, inside the Activity tab.
+    await tapIt(tester, find.text('Sara added Lunch', findRichText: true));
+    expect(byKey('group'), findsOneWidget);
+    expect(byKey('tab-1'), findsOneWidget);
+    await leave(tester);
+  });
+
+  testWidgets('You: photo, emoji or initial, a colour and the name, with a '
+      'live preview', (tester) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    await tapKey(tester, 'tab-2');
+    await tapKey(tester, 'profile');
+    expect(byKey('profile-sheet'), findsOneWidget);
+
+    await tapKey(tester, 'seg-emoji');
+    await tapKey(tester, 'emoji-4');
+    await tapKey(tester, 'tone-mint');
+    Avatar preview() => tester.widget<Avatar>(
+      find.descendant(
+        of: byKey('profile-preview'),
+        matching: find.byType(Avatar),
+      ),
+    );
+    expect(preview().look, const AvatarLook.emoji('🦊', 'mint'));
+    await tester.enterText(byKey('profile-name'), 'Talal A');
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: byKey('profile-preview'),
+        matching: find.text('Talal A'),
+      ),
+      findsOneWidget,
+    );
+    await tapKey(tester, 'profile-save');
+    expect(byKey('profile-sheet'), findsNothing);
+    expect(app.session.me!.name, 'Talal A');
+    expect(app.session.me!.look, const AvatarLook.emoji('🦊', 'mint'));
+
+    // A photo from the library goes up at once; one too big says so.
+    await tapKey(tester, 'profile');
+    await tapKey(tester, 'seg-photo');
+    app.device.avatarPhoto = Uint8List(80000);
+    await tapKey(tester, 'choose-photo');
+    expect(
+      find.text('That photo is too big. Try another one.'),
+      findsOneWidget,
+    );
+    app.device.avatarPhoto = Uint8List(2000);
+    await tapKey(tester, 'choose-photo');
+    expect(app.session.me!.look.kind, 'photo');
+    expect(byKey('remove-photo'), findsOneWidget);
+    await tapKey(tester, 'remove-photo');
+    expect(app.session.me!.look.kind, 'initial');
+    await tapKey(tester, 'sheet-close');
+    await leave(tester);
+  });
+
+  testWidgets('large text: the tab bar and + keep their size, and holding a '
+      'tab shows it big', (tester) async {
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    final tab = tester.getRect(byKey('tab-1')).size;
+    final add = tester.getRect(byKey('add')).size;
+    // Below 135 % there is no large content viewer.
+    final small = await tester.startGesture(tester.getCenter(byKey('tab-1')));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(byKey('large-content'), findsNothing);
+    await small.up();
+    await leave(tester);
+
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    expect(tester.getRect(byKey('tab-1')).size, tab);
+    expect(tester.getRect(byKey('add')).size, add);
+
+    final hold = await tester.startGesture(tester.getCenter(byKey('tab-1')));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(byKey('large-content'), findsOneWidget);
+    await hold.up();
+    await tester.pumpAndSettle();
+    expect(byKey('large-content'), findsNothing);
+    // Letting go picks the tab.
+    expect(byKey('activity'), findsOneWidget);
+    await leave(tester);
+  });
+
+  testWidgets('owing is never red: what you owe is in the text colour', (
+    tester,
+  ) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    final g = app.server.groupNamed('Salalah trip');
+    final me = g.members[0]['id']! as String;
+    final sara = g.members[1]['id']! as String;
+    // Sara paid 50, split equally: I owe her 25.
+    await tapKey(tester, 'add');
+    await typeAmount(tester, '50');
+    await tester.enterText(byKey('title'), 'Dinner');
+    await tapKey(tester, 'details');
+    await tapKey(tester, 'payer-$sara');
+    await tapKey(tester, 'save-expense');
+    final p = NNTheme.of(tester.element(byKey('my-balance'))).palette;
+    expect(balance(tester), 'AED 25.00');
+    expect(tester.widget<RollingText>(byKey('my-balance')).style.color, p.text);
+    await tapKey(tester, 'seg-_Tab.settle');
+    expect(tester.widget<AmountText>(byKey('balance-$me')).style.color, p.text);
+
+    await goBack(tester);
+    expect(find.text('Overall, you owe'), findsOneWidget);
+    expect(
+      tester.widget<RollingText>(byKey('overall-balance')).style.color,
+      p.text,
+    );
+    expect(p.text, isNot(p.danger));
+    // The next step is to pay Sara; she shared no way to be paid, so there is only Mark as paid.
+    expect(
+      tester.widget<Text>(byKey('next-line')).data,
+      'You owe Sara AED 25.00',
+    );
+    expect(byKey('next-pay'), findsNothing);
+    expect(byKey('next-mark-paid'), findsOneWidget);
+    await reveal(tester, byKey('group-balance-${g.id}'));
+    expect(
+      tester.widget<AmountText>(byKey('group-balance-${g.id}')).style.color,
+      p.text,
+    );
+    await leave(tester);
+  });
+
+  testWidgets('group options: a bill that repeats is added from the empty '
+      'state', (tester) async {
+    final server = FakeServer()..plus = true;
+    await pumpApp(tester, server: server);
+    await startWithGroup(tester);
+    await tapKey(tester, 'more');
+    expect(byKey('no-repeating'), findsOneWidget);
+    await tapKey(tester, 'add-repeating');
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await typeAmount(tester, '900');
+    await tester.enterText(byKey('title'), 'Rent');
+    await tapKey(tester, 'save-expense');
+    expect(server.groupNamed('Salalah trip').recurring, hasLength(1));
+    expect(byKey('no-repeating'), findsNothing);
+    await tapIt(tester, byKey('sheet-close').last);
     await leave(tester);
   });
 
@@ -1143,6 +1472,10 @@ void main() {
       'abcdefgh12',
     );
     expect(inviteToken(Uri.parse('/join/abcdefgh12')), 'abcdefgh12');
+    expect(
+      inviteToken(Uri.parse('https://nussnuss.app/j/k7m2q9xd4p')),
+      'k7m2q9xd4p',
+    );
     expect(inviteToken(Uri.parse('https://nussnuss.app/g/abc')), isNull);
     expect(inviteToken(Uri.parse('/')), isNull);
   });

@@ -32,6 +32,7 @@ Future<ExpenseResult?> showExpenseSheet(
   required GroupDetail group,
   Expense? editing,
   Rect? origin,
+  String? repeat,
 }) {
   final s = context.s;
   return showNNSheet<ExpenseResult>(
@@ -39,7 +40,7 @@ Future<ExpenseResult?> showExpenseSheet(
     key: const ValueKey('expense-sheet'),
     title: editing == null ? s.addExpense : s.editExpense,
     origin: origin,
-    builder: (_) => ExpenseForm(group: group, editing: editing),
+    builder: (_) => ExpenseForm(group: group, editing: editing, repeat: repeat),
   );
 }
 
@@ -81,9 +82,17 @@ DateTime _nextPeriod(DateTime d, String every) {
 /// split to everyone equally; Details opens the rest only when someone needs it. The split preview
 /// uses the same rules as the server, so what you see is exactly what gets saved.
 class ExpenseForm extends StatefulWidget {
-  const ExpenseForm({super.key, required this.group, this.editing});
+  const ExpenseForm({
+    super.key,
+    required this.group,
+    this.editing,
+    this.repeat,
+  });
   final GroupDetail group;
   final Expense? editing;
+
+  /// 'week' or 'month': a new bill that repeats (from group options, with Plus).
+  final String? repeat;
 
   @override
   State<ExpenseForm> createState() => _ExpenseFormState();
@@ -131,6 +140,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
     final e = widget.editing;
     if (e != null) {
       _fill(e);
+      _details = true;
+    } else if (widget.repeat != null) {
+      _repeat = widget.repeat!;
       _details = true;
     }
     // The summary and the chips follow the title as it is typed.
@@ -642,6 +654,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                 label: m.isMe ? s.you : m.name,
                 selected: _paidBy == m.id,
                 onTap: () => setState(() => _paidBy = m.id),
+                leading: Avatar(name: m.name, look: m.avatar, size: 24),
               ),
           ],
         ),
@@ -1052,7 +1065,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
       constraints: const BoxConstraints(minHeight: 56),
       child: Row(
         children: [
-          Avatar(name: m.name, size: 32),
+          Avatar(name: m.name, look: m.avatar, size: 32),
           const SizedBox(width: NNSpace.sm),
           Expanded(
             child: Column(
@@ -1203,19 +1216,17 @@ class _ShareBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = NNTheme.of(context).palette;
-    final colors = [
-      p.accent,
-      p.highlight,
-      p.success,
-      p.danger,
-      p.onAccentSoft,
-      p.text2,
-    ];
+    final nn = NNTheme.of(context);
+    final p = nn.palette;
+    // Each person's share in the colour of their avatar (never red: a share is not a debt).
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
     final parts = [
       for (var i = 0; i < members.length; i++)
         if ((owed[members[i].id] ?? 0) > 0)
-          (flex: owed[members[i].id]!, color: colors[i % colors.length]),
+          (
+            flex: owed[members[i].id]!,
+            color: (covers[members[i].avatar.tone] ?? covers['violet']!).fg,
+          ),
     ];
     return ExcludeSemantics(
       child: ClipRRect(

@@ -127,6 +127,7 @@ class Repo extends ChangeNotifier {
 
   static const _queueKey = 'nn:queue';
   static const _groupsKey = 'nn:cache:groups';
+  static const _overviewKey = 'nn:cache:overview';
   static String _groupKey(String id) => 'nn:cache:g:$id';
 
   final _ops = <PendingOp>[];
@@ -159,6 +160,7 @@ class Repo extends ChangeNotifier {
     _server.clear();
     await store.write(_queueKey, null);
     await store.write(_groupsKey, null);
+    await store.write(_overviewKey, null);
   }
 
   Future<void> _saveQueue() async {
@@ -214,6 +216,23 @@ class Repo extends ChangeNotifier {
     final list = await api.groups();
     await store.write(_groupsKey, jsonEncode([for (final g in list) g.json]));
     return list;
+  }
+
+  /// Home's last overview on this device, shown at once while the server's answer comes.
+  Future<Overview?> cachedOverview() async {
+    final raw = await store.read(_overviewKey);
+    if (raw == null) return null;
+    try {
+      return Overview.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<Overview> overview() async {
+    final o = await api.overview();
+    await store.write(_overviewKey, jsonEncode(o.json));
+    return o;
   }
 
   Future<GroupDetail?> cachedGroup(String id) async {

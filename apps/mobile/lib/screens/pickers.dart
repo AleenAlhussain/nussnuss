@@ -42,6 +42,7 @@ class PickerField extends StatelessWidget {
           decoration: BoxDecoration(
             color: p.surface2,
             borderRadius: BorderRadius.circular(NNRadius.control),
+            border: Border.all(color: p.edge),
           ),
           child: Row(
             children: [
@@ -129,7 +130,7 @@ class _CurrencyListState extends State<_CurrencyList> {
             focusNode: _focus,
             hint: s.search,
             onChanged: () => setState(() {}),
-            ring: p.focus,
+            ring: p.accent,
             fieldKey: const ValueKey('currency-search'),
           ),
         ),

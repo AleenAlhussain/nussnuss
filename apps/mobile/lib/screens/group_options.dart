@@ -15,6 +15,7 @@ import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
+import 'expense_sheet.dart';
 import 'paywall.dart';
 import 'pickers.dart';
 import 'summary_card.dart';
@@ -84,6 +85,13 @@ class _OptionsState extends State<_Options> {
     final session = SessionScope.read(context);
     if (session.hasPlus(g)) return true;
     return showPaywall(context, group: g);
+  }
+
+  /// A new bill that repeats every month: the expense sheet with "Repeats" already set.
+  Future<void> _addRepeating() async {
+    if (!await _needPlus() || !mounted) return;
+    final r = await showExpenseSheet(context, group: g, repeat: 'month');
+    if (r != null && mounted) _take(r.detail);
   }
 
   Future<void> _reminders(bool on) async {
@@ -191,9 +199,16 @@ class _OptionsState extends State<_Options> {
         ),
         SectionLabel(s.recurringTitle),
         if (g.recurring.isEmpty)
-          Text(
-            s.plusFRecurring,
-            style: NNType.footnote.copyWith(color: p.text2),
+          Padding(
+            key: const ValueKey('no-repeating'),
+            padding: const EdgeInsetsDirectional.only(
+              start: NNSpace.xxs,
+              bottom: NNSpace.xs,
+            ),
+            child: Text(
+              s.noRepeating,
+              style: NNType.footnote.copyWith(color: p.text2),
+            ),
           )
         else
           NNCard(
@@ -213,6 +228,22 @@ class _OptionsState extends State<_Options> {
                   ),
                 ],
               ],
+            ),
+          ),
+        const SizedBox(height: NNSpace.xs),
+        NNButton(
+          key: const ValueKey('add-repeating'),
+          label: s.addRepeating,
+          icon: Icons.event_repeat_rounded,
+          kind: ButtonKind.tinted,
+          onTap: _busy ? null : _addRepeating,
+        ),
+        if (!plus)
+          Padding(
+            padding: const EdgeInsets.only(top: NNSpace.xs),
+            child: Text(
+              '${s.plusFRecurring} · ${s.needsPlus}',
+              style: NNType.footnote.copyWith(color: p.text2),
             ),
           ),
         SectionLabel(s.circles),
@@ -787,6 +818,7 @@ class _CircleBodyState extends State<_CircleBody> {
                       key: ValueKey('circle-paid-${r.round}-$m'),
                       label: name(m),
                       avatarName: g.nameOf(m),
+                      look: g.member(m)?.avatar,
                       late: r.late.contains(m),
                       paid: r.paid.contains(m),
                       onChanged: _busy ? null : (v) => _toggle(r.round, m, v),
@@ -824,12 +856,14 @@ class _PaidToggle extends StatefulWidget {
     super.key,
     required this.label,
     required this.avatarName,
+    this.look,
     required this.late,
     required this.paid,
     required this.onChanged,
   });
   final String label;
   final String avatarName;
+  final AvatarLook? look;
   final bool late;
   final bool paid;
   final ValueChanged<bool>? onChanged;
@@ -889,7 +923,7 @@ class _PaidToggleState extends State<_PaidToggle>
         constraints: const BoxConstraints(minHeight: 52),
         child: Row(
           children: [
-            Avatar(name: widget.avatarName, size: 28),
+            Avatar(name: widget.avatarName, look: widget.look, size: 28),
             const SizedBox(width: NNSpace.sm),
             Expanded(
               child: Text(label, style: NNType.body.copyWith(color: p.text)),

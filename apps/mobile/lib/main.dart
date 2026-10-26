@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'data/accessibility.dart';
 import 'data/api.dart';
 import 'data/live.dart';
 import 'data/plugins.dart';
@@ -12,6 +13,7 @@ import 'data/session.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(watchReduceTransparency());
   final transport = IoTransport();
   final api = Api(baseUrl: defaultApiUrl(), transport: transport.call);
   _reportCrashes(api);

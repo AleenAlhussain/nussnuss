@@ -299,9 +299,13 @@ class NNPage extends StatefulWidget {
     this.titleKey,
     this.pinned,
     this.pinnedHeight = 56,
+    this.titleLeading,
   });
 
   final String title;
+
+  /// Sits before the large title (a group's cover).
+  final Widget? titleLeading;
   final List<Widget> slivers;
   final Widget? leading;
   final List<Widget> actions;
@@ -435,6 +439,18 @@ class _NNPageState extends State<NNPage> with SingleTickerProviderStateMixin {
     }
   }
 
+  Widget _withLeading(Widget title) {
+    final leading = widget.titleLeading;
+    if (leading == null) return title;
+    return Row(
+      children: [
+        ExcludeSemantics(child: leading),
+        const SizedBox(width: NNSpace.sm),
+        Expanded(child: title),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _tab?._remove(_scroll);
@@ -494,12 +510,14 @@ class _NNPageState extends State<NNPage> with SingleTickerProviderStateMixin {
                     excluding: _collapsed || !_settled,
                     child: Semantics(
                       header: true,
-                      child: Text(
-                        widget.title,
-                        key: widget.titleKey,
-                        style: NNType.largeTitle.copyWith(color: p.text),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      child: _withLeading(
+                        Text(
+                          widget.title,
+                          key: widget.titleKey,
+                          style: NNType.largeTitle.copyWith(color: p.text),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ),
@@ -553,7 +571,10 @@ class _NNPageState extends State<NNPage> with SingleTickerProviderStateMixin {
                 child: AnimatedOpacity(
                   opacity: _collapsed ? 1 : 0,
                   duration: duration,
-                  child: _Band(height: bar),
+                  // Under a pinned search field too, so rows never show crisp behind it.
+                  child: _Band(
+                    height: bar + (pinned != null ? widget.pinnedHeight : 0),
+                  ),
                 ),
               ),
             ),
@@ -680,14 +701,17 @@ class _Fixed extends SliverPersistentHeaderDelegate {
 }
 
 /// The top bar once content has scrolled under it: the glass of the current level (blurred and
-/// tinted; opaque for Solid) with a 16 pt fade at its lower edge instead of a hard line.
+/// tinted; opaque for Solid), then a soft 24 pt scroll-edge fade: the glass thins out and the page
+/// colour takes over, so rows dissolve into the bar instead of meeting a hard line.
 class _Band extends StatelessWidget {
   const _Band({required this.height});
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    final g = NNTheme.of(context).glass;
+    final nn = NNTheme.of(context);
+    final g = nn.glass;
+    final bg = nn.palette.bg;
     Widget band = Container(height: height, color: g.fill);
     if (g.blur > 0) {
       band = ClipRect(
@@ -703,12 +727,17 @@ class _Band extends StatelessWidget {
       children: [
         band,
         Container(
-          height: 16,
+          height: 24,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [g.fill, g.fill.withValues(alpha: 0)],
+              colors: [
+                Color.lerp(g.fill, bg, 0.5)!,
+                bg.withValues(alpha: 0.35),
+                bg.withValues(alpha: 0),
+              ],
+              stops: const [0, 0.45, 1],
             ),
           ),
         ),

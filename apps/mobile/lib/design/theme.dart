@@ -64,6 +64,7 @@ NNPalette _contrasted(NNPalette p) => NNPalette(
   surface: p.surface,
   surface2: p.surface2,
   separator: p.text3,
+  edge: p.text2,
   text: p.text,
   text2: p.text,
   text3: p.text2,
@@ -162,7 +163,7 @@ ThemeData buildTheme({
 
   final field = OutlineInputBorder(
     borderRadius: BorderRadius.circular(NNRadius.control),
-    borderSide: BorderSide.none,
+    borderSide: BorderSide(color: p.edge),
   );
 
   return ThemeData(
@@ -188,13 +189,17 @@ ThemeData buildTheme({
         horizontal: NNSpace.md,
         vertical: 14,
       ),
+      // Every field shows its edge (1 pt, ≥ 3:1 on every surface); focused, a 2 pt accent outline.
       border: field,
       enabledBorder: field,
       focusedBorder: field.copyWith(
-        borderSide: BorderSide(color: p.focus, width: 2),
+        borderSide: BorderSide(color: p.accent, width: 2),
       ),
       errorBorder: field.copyWith(
         borderSide: BorderSide(color: p.danger, width: 1.5),
+      ),
+      focusedErrorBorder: field.copyWith(
+        borderSide: BorderSide(color: p.danger, width: 2),
       ),
     ),
     snackBarTheme: SnackBarThemeData(

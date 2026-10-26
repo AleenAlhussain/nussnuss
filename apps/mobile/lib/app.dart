@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'data/accessibility.dart';
 import 'data/session.dart';
 import 'design/coin.dart';
 import 'design/page.dart';
@@ -19,10 +20,13 @@ class NussNussApp extends StatefulWidget {
   State<NussNussApp> createState() => _NussNussAppState();
 }
 
-/// The invite token in a link like https://nussnuss.app/join/abc123, or null.
+/// The invite code in a link like https://nussnuss.app/j/k7m2q9xd4p (or the older /join/…), or
+/// null.
 String? inviteToken(Uri uri) {
   final seg = uri.pathSegments.where((p) => p.isNotEmpty).toList();
-  return seg.length == 2 && seg[0] == 'join' && seg[1].length >= 8
+  return seg.length == 2 &&
+          (seg[0] == 'j' || seg[0] == 'join') &&
+          seg[1].length >= 8
       ? seg[1]
       : null;
 }
@@ -83,9 +87,12 @@ class _NussNussAppState extends State<NussNussApp> with WidgetsBindingObserver {
     return SessionScope(
       session: session,
       child: ListenableBuilder(
-        listenable: session,
+        listenable: Listenable.merge([session, reduceTransparency]),
         builder: (context, _) {
-          final glass = session.glass;
+          // Reduce Transparency turns glass solid, like Increase Contrast does.
+          final glass = reduceTransparency.value
+              ? GlassPref.solid
+              : session.glass;
           final look = session.activeLook;
           return MaterialApp(
             title: session.s.appName,

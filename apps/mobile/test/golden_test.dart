@@ -11,9 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nussnuss/core/suggest.dart';
+import 'package:nussnuss/format.dart' show clock;
 
 import 'widget_test.dart'
-    show leave, pumpApp, startWithGroup, tapKey, typeAmount;
+    show goBack, leave, pumpApp, startWithGroup, tapKey, typeAmount;
 
 Future<void> _loadFonts() async {
   Future<ByteData> asset(String w) =>
@@ -59,8 +60,15 @@ Future<void> _shot(WidgetTester tester, String name) async {
 void main() {
   setUpAll(_loadFonts);
   // Suggestions follow the time of day: pin it to lunchtime so the images do not depend on when CI runs.
-  setUp(() => suggestionClock = () => DateTime(2026, 10, 25, 13));
-  tearDown(() => suggestionClock = DateTime.now);
+  // Times on Home and in Activity ("1:00 PM") follow the same pinned clock.
+  setUp(() {
+    suggestionClock = () => DateTime(2026, 10, 25, 13);
+    clock = () => DateTime(2026, 10, 25, 13);
+  });
+  tearDown(() {
+    suggestionClock = DateTime.now;
+    clock = DateTime.now;
+  });
 
   for (final MapEntry(key: mode, value: prefs) in _modes.entries) {
     testWidgets('screens · $mode', (tester) async {
@@ -90,6 +98,14 @@ void main() {
       await tapKey(tester, 'more');
       await _shot(tester, '$mode-06-options');
       await tapKey(tester, 'sheet-close');
+
+      // The three tabs.
+      await goBack(tester);
+      await _shot(tester, '$mode-07-home');
+      await tapKey(tester, 'tab-1');
+      await _shot(tester, '$mode-08-activity');
+      await tapKey(tester, 'tab-2');
+      await _shot(tester, '$mode-09-you');
 
       await leave(tester);
     });

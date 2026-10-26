@@ -10,6 +10,10 @@ String money(int minor, String code, String lang) =>
 
 DateTime dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
 
+/// "Now" for labels like "2:05 PM" and the Today / Yesterday sections of Activity. Tests pin it,
+/// so pictures of the screens do not change with the time they are taken.
+DateTime Function() clock = DateTime.now;
+
 /// "Today", "Yesterday", or "Mon 20 Oct", in the person's language with Western digits (same as the web).
 String dayLabel(DateTime d, NNStrings s, {DateTime? now}) {
   final diff = dayKey(now ?? DateTime.now()).difference(dayKey(d)).inDays;

@@ -12,21 +12,26 @@ import '../design/page.dart';
 import '../design/theme.dart';
 import '../design/tokens.g.dart';
 import '../design/widgets.dart';
+import '../format.dart';
 import 'account_sheets.dart';
+import 'common.dart';
 import 'group_sheets.dart' show webUrl;
 import 'paywall.dart';
+import 'profile_sheet.dart';
 import 'summary_card.dart' show originOf;
 
-class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.onScrollDirection});
-  final ValueChanged<bool>? onScrollDirection;
+/// You: your profile first (how friends see you), where you stand overall, how the app looks,
+/// Plus, keeping your account, and the legal pages.
+class YouScreen extends StatefulWidget {
+  const YouScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  State<YouScreen> createState() => _YouScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _YouScreenState extends State<YouScreen> {
   Security? _security;
+  Overview? _overview;
   int _seen = -1;
 
   @override
@@ -36,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (rev != _seen) {
       _seen = rev;
       _loadSecurity();
+      _loadOverview();
     }
   }
 
@@ -45,6 +51,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _security = sec);
     } on ApiException {
       // Shown as unknown; the rows still work.
+    }
+  }
+
+  Future<void> _loadOverview() async {
+    final repo = SessionScope.read(context).repo;
+    if (_overview == null) {
+      final cached = await repo.cachedOverview();
+      if (mounted && cached != null) setState(() => _overview ??= cached);
+    }
+    try {
+      final o = await repo.overview();
+      if (mounted) setState(() => _overview = o);
+    } on ApiException {
+      // The copy on this device (if any) stays.
     }
   }
 
@@ -139,31 +159,177 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final plan = session.plan;
     final me = session.me;
     final day = MaterialLocalizations.of(context).formatMediumDate;
+    final totals = _overview?.totals ?? const <Money>[];
     return NNPage(
-      key: const ValueKey('settings'),
-      title: s.settings,
-      onScrollDirection: widget.onScrollDirection,
+      key: const ValueKey('you'),
+      title: s.tabYou,
       onRefresh: () async {
-        await Future.wait([_loadSecurity(), session.refreshPlan()]);
+        await Future.wait([
+          _loadSecurity(),
+          _loadOverview(),
+          session.refreshPlan(),
+        ]);
       },
       slivers: [
         SliverList.list(
           children: [
-            if ((me?.name ?? '').isNotEmpty)
-              NNCard(
-                child: Row(
-                  children: [
-                    Avatar(name: me!.name, size: 48),
-                    const SizedBox(width: NNSpace.sm),
-                    Expanded(
-                      child: Text(
-                        me.name,
-                        style: NNType.title3.copyWith(color: p.text),
+            // How friends see you, first.
+            if (me != null)
+              Pressable(
+                key: const ValueKey('profile'),
+                onTap: () => showProfileSheet(context),
+                semanticLabel: '${me.name}, ${s.profileEdit}',
+                excludeChildSemantics: true,
+                scale: 0.98,
+                child: NNCard(
+                  child: Row(
+                    children: [
+                      Avatar(name: me.name, look: me.look, size: 60),
+                      const SizedBox(width: NNSpace.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              me.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: NNType.title3.copyWith(color: p.text),
+                            ),
+                            Text(
+                              s.profileEdit,
+                              style: NNType.footnote.copyWith(color: p.text2),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      Icon(
+                        Directionality.of(context) == TextDirection.rtl
+                            ? Icons.chevron_left_rounded
+                            : Icons.chevron_right_rounded,
+                        color: p.text3,
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
+            // Where you stand, across every group.
+            SectionLabel(s.overallYou),
+            NNCard(
+              key: const ValueKey('you-balance'),
+              child: Semantics(
+                container: true,
+                child: totals.isEmpty
+                    ? Text(
+                        s.overallEven,
+                        style: NNType.headline.copyWith(color: p.text),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            totals.first.amount > 0
+                                ? s.overallBack
+                                : s.overallOwe,
+                            style: NNType.footnote.copyWith(
+                              color: p.text2,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          AmountText(
+                            money(
+                              totals.first.amount.abs(),
+                              totals.first.currency,
+                              s.lang,
+                            ),
+                            alignment: AlignmentDirectional.centerStart,
+                            style: NNType.title2.copyWith(
+                              color: balanceColor(p, totals.first.amount),
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          for (final m in totals.skip(1))
+                            Text(
+                              signedMoney(m.amount, m.currency, s),
+                              style: NNType.subhead.copyWith(
+                                color: balanceColor(p, m.amount),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
+
+            // How the app looks: a live preview, then the glass and the look.
+            SectionLabel(s.appearance),
+            NNCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // A picture of the app: it keeps its proportions at large text sizes.
+                  MediaQuery.withClampedTextScaling(
+                    maxScaleFactor: 1.3,
+                    child: _AppearancePreview(totals: totals),
+                  ),
+                  const SizedBox(height: NNSpace.md),
+                  _Label(s.glass),
+                  Segmented<GlassPref>(
+                    key: const ValueKey('settings-glass'),
+                    values: GlassPref.values,
+                    selected: session.glass,
+                    label: (g) => switch (g) {
+                      GlassPref.clear => s.glassAuto,
+                      GlassPref.tinted => s.glassTinted,
+                      GlassPref.solid => s.glassSolid,
+                    },
+                    onChanged: session.setGlass,
+                  ),
+                  _Hint(s.glassHint),
+                  const SizedBox(height: NNSpace.md),
+                  _Label(s.look),
+                  Wrap(
+                    spacing: NNSpace.xs,
+                    runSpacing: NNSpace.xs,
+                    children: [
+                      for (final l in looks)
+                        NNChip(
+                          key: ValueKey('look-$l'),
+                          label: s.raw('look_$l'),
+                          icon: plan.ownsLook(l)
+                              ? Icons.palette_outlined
+                              : Icons.lock_outline_rounded,
+                          selected: session.activeLook == l,
+                          onTap: () => _pickLook(l),
+                        ),
+                    ],
+                  ),
+                  _Hint(s.lookHint),
+                  const SizedBox(height: NNSpace.md),
+                  _Label(s.theme),
+                  Segmented<ThemePref>(
+                    values: ThemePref.values,
+                    selected: session.theme,
+                    label: (t) => s.raw('theme_${t.name}'),
+                    onChanged: session.setTheme,
+                  ),
+                ],
+              ),
+            ),
+
+            // Plus.
+            const SizedBox(height: NNSpace.md),
+            _PlusRow(
+              title: s.plus,
+              subtitle: plan.plus && plan.plusUntil != null
+                  ? s.fill(s.plusOnUntil, {'date': day(plan.plusUntil!)})
+                  : s.plusTagline,
+              action: s.seePlus,
+              onTap: () => showPaywall(context),
+            ),
 
             // Keeping the account.
             SectionLabel(s.account),
@@ -262,29 +428,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
 
-            // Plus.
-            SectionLabel(s.yourPlan),
-            _Rows(
-              children: [
-                _Row(
-                  key: const ValueKey('plan'),
-                  icon: Icons.workspace_premium_rounded,
-                  title: plan.plus ? s.plus : s.planFree,
-                  subtitle: plan.plus && plan.plusUntil != null
-                      ? s.fill(s.plusOnUntil, {'date': day(plan.plusUntil!)})
-                      : s.plusTagline,
-                  trailing: Text(
-                    s.seePlus,
-                    style: NNType.subhead.copyWith(
-                      color: p.accent,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () => showPaywall(context),
-                ),
-              ],
-            ),
-
             // How friends pay me.
             SectionLabel(s.payTo),
             _Rows(
@@ -322,44 +465,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: (l) => l == 'ar' ? 'العربية' : 'English',
               onChanged: session.setLang,
             ),
-            SectionLabel(s.theme),
-            Segmented<ThemePref>(
-              values: ThemePref.values,
-              selected: session.theme,
-              label: (t) => s.raw('theme_${t.name}'),
-              onChanged: session.setTheme,
-            ),
-            SectionLabel(s.look),
-            Wrap(
-              spacing: NNSpace.xs,
-              runSpacing: NNSpace.xs,
-              children: [
-                for (final l in looks)
-                  NNChip(
-                    key: ValueKey('look-$l'),
-                    label: s.raw('look_$l'),
-                    icon: plan.ownsLook(l)
-                        ? Icons.palette_outlined
-                        : Icons.lock_outline_rounded,
-                    selected: session.activeLook == l,
-                    onTap: () => _pickLook(l),
-                  ),
-              ],
-            ),
-            _Hint(s.lookHint),
-            SectionLabel(s.glass),
-            Segmented<GlassPref>(
-              key: const ValueKey('settings-glass'),
-              values: GlassPref.values,
-              selected: session.glass,
-              label: (g) => switch (g) {
-                GlassPref.clear => s.glassAuto,
-                GlassPref.tinted => s.glassTinted,
-                GlassPref.solid => s.glassSolid,
-              },
-              onChanged: session.setGlass,
-            ),
-            _Hint(s.glassHint),
             SectionLabel(s.sounds),
             NNCard(
               padding: const EdgeInsets.symmetric(
@@ -433,6 +538,210 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// A small label above a control inside a card.
+class _Label extends StatelessWidget {
+  const _Label(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(
+        start: NNSpace.xxs,
+        bottom: NNSpace.xs,
+      ),
+      child: Semantics(
+        header: true,
+        child: Text(
+          text,
+          style: NNType.subhead.copyWith(
+            color: p.text,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small Home in the current look and glass: it changes as soon as either does.
+class _AppearancePreview extends StatelessWidget {
+  const _AppearancePreview({required this.totals});
+  final List<Money> totals;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.s;
+    final p = NNTheme.of(context).palette;
+    final first = totals.isEmpty ? const Money('AED', 23000) : totals.first;
+    Widget row(String icon, String tone, String name, int amount) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(NNRadius.control),
+      ),
+      child: Row(
+        children: [
+          CoverTile(cover: Cover(icon, tone), size: 26),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: NNType.footnote.copyWith(
+                color: p.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            money(amount.abs(), first.currency, s.lang),
+            style: NNType.caption.copyWith(
+              color: balanceColor(p, amount),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Semantics(
+      label: s.preview,
+      container: true,
+      child: ExcludeSemantics(
+        child: Container(
+          key: const ValueKey('appearance-preview'),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: p.bg,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                first.amount >= 0 ? s.overallBack : s.overallOwe,
+                style: NNType.caption.copyWith(
+                  color: p.text2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                money(first.amount.abs(), first.currency, s.lang),
+                style: NNType.title2.copyWith(
+                  color: balanceColor(p, first.amount == 0 ? 1 : first.amount),
+                ),
+              ),
+              const SizedBox(height: NNSpace.xs),
+              row('plane', 'sky', s.tplTrip, 11000),
+              const SizedBox(height: 6),
+              row('home', 'mint', s.tplNameFlat, -4800),
+              const SizedBox(height: NNSpace.sm),
+              Align(
+                child: Glass(
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (i, icon) in const [
+                        Icons.home_rounded,
+                        Icons.history_rounded,
+                        Icons.person_outline_rounded,
+                      ].indexed)
+                        Container(
+                          width: 52,
+                          height: 34,
+                          decoration: ShapeDecoration(
+                            shape: const StadiumBorder(),
+                            color: i == 0
+                                ? p.text.withValues(alpha: 0.07)
+                                : null,
+                          ),
+                          child: Icon(
+                            icon,
+                            size: 20,
+                            color: i == 0 ? p.text : p.text2,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// NussNuss Plus: a warm card that opens the Plus page.
+class _PlusRow extends StatelessWidget {
+  const _PlusRow({
+    required this.title,
+    required this.subtitle,
+    required this.action,
+    required this.onTap,
+  });
+  final String title;
+  final String subtitle;
+  final String action;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final nn = NNTheme.of(context);
+    final p = nn.palette;
+    final warm = (nn.isDark ? NNCovers.dark : NNCovers.light)['saffron']!;
+    return Pressable(
+      key: const ValueKey('plan'),
+      onTap: onTap,
+      semanticLabel: '$title, $subtitle, $action',
+      excludeChildSemantics: true,
+      scale: 0.98,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(NNRadius.card),
+          gradient: LinearGradient(
+            begin: AlignmentDirectional.topStart,
+            end: AlignmentDirectional.bottomEnd,
+            colors: [warm.bg, p.surface],
+          ),
+          border: Border.all(color: Color.lerp(warm.bg, warm.fg, 0.2)!),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.workspace_premium_rounded, color: warm.fg),
+            const SizedBox(width: NNSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: NNType.headline.copyWith(color: p.text)),
+                  Text(
+                    subtitle,
+                    style: NNType.footnote.copyWith(color: p.text2),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: NNSpace.xs),
+            Text(
+              action,
+              style: NNType.subhead.copyWith(
+                color: p.accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

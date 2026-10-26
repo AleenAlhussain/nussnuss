@@ -136,7 +136,7 @@ class _Row extends StatelessWidget {
       ),
     );
     if (id == null) return MergeSemantics(child: row);
-    // Opens the group it is about, inside the Groups tab.
+    // Opens the group it is about, inside the Home tab.
     return Pressable(
       key: ValueKey('notice-${n.id}'),
       onTap: () {

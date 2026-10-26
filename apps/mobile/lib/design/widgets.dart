@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../core/identity.dart';
 import '../data/session.dart';
 import 'glass.dart';
 import 'motion.dart';
@@ -187,50 +188,193 @@ class Segmented<T> extends StatelessWidget {
   }
 }
 
-/// Initials on a soft color picked from the name, so the same friend always looks the same.
+/// A person: their photo, their emoji or their initial, on the tone they chose (or one picked
+/// from their name), so the same friend always looks the same. A photo falls back to the initial
+/// while it loads or when it can't. [ring] draws a ring around it (on the people strip, the colour
+/// of what you owe each other).
 class Avatar extends StatelessWidget {
-  const Avatar({super.key, required this.name, this.size = 36});
+  const Avatar({
+    super.key,
+    required this.name,
+    this.look,
+    this.size = 36,
+    this.ring,
+  });
   final String name;
+  final AvatarLook? look;
+  final double size;
+  final Color? ring;
+
+  @override
+  Widget build(BuildContext context) {
+    final nn = NNTheme.of(context);
+    final l = look ?? AvatarLook.forName(name);
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
+    final c = covers[l.tone] ?? covers['violet']!;
+    Widget initial() => Center(
+      child: Text(
+        initialOf(name),
+        style: TextStyle(
+          fontSize: size * 0.42,
+          fontWeight: FontWeight.w600,
+          color: c.fg,
+          height: 1.1,
+        ),
+        textScaler: TextScaler.noScaling,
+      ),
+    );
+    final api = context
+        .getInheritedWidgetOfExactType<SessionScope>()
+        ?.notifier
+        ?.api;
+    final Widget face = switch (l.kind) {
+      'emoji' => Center(
+        child: Text(
+          l.value!,
+          style: TextStyle(fontSize: size * 0.54, height: 1.1),
+          textScaler: TextScaler.noScaling,
+        ),
+      ),
+      'photo' when api != null => Image.network(
+        api.photoUrl(l.url!),
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        excludeFromSemantics: true,
+        frameBuilder: (_, child, frame, sync) =>
+            frame == null && !sync ? initial() : child,
+        errorBuilder: (_, _, _) => initial(),
+      ),
+      _ => initial(),
+    };
+    Widget disc = ClipOval(
+      child: SizedBox.square(
+        dimension: size,
+        child: ColoredBox(color: c.bg, child: face),
+      ),
+    );
+    if (ring != null) {
+      final w = math.max(2.0, size * 0.045);
+      disc = Container(
+        padding: EdgeInsets.all(w + 1),
+        decoration: ShapeDecoration(
+          shape: CircleBorder(
+            side: BorderSide(color: ring!, width: w),
+          ),
+        ),
+        child: disc,
+      );
+    }
+    return ExcludeSemantics(child: disc);
+  }
+}
+
+/// The drawn icon for each cover icon name. One icon family (Material rounded) throughout.
+const coverIconData = <String, IconData>{
+  'plane': Icons.flight_rounded,
+  'beach': Icons.beach_access_rounded,
+  'mountain': Icons.landscape_rounded,
+  'car': Icons.directions_car_rounded,
+  'home': Icons.home_rounded,
+  'food': Icons.restaurant_rounded,
+  'coffee': Icons.local_cafe_rounded,
+  'moon': Icons.nightlight_round,
+  'party': Icons.celebration_rounded,
+  'gift': Icons.card_giftcard_rounded,
+  'cart': Icons.shopping_cart_rounded,
+  'heart': Icons.favorite_rounded,
+  'ball': Icons.sports_soccer_rounded,
+  'work': Icons.work_rounded,
+  'book': Icons.menu_book_rounded,
+  'music': Icons.music_note_rounded,
+};
+
+/// A group's cover: its drawn icon on its tone, split on the diagonal into two soft halves like the
+/// coin. Used for group cards and headers.
+class CoverTile extends StatelessWidget {
+  const CoverTile({super.key, required this.cover, this.size = 48});
+  final Cover cover;
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final p = NNTheme.of(context).palette;
-    final pairs = [
-      (p.accentSoft, p.onAccentSoft),
-      (p.successSoft, p.success),
-      (p.dangerSoft, p.danger),
-      (p.surface2, p.text),
-    ];
-    final h = name.runes.fold<int>(0, (a, r) => (a * 31 + r) & 0x7fffffff);
-    final (bg, fg) = pairs[h % pairs.length];
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((s) => s.isNotEmpty)
-        .toList();
-    final initials = parts.isEmpty
-        ? '?'
-        : parts.length == 1
-        ? String.fromCharCodes(parts.first.runes.take(1))
-        : String.fromCharCodes(parts.first.runes.take(1)) +
-              String.fromCharCodes(parts.last.runes.take(1));
+    final nn = NNTheme.of(context);
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
+    final c = covers[cover.tone] ?? covers['violet']!;
+    final other = Color.lerp(c.bg, c.fg, nn.isDark ? 0.14 : 0.08)!;
     return ExcludeSemantics(
       child: Container(
         width: size,
         height: size,
         alignment: Alignment.center,
-        decoration: ShapeDecoration(shape: const CircleBorder(), color: bg),
-        child: Text(
-          initials.toUpperCase(),
-          style: TextStyle(
-            fontSize: size * 0.4,
-            fontWeight: FontWeight.w700,
-            color: fg,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size * 0.29),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [c.bg, c.bg, other, other],
+            stops: const [0, 0.5, 0.5, 1],
           ),
-          textScaler: TextScaler.noScaling,
+        ),
+        child: Icon(
+          coverIconData[cover.icon] ?? Icons.restaurant_rounded,
+          size: size * 0.5,
+          color: c.fg,
         ),
       ),
+    );
+  }
+}
+
+/// An amount on one line. When it doesn't fit it shrinks, but never below body size; only then
+/// does it take a second line.
+class AmountText extends StatelessWidget {
+  const AmountText(
+    this.text, {
+    super.key,
+    required this.style,
+    this.alignment = AlignmentDirectional.centerEnd,
+    this.textAlign,
+  });
+  final String text;
+  final TextStyle style;
+  final AlignmentGeometry alignment;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final one = Text(text, style: style, maxLines: 1, softWrap: false);
+        if (!c.hasBoundedWidth) return one;
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final width = tp.width;
+        tp.dispose();
+        if (width <= c.maxWidth) return one;
+        final size = style.fontSize ?? NNType.body.fontSize!;
+        final floor = math.min(1.0, NNType.body.fontSize! / size);
+        if (c.maxWidth / width >= floor) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: alignment,
+            child: one,
+          );
+        }
+        return Text(
+          text,
+          style: style.copyWith(
+            fontSize: math.min(size, NNType.body.fontSize!),
+          ),
+          maxLines: 2,
+          textAlign: textAlign,
+        );
+      },
     );
   }
 }
@@ -244,6 +388,7 @@ class NNChip extends StatelessWidget {
     required this.onTap,
     this.icon,
     this.trailing,
+    this.leading,
   });
 
   final String label;
@@ -251,6 +396,9 @@ class NNChip extends StatelessWidget {
   final VoidCallback? onTap;
   final IconData? icon;
   final Widget? trailing;
+
+  /// Instead of [icon]: a small avatar (who paid).
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -271,7 +419,7 @@ class NNChip extends StatelessWidget {
           decoration: ShapeDecoration(
             shape: StadiumBorder(
               side: BorderSide(
-                color: selected ? p.accent : p.separator,
+                color: selected ? p.accent : p.edge,
                 width: selected ? 1.5 : 1,
               ),
             ),
@@ -292,7 +440,10 @@ class NNChip extends StatelessWidget {
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (icon != null) ...[
+                  if (leading != null) ...[
+                    leading!,
+                    const SizedBox(width: 6),
+                  ] else if (icon != null) ...[
                     Icon(icon, size: 18, color: fg),
                     const SizedBox(width: 6),
                   ],
@@ -548,14 +699,14 @@ class SearchFieldBody extends StatelessWidget {
     final p = NNTheme.of(context).palette;
     return ListenableBuilder(
       listenable: Listenable.merge([focusNode, controller]),
+      // Its edge shows (1 pt); focused, a 2 pt outline in [ring] (the accent).
       builder: (context, _) => DecoratedBox(
         position: DecorationPosition.foreground,
         decoration: ShapeDecoration(
           shape: StadiumBorder(
-            side: BorderSide(
-              color: focusNode.hasFocus ? ring : ring.withValues(alpha: 0),
-              width: 2,
-            ),
+            side: focusNode.hasFocus
+                ? BorderSide(color: ring, width: 2)
+                : BorderSide(color: p.edge),
           ),
         ),
         child: Row(

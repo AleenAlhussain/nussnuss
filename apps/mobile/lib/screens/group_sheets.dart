@@ -344,19 +344,30 @@ class _ShareBodyState extends State<_ShareBody> {
   String _message(NNStrings s) =>
       '${s.fill(s.shareMessage, {'name': widget.group.name})} $_link';
 
+  late final Session _session = SessionScope.read(context);
+
   @override
   void initState() {
     super.initState();
+    // invite runs from this sheet opening to the link going out (shared or copied).
+    _session.timings.start('invite');
     _make();
   }
 
+  @override
+  void dispose() {
+    _session.timings.cancel('invite');
+    super.dispose();
+  }
+
+  void _sent() => _session.timings.finish('invite');
+
   Future<void> _make() async {
-    final s = SessionScope.read(context).s;
+    final s = _session.s;
     try {
-      final token = await SessionScope.read(
-        context,
-      ).api.invite(widget.group.id);
-      if (mounted) setState(() => _link = '${webUrl()}/join/$token');
+      // The short link (/j/<code>); servers before it only sent the token.
+      final link = await _session.api.inviteLink(widget.group.id);
+      if (mounted) setState(() => _link = '${webUrl()}${link.path}');
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.offline ? s.offline : e.message);
     }
@@ -399,9 +410,13 @@ class _ShareBodyState extends State<_ShareBody> {
             icon: Icons.ios_share_rounded,
             onTap: _link == null
                 ? null
-                : () => SessionScope.read(
-                    context,
-                  ).device.share(text: _message(s), origin: originOf(ctx)),
+                : () async {
+                    await _session.device.share(
+                      text: _message(s),
+                      origin: originOf(ctx),
+                    );
+                    _sent();
+                  },
           ),
         ),
         const SizedBox(height: NNSpace.sm),
@@ -413,7 +428,7 @@ class _ShareBodyState extends State<_ShareBody> {
           onTap: _link == null
               ? null
               : () async {
-                  final device = SessionScope.read(context).device;
+                  final device = _session.device;
                   final text = _message(s);
                   final ok = await device.open(
                     Uri.parse(
@@ -421,6 +436,7 @@ class _ShareBodyState extends State<_ShareBody> {
                     ),
                   );
                   if (!ok) await device.share(text: text);
+                  _sent();
                 },
         ),
         const SizedBox(height: NNSpace.sm),
@@ -432,7 +448,8 @@ class _ShareBodyState extends State<_ShareBody> {
           onTap: _link == null
               ? null
               : () async {
-                  await SessionScope.read(context).device.copy(_message(s));
+                  await _session.device.copy(_message(s));
+                  _sent();
                   haptic(Haptic.success);
                   if (!mounted) return;
                   setState(() => _copied = true);

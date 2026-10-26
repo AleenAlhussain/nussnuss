@@ -1,7 +1,9 @@
 // Mirrors packages/core/test/core.test.ts case for case. Change both together.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nussnuss/core/extras.dart';
+import 'package:nussnuss/core/identity.dart';
 import 'package:nussnuss/core/money.dart';
+import 'package:nussnuss/core/qr.dart';
 import 'package:nussnuss/core/split.dart';
 import 'package:nussnuss/core/suggest.dart';
 import 'package:nussnuss/core/types.dart';
@@ -416,6 +418,90 @@ void main() {
       final none = parseReceipt('nothing to see here', 'AED');
       expect(none.items.isEmpty, isTrue);
       expect(none.total, isNull);
+    });
+  });
+
+  group('categories from the title', () {
+    test('common words in English and Arabic', () {
+      expect(categoryFromTitle('Fuel'), 'transport');
+      expect(categoryFromTitle('Petrol for the car'), 'transport');
+      expect(categoryFromTitle('Dinner at the souq'), 'food');
+      expect(categoryFromTitle('Water bill'), 'bills');
+      expect(categoryFromTitle('Water'), 'groceries');
+      expect(categoryFromTitle('عشاء'), 'food');
+      expect(categoryFromTitle('البنزين'), 'transport');
+      expect(categoryFromTitle('فاتورة الكهرباء'), 'bills');
+      expect(categoryFromTitle('هديّة لسارة'), 'shopping');
+      expect(categoryFromTitle('Hotel in Salalah'), 'stay');
+      expect(categoryFromTitle('Something else'), isNull);
+      expect(categoryFromTitle(''), isNull);
+    });
+  });
+
+  group('covers and avatars', () {
+    test('old emoji become drawn icons; own covers win', () {
+      expect(groupCover(emoji: '✈️'), const Cover('plane', 'sky'));
+      expect(groupCover(emoji: '🏠'), const Cover('home', 'violet'));
+      expect(
+        groupCover(emoji: '🌙', cover: 'moon:saffron'),
+        const Cover('moon', 'saffron'),
+      );
+      expect(groupCover(emoji: '🤷'), const Cover('food', 'coral'));
+      expect(parseCover('plane:nope'), isNull);
+    });
+    test('tones and initials are stable', () {
+      expect(toneFor('Omar'), toneFor(' omar '));
+      expect(coverTones.contains(toneFor('سارة')), isTrue);
+      expect(initialOf('omar'), 'O');
+      expect(initialOf('  مها'), 'م');
+      expect(initialOf(''), '?');
+    });
+    test('contextual ideas follow the cover icon', () {
+      expect(contextIdeas(13, 'home'), [
+        'groceries',
+        'rent',
+        'internet',
+        'electricity',
+      ]);
+      expect(contextIdeas(20, 'moon')[0], 'iftar');
+      expect(contextIdeas(9, 'plane').contains('hotel'), isTrue);
+    });
+  });
+
+  group('QR codes', () {
+    test('a short invite link fits a small code', () {
+      final code = encodeQr('https://nussnuss.app/j/k7m2q9xd4p');
+      expect(code.version <= 4, isTrue);
+      expect(code.size, code.version * 4 + 17);
+    });
+    test('long texts use bigger versions, too long ones are refused', () {
+      final seen = <int>{};
+      for (final len in [
+        1,
+        10,
+        20,
+        30,
+        45,
+        60,
+        80,
+        100,
+        120,
+        150,
+        170,
+        190,
+        205,
+      ]) {
+        final text = 'نص نص https://example.com/${'x' * len}';
+        seen.add(encodeQr(text.substring(0, len < 1 ? 1 : len)).version);
+      }
+      expect(seen.length >= 8, isTrue);
+      var threw = false;
+      try {
+        encodeQr('x' * 400);
+      } on FormatException {
+        threw = true;
+      }
+      expect(threw, isTrue);
     });
   });
 }

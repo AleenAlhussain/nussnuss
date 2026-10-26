@@ -186,6 +186,7 @@ class Api {
     String? name,
     String? locale,
     List<PayTo>? payTo,
+    AvatarLook? avatar,
   }) async => Me.fromJson(
     _map(
       await _call(
@@ -195,10 +196,27 @@ class Api {
           'name': ?name,
           'locale': ?locale,
           if (payTo != null) 'payTo': [for (final p in payTo) p.toJson()],
+          // Only an initial or an emoji; photos go up through [setPhoto].
+          if (avatar != null)
+            'avatar': {
+              'kind': avatar.kind,
+              'tone': avatar.tone,
+              'value': ?avatar.value,
+            },
         },
       ),
     ),
   );
+
+  /// A profile photo: a small JPEG, PNG or WebP (at most 70 KB), as base64.
+  Future<Me> setPhoto(String base64) async => Me.fromJson(
+    _map(await _call('POST', '/me/photo', body: {'data': base64})),
+  );
+  Future<Me> removePhoto() async =>
+      Me.fromJson(_map(await _call('DELETE', '/me/photo')));
+
+  /// Where a photo avatar's relative url is served.
+  String photoUrl(String url) => url.startsWith('http') ? url : '$baseUrl$url';
   Future<void> deleteMe() => _call('DELETE', '/me');
 
   // Keeping an account: recovery codes, codes for another device, signed-in devices.
@@ -327,6 +345,73 @@ class Api {
   Future<GroupDetail> group(String id) async =>
       _detail(await _call('GET', '/groups/$id'));
 
+  Future<GroupDetail> patchGroup(
+    String id, {
+    String? name,
+    String? cover,
+    String? currency,
+  }) async => _detail(
+    await _call(
+      'PATCH',
+      '/groups/$id',
+      body: {'name': ?name, 'cover': ?cover, 'currency': ?currency},
+    ),
+  );
+
+  // Home, people and activity across every group.
+  Future<Overview> overview() async =>
+      Overview.fromJson(_map(await _call('GET', '/overview')));
+
+  Future<PersonDetail> person(String key) async =>
+      PersonDetail.fromJson(_map(await _call('GET', '/people/$key')));
+
+  /// Records a payment in every shared group that isn't even. Returns the payments, for Undo.
+  Future<({List<String> payments, PersonDetail person})> settleAll(
+    String key, {
+    List<String>? groups,
+  }) async {
+    final d = _map(
+      await _call('POST', '/people/$key/settle', body: {'groups': ?groups}),
+    );
+    return (
+      payments: [for (final p in _list(d['payments'])) p['id'] as String],
+      person: PersonDetail.fromJson(_map(d['person'])),
+    );
+  }
+
+  Future<void> undoPayments(List<String> ids) =>
+      _call('POST', '/payments/undo', body: {'ids': ids});
+
+  Future<ActivityPage> activity({String? before, String? group}) async {
+    final q = {'before': ?before, 'group': ?group};
+    final path = q.isEmpty
+        ? '/activity'
+        : '/activity?${Uri(queryParameters: q).query}';
+    return ActivityPage.fromJson(_map(await _call('GET', path)));
+  }
+
+  Future<void> activitySeen() => _call('POST', '/activity/seen');
+
+  /// Anonymous task timings (phase 0 of the design plan): no token, never awaited by the interface.
+  Future<void> timing({
+    required String app,
+    required String version,
+    required String job,
+    required int ms,
+    required bool ok,
+  }) => _call(
+    'POST',
+    '/telemetry/timing',
+    body: {
+      'app': app,
+      'version': version,
+      'job': job,
+      'ms': ms.clamp(0, 600000),
+      'ok': ok,
+    },
+    auth: false,
+  );
+
   Future<int> version(String id, int since) async =>
       ((_map(await _call('GET', '/groups/$id/changes?since=$since')))['version']
               as num)
@@ -373,7 +458,14 @@ class Api {
       _detail(await _call('DELETE', '/payments/$paymentId'));
 
   Future<String> invite(String groupId) async =>
-      _map(await _call('POST', '/groups/$groupId/invites'))['token'] as String;
+      (await inviteLink(groupId)).token;
+
+  /// A new invite: the short code and the path the web serves it at (/j/<code>).
+  Future<({String token, String path})> inviteLink(String groupId) async {
+    final d = _map(await _call('POST', '/groups/$groupId/invites'));
+    final token = d['token'] as String;
+    return (token: token, path: d['path'] as String? ?? '/j/$token');
+  }
 
   Future<({Map<String, dynamic> group, List<Member> members})> preview(
     String token,

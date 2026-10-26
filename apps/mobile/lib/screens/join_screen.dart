@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/identity.dart';
 import '../data/api.dart';
 import '../data/models.dart';
 import '../data/session.dart';
@@ -135,18 +136,12 @@ class _JoinScreenState extends State<JoinScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
-            child: Container(
-              width: 88,
-              height: 88,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: p.surface,
-                borderRadius: BorderRadius.circular(NNRadius.card),
+            child: CoverTile(
+              cover: groupCover(
+                cover: preview.group['cover'] as String?,
+                emoji: preview.group['emoji'] as String?,
               ),
-              child: Text(
-                preview.group['emoji'] as String? ?? '',
-                style: const TextStyle(fontSize: 44),
-              ),
+              size: 88,
             ),
           ),
           const SizedBox(height: NNSpace.sm),

@@ -586,143 +586,268 @@ class TabItem {
     required this.label,
     required this.icon,
     required this.selectedIcon,
+    this.badge = 0,
+    this.badgeLabel,
   });
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+
+  /// New things to look at (Activity): a small count on the icon.
+  final int badge;
+
+  /// How a screen reader says the badge ("3 new").
+  final String? badgeLabel;
 }
 
-/// Floating glass capsule with the tabs. The selected tab sits in a filled capsule; while the person
-/// scrolls down the bar shrinks and the other labels tuck away, then it comes back on scroll up.
-class GlassTabBar extends StatelessWidget {
+/// Floating glass capsule with the tabs: each an icon over its name, the selected one in a filled
+/// capsule. While the person scrolls down the bar shrinks to icons only, then it comes back on
+/// scroll up. It keeps its size at large text sizes (like the system's own bars); instead, with
+/// [largeContent], pressing and holding a tab shows it big in the middle of the screen (Apple's
+/// large content viewer), and letting go there picks it.
+class GlassTabBar extends StatefulWidget {
   const GlassTabBar({
     super.key,
     required this.items,
     required this.index,
     required this.onChanged,
     this.compact = false,
+    this.largeContent = false,
   });
 
   final List<TabItem> items;
   final int index;
   final ValueChanged<int> onChanged;
   final bool compact;
+  final bool largeContent;
 
-  static TextStyle _labelStyle(Color color) =>
-      NNType.subhead.copyWith(fontWeight: FontWeight.w600, color: color);
+  @override
+  State<GlassTabBar> createState() => _GlassTabBarState();
+}
 
-  /// Width the bar needs with every label showing, at the person's text size.
-  double _fullWidth(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-    var w = 12.0;
-    for (final item in items) {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: item.label,
-          style: DefaultTextStyle.of(
-            context,
-          ).style.merge(_labelStyle(const Color(0xFF000000))),
-        ),
-        textDirection: Directionality.of(context),
-        textScaler: scaler,
-        maxLines: 1,
-      )..layout();
-      w += 32 + 22 + 8 + tp.width;
-      tp.dispose();
+class _GlassTabBarState extends State<GlassTabBar> {
+  OverlayEntry? _hud;
+
+  void _showHud(int i) {
+    _hideHud();
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    final item = widget.items[i];
+    final entry = OverlayEntry(
+      builder: (_) => _LargeContent(icon: item.selectedIcon, label: item.label),
+    );
+    _hud = entry;
+    overlay.insert(entry);
+    haptic(Haptic.selection);
+  }
+
+  void _hideHud() {
+    final h = _hud;
+    _hud = null;
+    if (h != null && h.mounted) {
+      h.remove();
+      h.dispose();
     }
-    return w;
+  }
+
+  @override
+  void dispose() {
+    _hideHud();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // With large text or long labels, the unselected labels tuck away (as when scrolling), and as a last
-    // resort the whole capsule scales down, so the bar never overflows the screen.
-    return LayoutBuilder(
-      builder: (context, box) {
-        final squeezed =
-            box.hasBoundedWidth && _fullWidth(context) > box.maxWidth;
-        return FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: AlignmentDirectional.bottomStart,
-          child: _bar(context, hideOthers: compact || squeezed),
-        );
-      },
-    );
-  }
-
-  /// While scrolling down ([compact]) the bar folds to icons only; with narrow space
-  /// ([hideOthers]) only the selected tab keeps its label.
-  Widget _bar(BuildContext context, {required bool hideOthers}) {
     final p = NNTheme.of(context).palette;
     final still = reduceMotion(context);
     final duration = still ? NNMotion.fade : NNMotion.standardDuration;
-    return AnimatedScale(
-      scale: compact && !still ? 0.9 : 1,
-      alignment: AlignmentDirectional.bottomStart.resolve(
-        Directionality.of(context),
+    final compact = widget.compact;
+    // Fixed sizes, whatever the text size: the large content viewer is how big text reaches it.
+    // On the narrowest phones the whole capsule scales down rather than overflow.
+    return MediaQuery.withNoTextScaling(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: AlignmentDirectional.bottomStart,
+        child: AnimatedScale(
+          scale: compact && !still ? 0.92 : 1,
+          alignment: AlignmentDirectional.bottomStart.resolve(
+            Directionality.of(context),
+          ),
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          child: Glass(
+            padding: const EdgeInsets.all(5),
+            child: Semantics(
+              container: true,
+              explicitChildNodes: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < widget.items.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 2),
+                    _tab(context, i, p, duration),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      duration: duration,
-      curve: Curves.easeOutCubic,
-      child: Glass(
-        padding: const EdgeInsets.all(6),
-        child: Semantics(
-          container: true,
-          explicitChildNodes: true,
-          child: Row(
+    );
+  }
+
+  Widget _tab(BuildContext context, int i, NNPalette p, Duration duration) {
+    final item = widget.items[i];
+    final selected = i == widget.index;
+    final compact = widget.compact;
+    final color = selected ? p.text : p.text2;
+    Widget icon = Icon(
+      selected ? item.selectedIcon : item.icon,
+      size: 24,
+      color: color,
+    );
+    if (item.badge > 0) {
+      icon = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          icon,
+          PositionedDirectional(
+            top: -4,
+            end: -9,
+            child: Container(
+              key: ValueKey('tab-badge-$i'),
+              constraints: const BoxConstraints(minWidth: 18),
+              height: 18,
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              alignment: Alignment.center,
+              decoration: ShapeDecoration(
+                shape: StadiumBorder(
+                  side: BorderSide(color: p.surface, width: 1.5),
+                ),
+                color: p.accent,
+              ),
+              child: Text(
+                item.badge > 99 ? '99+' : '${item.badge}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: p.onAccent,
+                  height: 1.1,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    final label = [
+      item.label,
+      if (item.badge > 0 && item.badgeLabel != null) item.badgeLabel!,
+    ].join(', ');
+    return GestureDetector(
+      onLongPressStart: widget.largeContent ? (_) => _showHud(i) : null,
+      onLongPressEnd: widget.largeContent
+          ? (_) {
+              _hideHud();
+              widget.onChanged(i);
+            }
+          : null,
+      onLongPressCancel: widget.largeContent ? _hideHud : null,
+      child: Pressable(
+        key: ValueKey('tab-$i'),
+        onTap: () => widget.onChanged(i),
+        haptic: Haptic.light,
+        scale: NNMotion.glassPressScale,
+        selected: selected,
+        semanticLabel: label,
+        excludeChildSemantics: true,
+        child: AnimatedContainer(
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          width: compact ? 54 : 76,
+          height: 54,
+          decoration: ShapeDecoration(
+            shape: const StadiumBorder(),
+            color: selected
+                ? p.text.withValues(alpha: 0.07)
+                : p.text.withValues(alpha: 0),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              AnimatedSize(
+                duration: duration,
+                curve: Curves.easeOutCubic,
+                child: compact
+                    ? const SizedBox(width: 24)
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: SizedBox(
+                          width: 70,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              item.label,
+                              maxLines: 1,
+                              style: NNType.caption.copyWith(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: color,
+                                height: 1.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The large content viewer: a tab's icon and name, big, in the middle of the screen while it is
+/// held.
+class _LargeContent extends StatelessWidget {
+  const _LargeContent({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return Center(
+      child: IgnorePointer(
+        child: Container(
+          key: const ValueKey('large-content'),
+          width: 190,
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: BorderRadius.circular(NNRadius.card),
+            border: Border.all(color: p.separator),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 30,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = 0; i < items.length; i++)
-                Pressable(
-                  key: ValueKey('tab-$i'),
-                  onTap: () => onChanged(i),
-                  haptic: Haptic.light,
-                  scale: NNMotion.glassPressScale,
-                  selected: i == index,
-                  semanticLabel: items[i].label,
-                  excludeChildSemantics: true,
-                  child: AnimatedContainer(
-                    duration: duration,
-                    curve: Curves.easeOutCubic,
-                    height: 48,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: compact ? 13 : 16,
-                    ),
-                    decoration: ShapeDecoration(
-                      shape: const StadiumBorder(),
-                      color: i == index
-                          ? p.surface2
-                          : p.surface2.withValues(alpha: 0),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          i == index ? items[i].selectedIcon : items[i].icon,
-                          size: 22,
-                          color: i == index ? p.text : p.text2,
-                        ),
-                        AnimatedSize(
-                          duration: duration,
-                          curve: Curves.easeOutCubic,
-                          child: (compact || (hideOthers && i != index))
-                              ? const SizedBox.shrink()
-                              : Padding(
-                                  padding: const EdgeInsetsDirectional.only(
-                                    start: 8,
-                                  ),
-                                  child: Text(
-                                    items[i].label,
-                                    style: NNType.subhead.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: i == index ? p.text : p.text2,
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              Icon(icon, size: 72, color: p.text),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                textScaler: TextScaler.noScaling,
+                style: NNType.title1.copyWith(color: p.text),
+              ),
             ],
           ),
         ),

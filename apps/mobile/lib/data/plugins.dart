@@ -104,6 +104,21 @@ class PluginDevice implements Device {
   }
 
   @override
+  Future<Uint8List?> pickAvatarPhoto() async {
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 256,
+        maxHeight: 256,
+        imageQuality: 80,
+      );
+      return photo == null ? null : await photo.readAsBytes();
+    } on Exception {
+      return null;
+    }
+  }
+
+  @override
   Stream<Offset> tilt() {
     const g = 9.81;
     return accelerometerEventStream(samplingPeriod: SensorInterval.uiInterval)
