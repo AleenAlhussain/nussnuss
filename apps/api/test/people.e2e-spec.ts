@@ -136,6 +136,7 @@ describe('Home, people and settling with a person', () => {
     expect(mine).toMatchObject({ actor: { name: 'Talal', me: true }, unread: false, expense: { impact: 20000 } });
     expect(a.unread).toBeGreaterThanOrEqual(1);
     expect((await as(talal.token).get('/overview').expect(200)).body.unread).toBe(a.unread);
+    expect((await as(talal.token).get('/activity/unread').expect(200)).body.unread).toBe(a.unread);
     await as(talal.token).post('/activity/seen').expect(204);
     expect((await as(talal.token).get('/activity').expect(200)).body.unread).toBe(0);
     const onlyFlat = (await as(talal.token).get(`/activity?group=${flat.id}`).expect(200)).body;

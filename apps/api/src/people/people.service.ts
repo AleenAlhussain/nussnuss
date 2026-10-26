@@ -3,7 +3,7 @@ import { type Avatar, coverKey, expenseInGroupCurrency, groupCover, owedInGroupC
 import { and, desc, eq, inArray, isNull, lt, ne, gt, or, sql } from 'drizzle-orm';
 import { avatarView, namePersonKey, userPersonKey } from '../common/identity.js';
 import { DB, type Db } from '../db/db.module.js';
-import { changes, expenses, payments, users } from '../db/schema.js';
+import { changes, expenses, members, payments, users } from '../db/schema.js';
 import { type Computed, type ExpenseView, GroupsService, type MemberRow } from '../groups/groups.service.js';
 
 export interface Money {
@@ -319,6 +319,28 @@ export class PeopleService {
     }
     const more = rows.length === 60 || (items.length >= 30 && last !== rows[rows.length - 1]?.id);
     return { items, next: more && last ? String(last) : null, unread: await this.unread(userId, all, seen) };
+  }
+
+  /** Just the count of new Activity items, cheap enough for the tab badge to ask for on any screen. */
+  async unreadCount(userId: string) {
+    const mineRows = await this.db.select({ groupId: members.groupId }).from(members).where(eq(members.userId, userId));
+    const ids = mineRows.map((r) => r.groupId);
+    if (!ids.length) return 0;
+    const [u] = await this.db.select({ seen: users.activitySeenAt }).from(users).where(eq(users.id, userId));
+    const seen = u?.seen ?? null;
+    const [r] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(changes)
+      .where(
+        and(
+          inArray(changes.groupId, ids),
+          inArray(changes.entity, ['expense', 'payment']),
+          inArray(changes.op, ['create', 'update']),
+          or(isNull(changes.actor), ne(changes.actor, userId)),
+          seen ? gt(changes.at, seen) : undefined,
+        ),
+      );
+    return Math.min(99, r?.n ?? 0);
   }
 
   async markSeen(userId: string) {

@@ -315,6 +315,7 @@ export const api = {
   activity: (opts: { before?: string; group?: string } = {}) =>
     call<ActivityPage>('GET', `/activity${opts.before || opts.group ? '?' : ''}${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}`),
   activitySeen: () => call<void>('POST', '/activity/seen'),
+  activityUnread: () => call<{ unread: number }>('GET', '/activity/unread'),
   group: (id: string) => call<GroupDetail>('GET', `/groups/${id}`),
   changes: (id: string, since: number) => call<{ version: number; changes: unknown[] }>('GET', `/groups/${id}/changes?since=${since}`),
   addMember: (id: string, name: string) => call<GroupDetail>('POST', `/groups/${id}/members`, { name }),

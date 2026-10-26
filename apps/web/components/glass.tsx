@@ -455,6 +455,8 @@ export function Sheet({
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const first = setTimeout(() => {
+      // Someone already tapped into the sheet: leave their focus where it is.
+      if (panel.current?.contains(document.activeElement)) return;
       // The field marked for it first (the group name), otherwise the first control.
       const el = panel.current?.querySelector<HTMLElement>('[data-autofocus]') ?? panel.current?.querySelector<HTMLElement>('input, button:not([data-grabber])');
       el?.focus();

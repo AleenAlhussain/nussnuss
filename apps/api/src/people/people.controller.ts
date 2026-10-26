@@ -67,6 +67,12 @@ export class PeopleController {
     return this.people.activity(user.id, q);
   }
 
+  /** The tab badge: how many Activity items are new. */
+  @Get('activity/unread')
+  async unread(@CurrentUser() user: AuthUser) {
+    return { unread: await this.people.unreadCount(user.id) };
+  }
+
   /** "Mark all read". */
   @Post('activity/seen')
   @HttpCode(204)
