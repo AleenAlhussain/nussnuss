@@ -11,6 +11,7 @@ import 'package:nussnuss/design/theme.dart';
 import 'package:nussnuss/design/widgets.dart';
 import 'package:nussnuss/format.dart';
 import 'package:nussnuss/l10n/strings.g.dart';
+import 'package:nussnuss/screens/intro.dart';
 import 'package:nussnuss/screens/keypad.dart';
 
 import 'fake_server.dart';
@@ -22,10 +23,14 @@ class TestApp {
   final QuietDevice device;
 }
 
+/// Starts the app. The launch intro is off unless [intro]; without [settle] it returns right after
+/// the first frame, for tests that step through time themselves.
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   Map<String, String>? store,
   FakeServer? server,
+  bool intro = false,
+  bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(1170, 2532); // iPhone 15 at 3x
   tester.view.devicePixelRatio = 3;
@@ -40,8 +45,9 @@ Future<TestApp> pumpApp(
     store: MemoryStore(store),
     device: device,
   );
+  launchIntroEnabled = intro;
   await tester.pumpWidget(NussNussApp(session: session));
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
   return TestApp(fake, session, device);
 }
 
@@ -973,6 +979,121 @@ void main() {
     await tester.pumpAndSettle();
     expect(count('GET /groups'), groups + 1);
     await leave(tester);
+  });
+
+  group('launch intro', () {
+    /// Moves time on in 50 ms frames.
+    Future<void> run(WidgetTester tester, int ms) async {
+      for (var t = 0; t < ms; t += 50) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    Finder inIntro(Finder f) =>
+        find.descendant(of: byKey('intro'), matching: f);
+
+    testWidgets('the first launch plays the whole story, then the app is '
+        'usable', (tester) async {
+      final app = await pumpApp(tester, intro: true, settle: false);
+      await tester.pump();
+      expect(byKey('intro'), findsOneWidget);
+      await run(tester, 1000);
+      // The app is already there underneath.
+      expect(byKey('welcome'), findsOneWidget);
+      expect(byKey('intro-coin'), findsOneWidget);
+      await run(tester, 2300);
+      expect(byKey('intro-wordmark'), findsOneWidget);
+      expect(inIntro(find.text('Split it fair.')), findsOneWidget);
+      await run(tester, 600);
+      // At 3.7 s the doors open.
+      expect(byKey('intro-doors'), findsOneWidget);
+      await run(tester, 1000);
+      expect(byKey('intro'), findsNothing);
+      expect(
+        (app.session.store as MemoryStore).values['nn:introSeen'],
+        isNotNull,
+      );
+      await tester.pumpAndSettle();
+      await tapKey(tester, 'start');
+      expect(byKey('name'), findsOneWidget);
+      await leave(tester);
+    });
+
+    testWidgets('haptics: a light tap as the coin pops in, a firm one as the '
+        'halves snap back', (tester) async {
+      final played = recordHaptics();
+      await pumpApp(tester, intro: true, settle: false);
+      await tester.pump();
+      await run(tester, 850);
+      expect(played, isEmpty);
+      await run(tester, 100);
+      expect(played, [Haptic.light]);
+      await run(tester, 1550);
+      expect(played, [Haptic.light]);
+      await run(tester, 100);
+      expect(played, [Haptic.light, Haptic.medium]);
+      await run(tester, 2300);
+      expect(byKey('intro'), findsNothing);
+      await leave(tester);
+    });
+
+    testWidgets('Skip goes straight to the doors', (tester) async {
+      final played = recordHaptics();
+      await pumpApp(tester, intro: true, settle: false);
+      await tester.pump();
+      await run(tester, 400);
+      await tester.tap(byKey('intro-skip'));
+      await tester.pump();
+      expect(byKey('intro-doors'), findsOneWidget);
+      await run(tester, 1100);
+      expect(byKey('intro'), findsNothing);
+      expect(played, isNot(contains(Haptic.medium)));
+      expect(byKey('welcome'), findsOneWidget);
+      await leave(tester);
+    });
+
+    testWidgets('later launches play the short version, gone within a '
+        'second', (tester) async {
+      final played = recordHaptics();
+      await pumpApp(
+        tester,
+        intro: true,
+        settle: false,
+        store: {'nn:introSeen': '1'},
+      );
+      await tester.pump();
+      expect(byKey('intro'), findsOneWidget);
+      expect(byKey('intro-wordmark'), findsNothing);
+      await run(tester, 1100);
+      expect(byKey('intro'), findsNothing);
+      // The halves snap shut with a light tap.
+      expect(played, [Haptic.light]);
+      await leave(tester);
+    });
+
+    testWidgets('Reduce Motion: a still coin that fades, no doors; a screen '
+        'reader: no intro', (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await pumpApp(tester, intro: true, settle: false);
+      await tester.pump();
+      expect(byKey('intro-coin'), findsOneWidget);
+      for (var t = 0; t < 900; t += 50) {
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(byKey('intro-doors'), findsNothing);
+      }
+      expect(byKey('intro'), findsNothing);
+      await leave(tester);
+
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(accessibleNavigation: true);
+      await pumpApp(tester, intro: true, settle: false);
+      expect(byKey('intro'), findsNothing);
+      await leave(tester);
+    });
   });
 
   test('looks: Night is always dark, Saffron follows the setting', () {

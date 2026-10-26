@@ -334,6 +334,7 @@ class NNStrings {
   String get searchExpenses => _m['searchExpenses']!;
   String get pullRefresh => _m['pullRefresh']!;
   String get recentSearches => _m['recentSearches']!;
+  String get introSkip => _m['introSkip']!;
   String get catFood => _m['cat_food']!;
   String get catGroceries => _m['cat_groceries']!;
   String get catTransport => _m['cat_transport']!;
@@ -654,6 +655,7 @@ const _en = <String, String>{
   'searchExpenses': 'Expenses',
   'pullRefresh': 'Pull to refresh',
   'recentSearches': 'Recent',
+  'introSkip': 'Skip',
   'cat_food': 'Food',
   'cat_groceries': 'Groceries',
   'cat_transport': 'Transport',
@@ -974,6 +976,7 @@ const _ar = <String, String>{
   'searchExpenses': 'المصاريف',
   'pullRefresh': 'اسحب للتحديث',
   'recentSearches': 'عمليات البحث الأخيرة',
+  'introSkip': 'تخطّي',
   'cat_food': 'أكل',
   'cat_groceries': 'مقاضي',
   'cat_transport': 'مواصلات',

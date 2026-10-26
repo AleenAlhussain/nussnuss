@@ -89,6 +89,98 @@ class _CoinState extends State<Coin> with SingleTickerProviderStateMixin {
   }
 }
 
+/// One half of the coin as a closed half-disc in [r], starting at angle [start] (π/2 draws the left
+/// half, −π/2 the right one): enamel with depth, a sheen that follows [sheen], and the minted rim.
+void _paintHalf(
+  Canvas canvas,
+  Rect r,
+  double start,
+  Color color,
+  Offset sheen,
+) {
+  final path = Path()
+    ..moveTo(r.center.dx, r.center.dy)
+    ..arcTo(r, start, math.pi, false)
+    ..close();
+  canvas.drawPath(path, Paint()..color = color);
+  canvas.save();
+  canvas.clipPath(path);
+  // Depth: a little darker toward the bottom edge.
+  canvas.drawRect(
+    r,
+    Paint()
+      ..shader = ui.Gradient.linear(r.topCenter, r.bottomCenter, [
+        const Color(0x00000000),
+        const Color(0x2E000000),
+      ]),
+  );
+  // Sheen: a soft light whose spot follows the tilt.
+  final spot =
+      r.center +
+      Offset(
+        r.width * (-0.18 + 0.32 * sheen.dx),
+        r.height * (-0.26 + 0.28 * sheen.dy),
+      );
+  canvas.drawCircle(
+    spot,
+    r.width * 0.62,
+    Paint()
+      ..shader = ui.Gradient.radial(spot, r.width * 0.62, [
+        const Color(0x52FFFFFF),
+        const Color(0x00FFFFFF),
+      ]),
+  );
+  // The minted rim: a fine light ring just inside the edge.
+  canvas.drawArc(
+    r.deflate(r.width * 0.06),
+    start,
+    math.pi,
+    false,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1, r.width * 0.022)
+      ..color = const Color(0x40FFFFFF),
+  );
+  canvas.restore();
+}
+
+/// One half of the coin on its own, drawn in a [size] × [size] box (the whole disc's box), so the
+/// halves can move apart: the indigo (accent) half when [left], else the saffron (highlight) one.
+/// Always left and right, in every language.
+class CoinHalf extends StatelessWidget {
+  const CoinHalf({super.key, required this.left, required this.size});
+  final bool left;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _HalfPainter(left ? p.accent : p.highlight, left),
+    );
+  }
+}
+
+class _HalfPainter extends CustomPainter {
+  _HalfPainter(this.color, this.left);
+  final Color color;
+  final bool left;
+
+  @override
+  void paint(Canvas canvas, Size size) => _paintHalf(
+    canvas,
+    Offset.zero & size,
+    left ? math.pi / 2 : -math.pi / 2,
+    color,
+    Offset.zero,
+  );
+
+  @override
+  bool shouldRepaint(_HalfPainter old) =>
+      old.color != color || old.left != left;
+}
+
 class _CoinPainter extends CustomPainter {
   _CoinPainter(this.join, this.left, this.right, this.sheen);
   final double join;
@@ -96,52 +188,8 @@ class _CoinPainter extends CustomPainter {
   final Color right;
   final Offset sheen;
 
-  void _half(Canvas canvas, Rect r, double start, Color color) {
-    final path = Path()
-      ..moveTo(r.center.dx, r.center.dy)
-      ..arcTo(r, start, math.pi, false)
-      ..close();
-    canvas.drawPath(path, Paint()..color = color);
-    canvas.save();
-    canvas.clipPath(path);
-    // Depth: a little darker toward the bottom edge.
-    canvas.drawRect(
-      r,
-      Paint()
-        ..shader = ui.Gradient.linear(r.topCenter, r.bottomCenter, [
-          const Color(0x00000000),
-          const Color(0x2E000000),
-        ]),
-    );
-    // Sheen: a soft light whose spot follows the tilt.
-    final spot =
-        r.center +
-        Offset(
-          r.width * (-0.18 + 0.32 * sheen.dx),
-          r.height * (-0.26 + 0.28 * sheen.dy),
-        );
-    canvas.drawCircle(
-      spot,
-      r.width * 0.62,
-      Paint()
-        ..shader = ui.Gradient.radial(spot, r.width * 0.62, [
-          const Color(0x52FFFFFF),
-          const Color(0x00FFFFFF),
-        ]),
-    );
-    // The minted rim: a fine light ring just inside the edge.
-    canvas.drawArc(
-      r.deflate(r.width * 0.06),
-      start,
-      math.pi,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(1, r.width * 0.022)
-        ..color = const Color(0x40FFFFFF),
-    );
-    canvas.restore();
-  }
+  void _half(Canvas canvas, Rect r, double start, Color color) =>
+      _paintHalf(canvas, r, start, color, sheen);
 
   @override
   void paint(Canvas canvas, Size size) {

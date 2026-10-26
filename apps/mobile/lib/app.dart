@@ -7,6 +7,7 @@ import 'design/page.dart';
 import 'design/theme.dart';
 import 'design/tokens.g.dart';
 import 'screens/home.dart';
+import 'screens/intro.dart';
 import 'screens/join_screen.dart';
 import 'screens/welcome_screen.dart';
 
@@ -115,8 +116,11 @@ class _NussNussAppState extends State<NussNussApp> with WidgetsBindingObserver {
             ),
             // Everything shares the theme's text style, including what floats above the pages
             // (the tab bar and toasts live in the root overlay, outside any page's Material).
-            builder: (context, child) =>
-                Material(type: MaterialType.transparency, child: child),
+            // The launch intro plays over the app, which builds underneath from the first frame.
+            builder: (context, child) => Material(
+              type: MaterialType.transparency,
+              child: LaunchIntro(child: child!),
+            ),
             // Launched from a link, the platform names the link as the first route; the root
             // screen reads the invite from the session instead of pushing a route for it.
             onGenerateInitialRoutes: (_) => [_rootRoute()],
