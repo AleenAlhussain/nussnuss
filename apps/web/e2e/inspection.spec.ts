@@ -345,12 +345,15 @@ test('phase 3: Equally or Unequally, drag a share onto someone; invite with QR a
   await expect(page.getByTestId('mode').getByRole('tab')).toHaveCount(4);
   await expect(page.getByTestId('drag-shares')).toBeVisible();
   await page.getByTestId('drag-shares').scrollIntoViewIfNeeded();
+  // Measure once the sheet has stopped moving (it animates open and may still be scrolling).
+  await still(page);
   // Drag "+1 share" onto Sami: Sami now has two shares (30 of 60), the buttons still work too.
   const token = (await page.getByTestId('share-token').boundingBox())!;
   const target = (await page.getByTestId('share-drop').nth(1).boundingBox())!;
   await page.mouse.move(token.x + token.width / 2, token.y + token.height / 2);
   await page.mouse.down();
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 });
+  await expect(page.getByTestId('share-drop').nth(1)).toHaveClass(/ring-accent/);
   await page.mouse.up();
   await expect(page.getByTestId('share-count').nth(1)).toHaveText('2');
   await expect(page.getByTestId('split-legend')).toContainText('Sami');

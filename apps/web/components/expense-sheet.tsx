@@ -648,6 +648,8 @@ function DragShares({
 }) {
   const { t, prefs } = useSession();
   const [drag, setDrag] = useState<{ x: number; y: number; over: string | null } | null>(null);
+  // The drag as it is right now: pointer events can arrive before React re-renders with it.
+  const live = useRef<{ over: string | null } | null>(null);
   const targetAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest('[data-drop]') as HTMLElement | null)?.dataset.drop ?? null;
   return (
     <div className="flex flex-col gap-3 rounded-card bg-surface p-3" data-testid="drag-shares">
@@ -679,23 +681,29 @@ function DragShares({
         data-testid="share-token"
         onPointerDown={(e) => {
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          live.current = { over: null };
           setDrag({ x: e.clientX, y: e.clientY, over: null });
         }}
         onPointerMove={(e) => {
-          if (!drag) return;
+          if (!live.current) return;
           const over = targetAt(e.clientX, e.clientY);
-          if (over !== drag.over && over) haptic('selection');
+          if (over !== live.current.over && over) haptic('selection');
+          live.current = { over };
           setDrag({ x: e.clientX, y: e.clientY, over });
         }}
         onPointerUp={(e) => {
-          const over = drag ? targetAt(e.clientX, e.clientY) : null;
+          const over = live.current ? targetAt(e.clientX, e.clientY) : null;
+          live.current = null;
           setDrag(null);
           if (over) {
             haptic('success');
             onAdd(over);
           }
         }}
-        onPointerCancel={() => setDrag(null)}
+        onPointerCancel={() => {
+          live.current = null;
+          setDrag(null);
+        }}
       >
         <HandGrabbing size={18} aria-hidden />
         {t('addShare')}
