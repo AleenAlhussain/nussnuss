@@ -299,8 +299,9 @@ test('phase 2 and 3: You with a profile look, covers, swipe and hold on rows, on
   await expect(page.getByTestId('expense-row')).toHaveCount(3);
 
   // Press and hold a row: a preview and the same actions.
-  const r2 = (await page.getByTestId('expense-row').nth(1).boundingBox())!;
-  await page.mouse.move(r2.x + 40, r2.y + r2.height / 2);
+  // hover() waits for the list to stop moving (the duplicate slides in) and for the row to be what's
+  // under the pointer; then hold.
+  await page.getByTestId('expense-row').nth(1).hover({ position: { x: 40, y: 20 } });
   await page.mouse.down();
   await expect(page.getByTestId('context-menu')).toBeVisible();
   await page.mouse.up();

@@ -224,6 +224,8 @@ test('motion: the sheet steps the page back, a failed save shakes, pull to refre
   await page.getByTestId('tab-settle').click();
   const card = page.getByTestId('transfer').first();
   await expect(card).toBeVisible();
+  // hover() waits for the tab's content to stop moving before we measure.
+  await card.hover({ position: { x: 30, y: 30 } });
   const box = (await card.boundingBox())!;
   const y = box.y + 30;
   await page.mouse.move(box.x + 30, y);
