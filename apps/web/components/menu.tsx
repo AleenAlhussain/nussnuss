@@ -127,7 +127,7 @@ function ContextMenu({ at, onClose, items, preview }: { at: { x: number; y: numb
             style={{ left, width, ...(below ? { top: Math.max(16, at.y) } : { bottom: Math.max(16, vh - at.bottom) }), transformOrigin: below ? 'top center' : 'bottom center' }}
           >
             {preview ? <div className="rounded-card bg-surface p-4 shadow-[0_12px_40px_rgba(0,0,0,0.25)]">{preview}</div> : null}
-            <div className="glass overflow-hidden rounded-card">
+            <div className="overflow-hidden rounded-card bg-surface shadow-[0_16px_48px_rgba(0,0,0,0.28)]">
               {items.map((it) => (
                 <button
                   key={it.label}

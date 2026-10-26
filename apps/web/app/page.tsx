@@ -282,7 +282,8 @@ function NextStepCard({ next, onDone }: { next: NextStep; onDone: () => void }) 
           <span className="truncate t-footnote text-text-2">{next.group.name}</span>
         </span>
       </div>
-      <div className="flex flex-wrap gap-2">{actions}</div>
+      {/* Side by side when they fit, one above the other on a narrow phone or with large text. */}
+      <div className="flex flex-wrap gap-2 [&>button]:min-w-[min(100%,10rem)] [&>button]:grow [&>button]:basis-40 [&>button]:whitespace-nowrap">{actions}</div>
     </motion.section>
   );
 }

@@ -159,7 +159,7 @@ export default function ActivityPage() {
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="line-clamp-2 t-body text-text">{d.line}</span>
-                          <span className="truncate t-footnote text-text-2">{d.sub}</span>
+                          <span className="line-clamp-2 t-footnote text-text-2">{d.sub}</span>
                         </span>
                         {d.amount ? <span className={`t-subhead font-semibold num whitespace-nowrap ${d.positive ? 'text-success' : 'text-text'}`}>{d.amount}</span> : null}
                         {i.unread ? (

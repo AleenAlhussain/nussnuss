@@ -85,8 +85,8 @@ test('phase 1: field edges, owing not red, scroll edge, transfers, glossary, cur
   const accent = await rgbOfVar(page, '--nn-accent');
   expect(await page.getByTestId('person-name').evaluate((el) => getComputedStyle(el).boxShadow)).toContain(edge);
   await page.getByTestId('person-name').focus();
-  await expect.poll(() => page.getByTestId('person-name').evaluate((el) => getComputedStyle(el).boxShadow)).toContain(accent);
-  expect(await page.getByTestId('person-name').evaluate((el) => getComputedStyle(el).boxShadow)).toContain('2px');
+  // (after the 120 ms transition settles)
+  await expect.poll(() => page.getByTestId('person-name').evaluate((el) => getComputedStyle(el).boxShadow)).toBe(`${accent} 0px 0px 0px 2px inset`);
   // The same currency picker as the phone app: a searchable list in the sheet.
   await page.getByTestId('group-currency').click();
   await expect(page.getByTestId('currency-list')).toBeVisible();

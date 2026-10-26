@@ -259,14 +259,13 @@ export function ShareSheet({ open, onClose, group }: { open: boolean; onClose: (
         <div className="flex flex-col items-center gap-3 rounded-card bg-surface p-4">
           {link ? <QrCode text={link} label={`${t('scanToJoin')}: ${shown}`} /> : <div className="shimmer h-[168px] w-[168px] rounded-control" />}
           <span className="t-footnote font-semibold text-text-2">{t('scanToJoin')}</span>
-          <div className="flex w-full items-center gap-2">
-            <span className="min-w-0 flex-1 truncate rounded-control bg-surface-2 px-3 py-2.5 t-subhead font-semibold text-text num" data-testid="invite-link" dir="ltr">
-              {shown}
-            </span>
-            <Button variant="secondary" icon={<Copy size={18} />} disabled={!link} onClick={copy} data-testid="copy-link">
-              {t('copy')}
-            </Button>
-          </div>
+          {/* The whole short link, readable and never cut off, with Copy under it. */}
+          <span className="w-full break-all rounded-control bg-surface-2 px-3 py-2.5 text-center t-subhead font-semibold text-text num" data-testid="invite-link" dir="ltr">
+            {shown}
+          </span>
+          <Button block variant="secondary" icon={<Copy size={18} />} disabled={!link} onClick={copy} data-testid="copy-link">
+            {t('copy')}
+          </Button>
         </div>
         <ul className="overflow-hidden rounded-card bg-surface" aria-label={t('people')}>
           {group.members.map((m) => (
