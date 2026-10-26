@@ -22,7 +22,10 @@ import { PaymentsController } from './payments/payments.controller.js';
 import { PlansController } from './plans/plans.controller.js';
 import { PlansService } from './plans/plans.service.js';
 import { RatesController } from './rates/rates.controller.js';
-import { CrashController } from './telemetry/crash.controller.js';
+import { CrashController, TimingController } from './telemetry/crash.controller.js';
+import { AvatarsController } from './accounts/avatars.controller.js';
+import { PeopleController } from './people/people.controller.js';
+import { PeopleService } from './people/people.service.js';
 import { RecurringController } from './recurring/recurring.controller.js';
 import { RecurringService } from './recurring/recurring.service.js';
 
@@ -31,7 +34,10 @@ import { RecurringService } from './recurring/recurring.service.js';
   controllers: [
     HealthController,
     CrashController,
+    TimingController,
     AuthController,
+    AvatarsController,
+    PeopleController,
     AccountsController,
     GroupsController,
     ExpensesController,
@@ -47,6 +53,7 @@ import { RecurringService } from './recurring/recurring.service.js';
   ],
   providers: [
     GroupsService,
+    PeopleService,
     ExpensesService,
     PlansService,
     RecurringService,

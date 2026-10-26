@@ -335,6 +335,158 @@ class NNStrings {
   String get pullRefresh => _m['pullRefresh']!;
   String get recentSearches => _m['recentSearches']!;
   String get introSkip => _m['introSkip']!;
+  String get tabHome => _m['tabHome']!;
+  String get tabActivity => _m['tabActivity']!;
+  String get tabYou => _m['tabYou']!;
+  String get overallBack => _m['overallBack']!;
+  String get overallOwe => _m['overallOwe']!;
+  String get overallEven => _m['overallEven']!;
+  String get overallEvenBody => _m['overallEvenBody']!;
+  String get acrossN => _m['acrossN']!;
+  String get acrossOne => _m['acrossOne']!;
+  String get andAmount => _m['andAmount']!;
+  String get nextStep => _m['nextStep']!;
+  String get nextPay => _m['next_pay']!;
+  String get nextCollect => _m['next_collect']!;
+  String get nextFirst => _m['next_first']!;
+  String get nextInvite => _m['next_invite']!;
+  String get payName => _m['payName']!;
+  String get addFirst => _m['addFirst']!;
+  String get inviteFriends => _m['inviteFriends']!;
+  String get seeAll => _m['seeAll']!;
+  String get settledGroups => _m['settledGroups']!;
+  String get showSettled => _m['showSettled']!;
+  String get hideSettled => _m['hideSettled']!;
+  String get actYouAdded => _m['act_youAdded']!;
+  String get actNameAdded => _m['act_nameAdded']!;
+  String get actPaidLine => _m['act_paidLine']!;
+  String get settledOn => _m['settledOn']!;
+  String get personEven => _m['personEven']!;
+  String get personOwesYou => _m['personOwesYou']!;
+  String get personYouOwe => _m['personYouOwe']!;
+  String get personEvenTitle => _m['personEvenTitle']!;
+  String get settleEverything => _m['settleEverything']!;
+  String get settleEverythingBody => _m['settleEverythingBody']!;
+  String get settleConfirm => _m['settleConfirm']!;
+  String get settledWith => _m['settledWith']!;
+  String get groupsShared => _m['groupsShared']!;
+  String get betweenYou => _m['betweenYou']!;
+  String get owesYouX => _m['owesYouX']!;
+  String get youOweX => _m['youOweX']!;
+  String get youPaidOn => _m['youPaidOn']!;
+  String get namePaidOn => _m['namePaidOn']!;
+  String get remindAllMessage => _m['remindAllMessage']!;
+  String get noPeople => _m['noPeople']!;
+  String get personNotFound => _m['personNotFound']!;
+  String get markAllRead => _m['markAllRead']!;
+  String get everything => _m['everything']!;
+  String get thisWeek => _m['thisWeek']!;
+  String get earlier => _m['earlier']!;
+  String get actAdded => _m['act_added']!;
+  String get actEdited => _m['act_edited']!;
+  String get actYouEdited => _m['act_youEdited']!;
+  String get actPaid => _m['act_paid']!;
+  String get actPaidYou => _m['act_paidYou']!;
+  String get actYouPaid => _m['act_youPaid']!;
+  String get actYouGot => _m['act_youGot']!;
+  String get yourShare => _m['yourShare']!;
+  String get youLent => _m['youLent']!;
+  String get notInvolved => _m['notInvolved']!;
+  String get noActivityTitle => _m['noActivityTitle']!;
+  String get noActivityBody => _m['noActivityBody']!;
+  String get showMore => _m['showMore']!;
+  String get unreadN => _m['unreadN']!;
+  String get newItem => _m['newItem']!;
+  String get profileEdit => _m['profileEdit']!;
+  String get photo => _m['photo']!;
+  String get choosePhoto => _m['choosePhoto']!;
+  String get removePhoto => _m['removePhoto']!;
+  String get avatarEmoji => _m['avatarEmoji']!;
+  String get avatarInitial => _m['avatarInitial']!;
+  String get colour => _m['colour']!;
+  String get toneViolet => _m['tone_violet']!;
+  String get toneSaffron => _m['tone_saffron']!;
+  String get toneMint => _m['tone_mint']!;
+  String get toneCoral => _m['tone_coral']!;
+  String get toneSky => _m['tone_sky']!;
+  String get toneRose => _m['tone_rose']!;
+  String get toneSlate => _m['tone_slate']!;
+  String get photoTooBig => _m['photoTooBig']!;
+  String get photoBad => _m['photoBad']!;
+  String get profileSaved => _m['profileSaved']!;
+  String get preview => _m['preview']!;
+  String get appearance => _m['appearance']!;
+  String get overallYou => _m['overallYou']!;
+  String get cover => _m['cover']!;
+  String get coverAndName => _m['coverAndName']!;
+  String get iconPlane => _m['icon_plane']!;
+  String get iconBeach => _m['icon_beach']!;
+  String get iconMountain => _m['icon_mountain']!;
+  String get iconCar => _m['icon_car']!;
+  String get iconHome => _m['icon_home']!;
+  String get iconFood => _m['icon_food']!;
+  String get iconCoffee => _m['icon_coffee']!;
+  String get iconMoon => _m['icon_moon']!;
+  String get iconParty => _m['icon_party']!;
+  String get iconGift => _m['icon_gift']!;
+  String get iconCart => _m['icon_cart']!;
+  String get iconHeart => _m['icon_heart']!;
+  String get iconBall => _m['icon_ball']!;
+  String get iconWork => _m['icon_work']!;
+  String get iconBook => _m['icon_book']!;
+  String get iconMusic => _m['icon_music']!;
+  String get splitEqually => _m['splitEqually']!;
+  String get splitUnequally => _m['splitUnequally']!;
+  String get splitHow => _m['splitHow']!;
+  String get dragHint => _m['dragHint']!;
+  String get addShare => _m['addShare']!;
+  String get moreShare => _m['moreShare']!;
+  String get lessShare => _m['lessShare']!;
+  String get sharesOf => _m['sharesOf']!;
+  String get splitSummaryUnequal => _m['splitSummaryUnequal']!;
+  String get duplicate => _m['duplicate']!;
+  String get duplicated => _m['duplicated']!;
+  String get edit => _m['edit']!;
+  String get changeCategory => _m['changeCategory']!;
+  String get categoryChanged => _m['categoryChanged']!;
+  String get rowActions => _m['rowActions']!;
+  String get inviteBody => _m['inviteBody']!;
+  String get scanToJoin => _m['scanToJoin']!;
+  String get joined => _m['joined']!;
+  String get notJoined => _m['notJoined']!;
+  String get shareLink => _m['shareLink']!;
+  String get invitedYou => _m['invitedYou']!;
+  String get joinMeta => _m['joinMeta']!;
+  String get joinGroupX => _m['joinGroupX']!;
+  String get someoneElse => _m['someoneElse']!;
+  String get worksInBrowser => _m['worksInBrowser']!;
+  String get getAppLine => _m['getAppLine']!;
+  String get alreadyJoined => _m['alreadyJoined']!;
+  String get welcome1T => _m['welcome1T']!;
+  String get welcome1B => _m['welcome1B']!;
+  String get welcome2T => _m['welcome2T']!;
+  String get welcome2B => _m['welcome2B']!;
+  String get welcome3T => _m['welcome3T']!;
+  String get welcome3B => _m['welcome3B']!;
+  String get startGroup => _m['startGroup']!;
+  String get addRepeating => _m['addRepeating']!;
+  String get noRepeating => _m['noRepeating']!;
+  String get plusFree => _m['plusFree']!;
+  String get plusB1T => _m['plusB1T']!;
+  String get plusB1B => _m['plusB1B']!;
+  String get plusB2T => _m['plusB2T']!;
+  String get plusB2B => _m['plusB2B']!;
+  String get plusB3T => _m['plusB3T']!;
+  String get plusB3B => _m['plusB3B']!;
+  String get startPlus => _m['startPlus']!;
+  String get perMonth => _m['perMonth']!;
+  String get perYear => _m['perYear']!;
+  String get billedBy => _m['billedBy']!;
+  String get saveToPasswords => _m['saveToPasswords']!;
+  String get savedToPasswords => _m['savedToPasswords']!;
+  String get categoryFor => _m['categoryFor']!;
+  String get waitingHome => _m['waitingHome']!;
+  String get bodyCanOpen => _m['bodyCanOpen']!;
   String get catFood => _m['cat_food']!;
   String get catGroceries => _m['cat_groceries']!;
   String get catTransport => _m['cat_transport']!;
@@ -355,8 +507,8 @@ const _en = <String, String>{
   'groups': 'Groups',
   'settings': 'Settings',
   'newGroup': 'New group',
-  'noGroupsTitle': 'No groups yet',
-  'noGroupsBody': 'Make one for a trip, a flat or a dinner, then add what everyone paid.',
+  'noGroupsTitle': 'Start your first group',
+  'noGroupsBody': 'One group per trip, flat or dinner. Friends join from a link.',
   'groupName': 'Group name',
   'groupNamePh': 'Trip to Salalah',
   'currency': 'Currency',
@@ -376,7 +528,7 @@ const _en = <String, String>{
   'addExpense': 'Add expense',
   'editExpense': 'Edit expense',
   'noExpensesTitle': 'Nothing spent yet',
-  'noExpensesBody': 'Tap + to add the first expense.',
+  'noExpensesBody': 'Add what someone paid and NussNuss splits it.',
   'total': 'Total spent',
   'youAreOwed': 'You get back',
   'youOwe': 'You owe',
@@ -517,7 +669,7 @@ const _en = <String, String>{
   'terms': 'Terms',
   'about': 'About',
   'look': 'Look',
-  'look_default': 'Violet',
+  'look_default': 'Default',
   'look_night': 'Night',
   'look_saffron': 'Saffron',
   'lookHint': 'Night is always dark. Looks come with Plus, or one at a time.',
@@ -656,6 +808,158 @@ const _en = <String, String>{
   'pullRefresh': 'Pull to refresh',
   'recentSearches': 'Recent',
   'introSkip': 'Skip',
+  'tabHome': 'Home',
+  'tabActivity': 'Activity',
+  'tabYou': 'You',
+  'overallBack': 'Overall, you get back',
+  'overallOwe': 'Overall, you owe',
+  'overallEven': 'You’re all even',
+  'overallEvenBody': 'Nobody owes you and you owe nobody.',
+  'acrossN': 'Across {n} groups',
+  'acrossOne': 'In 1 group',
+  'andAmount': 'and {amount}',
+  'nextStep': 'Next step',
+  'next_pay': 'You owe {name} {amount}',
+  'next_collect': '{name} owes you {amount}',
+  'next_first': 'Add the first expense to {group}',
+  'next_invite': 'Invite friends to {group}',
+  'payName': 'Pay {name}',
+  'addFirst': 'Add the first expense',
+  'inviteFriends': 'Invite friends',
+  'seeAll': 'See all',
+  'settledGroups': 'Settled',
+  'showSettled': 'Show settled groups ({n})',
+  'hideSettled': 'Hide settled groups',
+  'act_youAdded': 'You added {title}',
+  'act_nameAdded': '{name} added {title}',
+  'act_paidLine': '{from} paid {to}',
+  'settledOn': 'Settled {date}',
+  'personEven': 'Even',
+  'personOwesYou': 'Overall, {name} owes you',
+  'personYouOwe': 'Overall, you owe {name}',
+  'personEvenTitle': 'You and {name} are even',
+  'settleEverything': 'Settle everything',
+  'settleEverythingBody': 'Marks every open balance with {name} as paid, in each group you share. Do it after the money has changed hands.',
+  'settleConfirm': 'Mark all as paid',
+  'settledWith': 'Settled with {name}',
+  'groupsShared': 'Groups you share',
+  'betweenYou': 'Between you two',
+  'owesYouX': 'owes you {amount}',
+  'youOweX': 'you owe {amount}',
+  'youPaidOn': 'You paid · {date}',
+  'namePaidOn': '{name} paid · {date}',
+  'remindAllMessage': 'Hi {name}, a friendly reminder: you owe me {amounts} on NussNuss.',
+  'noPeople': 'People you split with show up here.',
+  'personNotFound': 'This person isn’t in any of your groups any more.',
+  'markAllRead': 'Mark all read',
+  'everything': 'Everything',
+  'thisWeek': 'This week',
+  'earlier': 'Earlier',
+  'act_added': 'added {title}',
+  'act_edited': 'edited {title}',
+  'act_youEdited': 'You edited {title}',
+  'act_paid': 'marked a payment to {name}',
+  'act_paidYou': 'marked a payment to you',
+  'act_youPaid': 'You marked a payment to {name}',
+  'act_youGot': 'You marked {name}’s payment',
+  'yourShare': 'your share {amount}',
+  'youLent': 'you lent {amount}',
+  'notInvolved': 'not part of it',
+  'noActivityTitle': 'Nothing yet',
+  'noActivityBody': 'Expenses and payments from all your groups show up here.',
+  'showMore': 'Show more',
+  'unreadN': '{n} new',
+  'newItem': 'New',
+  'profileEdit': 'Photo, name and colour',
+  'photo': 'Photo',
+  'choosePhoto': 'Choose a photo',
+  'removePhoto': 'Remove photo',
+  'avatarEmoji': 'Emoji',
+  'avatarInitial': 'Initial',
+  'colour': 'Colour',
+  'tone_violet': 'Violet',
+  'tone_saffron': 'Saffron',
+  'tone_mint': 'Mint',
+  'tone_coral': 'Coral',
+  'tone_sky': 'Sky',
+  'tone_rose': 'Rose',
+  'tone_slate': 'Slate',
+  'photoTooBig': 'That photo is too big. Try another one.',
+  'photoBad': 'Use a JPEG, PNG or WebP photo.',
+  'profileSaved': 'Saved',
+  'preview': 'Preview',
+  'appearance': 'Appearance',
+  'overallYou': 'Your balance',
+  'cover': 'Cover',
+  'coverAndName': 'Cover and name',
+  'icon_plane': 'Travel',
+  'icon_beach': 'Beach',
+  'icon_mountain': 'Outdoors',
+  'icon_car': 'Road trip',
+  'icon_home': 'Home',
+  'icon_food': 'Food',
+  'icon_coffee': 'Coffee',
+  'icon_moon': 'Ramadan',
+  'icon_party': 'Party',
+  'icon_gift': 'Gifts',
+  'icon_cart': 'Shopping',
+  'icon_heart': 'Family',
+  'icon_ball': 'Sport',
+  'icon_work': 'Work',
+  'icon_book': 'Study',
+  'icon_music': 'Music',
+  'splitEqually': 'Equally',
+  'splitUnequally': 'Unequally',
+  'splitHow': 'How to split',
+  'dragHint': 'Drag a share onto someone, or use the buttons below.',
+  'addShare': '+1 share',
+  'moreShare': 'One more share for {name}',
+  'lessShare': 'One less share for {name}',
+  'sharesOf': '{name}: {n} shares, {amount}',
+  'splitSummaryUnequal': 'Split unequally',
+  'duplicate': 'Duplicate',
+  'duplicated': 'Duplicated',
+  'edit': 'Edit',
+  'changeCategory': 'Change category',
+  'categoryChanged': 'Category changed',
+  'rowActions': 'Actions for {title}',
+  'inviteBody': 'Friends open the link, pick their name and they’re in. No app or account needed.',
+  'scanToJoin': 'Scan to join',
+  'joined': 'Joined',
+  'notJoined': 'Not joined yet',
+  'shareLink': 'Share link',
+  'invitedYou': '{name} invited you',
+  'joinMeta': '{n} people · {currency}',
+  'joinGroupX': 'Join {name}',
+  'someoneElse': 'I’m someone else',
+  'worksInBrowser': 'Works right here in the browser.',
+  'getAppLine': 'Get the app for widgets and reminders.',
+  'alreadyJoined': 'Already joined',
+  'welcome1T': 'Add an expense in three taps',
+  'welcome1B': 'Type the amount, tap a suggested title, save. Everyone’s share is worked out for you.',
+  'welcome2T': 'Settle with fewer payments',
+  'welcome2B': 'NussNuss works out who pays whom, so it takes the fewest transfers.',
+  'welcome3T': 'Friends join from a link',
+  'welcome3B': 'No app or account needed. They pick their name and they’re in.',
+  'startGroup': 'Start a group',
+  'addRepeating': 'Add a bill that repeats',
+  'noRepeating': 'No repeating bills yet. Rent, internet or a cleaner can add themselves each month.',
+  'plusFree': 'Everything in NussNuss stays free. Plus adds the extras for people who split a lot.',
+  'plusB1T': 'Bills that add themselves',
+  'plusB1B': 'Rent and internet, every month, on the day.',
+  'plusB2T': 'Split a receipt by item',
+  'plusB2B': 'Tap who had what; tax and tip are shared fairly.',
+  'plusB3T': 'Every look, live rates and charts',
+  'plusB3B': 'Night and Saffron, spending by category and person, and exports.',
+  'startPlus': 'Start Plus',
+  'perMonth': '{price} a month',
+  'perYear': '{price} a year',
+  'billedBy': 'Billed through the App Store or Google Play. Cancel any time in your store settings.',
+  'saveToPasswords': 'Save to Passwords',
+  'savedToPasswords': 'Saved to your passwords',
+  'categoryFor': 'Category for {title}',
+  'waitingHome': '{n} waiting to sync. They’ll go up when you’re online.',
+  'bodyCanOpen': 'Open {name}',
   'cat_food': 'Food',
   'cat_groceries': 'Groceries',
   'cat_transport': 'Transport',
@@ -676,8 +980,8 @@ const _ar = <String, String>{
   'groups': 'المجموعات',
   'settings': 'الإعدادات',
   'newGroup': 'مجموعة جديدة',
-  'noGroupsTitle': 'لا توجد مجموعات بعد',
-  'noGroupsBody': 'أنشئ مجموعة لرحلة أو سكن أو عزومة، ثم سجّل مين دفع إيش.',
+  'noGroupsTitle': 'ابدأ أول مجموعة',
+  'noGroupsBody': 'مجموعة لكل رحلة أو سكن أو عزومة. أصحابك ينضمون من رابط.',
   'groupName': 'اسم المجموعة',
   'groupNamePh': 'رحلة صلالة',
   'currency': 'العملة',
@@ -697,7 +1001,7 @@ const _ar = <String, String>{
   'addExpense': 'أضف مصروف',
   'editExpense': 'تعديل المصروف',
   'noExpensesTitle': 'لا مصاريف بعد',
-  'noExpensesBody': 'اضغط + لإضافة أول مصروف.',
+  'noExpensesBody': 'سجّل اللي دفعه أي واحد ونص نص يقسمه.',
   'total': 'المجموع',
   'youAreOwed': 'لك',
   'youOwe': 'عليك',
@@ -717,7 +1021,7 @@ const _ar = <String, String>{
   'category': 'التصنيف',
   'pays': 'يدفع لـ',
   'markPaid': 'تم الدفع',
-  'swipeHint': 'اسحب لتسجيل الدفع',
+  'swipeHint': 'اسحب لليمين لتسجيل الدفع',
   'paidRecorded': 'تم تسجيل الدفع',
   'undo': 'تراجع',
   'deleted': 'تم حذف المصروف',
@@ -838,7 +1142,7 @@ const _ar = <String, String>{
   'terms': 'الشروط',
   'about': 'عن التطبيق',
   'look': 'الإطلالة',
-  'look_default': 'بنفسجي',
+  'look_default': 'الافتراضي',
   'look_night': 'ليل',
   'look_saffron': 'زعفران',
   'lookHint': 'ليل داكن دائمًا. الإطلالات ضمن بلس، أو كل وحدة لحالها.',
@@ -977,6 +1281,158 @@ const _ar = <String, String>{
   'pullRefresh': 'اسحب للتحديث',
   'recentSearches': 'عمليات البحث الأخيرة',
   'introSkip': 'تخطّي',
+  'tabHome': 'الرئيسية',
+  'tabActivity': 'النشاط',
+  'tabYou': 'أنت',
+  'overallBack': 'بالمجمل، لك',
+  'overallOwe': 'بالمجمل، عليك',
+  'overallEven': 'حساباتك كلها مسوّاة',
+  'overallEvenBody': 'ما أحد عليه لك، وما عليك لأحد.',
+  'acrossN': 'في {n} مجموعات',
+  'acrossOne': 'في مجموعة واحدة',
+  'andAmount': 'و{amount}',
+  'nextStep': 'الخطوة التالية',
+  'next_pay': 'عليك لـ {name} {amount}',
+  'next_collect': 'لك عند {name} {amount}',
+  'next_first': 'أضف أول مصروف في {group}',
+  'next_invite': 'ادعُ أصحابك إلى {group}',
+  'payName': 'ادفع لـ {name}',
+  'addFirst': 'أضف أول مصروف',
+  'inviteFriends': 'ادعُ أصحابك',
+  'seeAll': 'عرض الكل',
+  'settledGroups': 'مسوّاة',
+  'showSettled': 'اعرض المجموعات المسوّاة ({n})',
+  'hideSettled': 'أخفِ المجموعات المسوّاة',
+  'act_youAdded': 'أضفت {title}',
+  'act_nameAdded': '{name} أضاف {title}',
+  'act_paidLine': '{from} دفع لـ {to}',
+  'settledOn': 'تمت التسوية {date}',
+  'personEven': 'متساوين',
+  'personOwesYou': 'بالمجمل، لك عند {name}',
+  'personYouOwe': 'بالمجمل، عليك لـ {name}',
+  'personEvenTitle': 'أنت و{name} متساوين',
+  'settleEverything': 'سوِّ كل شي',
+  'settleEverythingBody': 'يسجّل كل المبالغ المفتوحة مع {name} كمدفوعة، في كل مجموعة مشتركة. سوّها بعد ما تنتقل الفلوس.',
+  'settleConfirm': 'سجّل الكل كمدفوع',
+  'settledWith': 'تمت التسوية مع {name}',
+  'groupsShared': 'المجموعات المشتركة',
+  'betweenYou': 'بينك وبينه',
+  'owesYouX': 'لك {amount}',
+  'youOweX': 'عليك {amount}',
+  'youPaidOn': 'أنت دفعت · {date}',
+  'namePaidOn': '{name} دفع · {date}',
+  'remindAllMessage': 'هلا {name}، تذكير لطيف: عليك لي {amounts} على نص نص.',
+  'noPeople': 'الأشخاص اللي تقسم معهم يظهرون هنا.',
+  'personNotFound': 'هذا الشخص ما عاد في أي مجموعة من مجموعاتك.',
+  'markAllRead': 'اعتبر الكل مقروء',
+  'everything': 'الكل',
+  'thisWeek': 'هذا الأسبوع',
+  'earlier': 'قبل كذا',
+  'act_added': 'أضاف {title}',
+  'act_edited': 'عدّل {title}',
+  'act_youEdited': 'عدّلت {title}',
+  'act_paid': 'سجّل دفعة لـ {name}',
+  'act_paidYou': 'سجّل دفعة لك',
+  'act_youPaid': 'سجّلت دفعة لـ {name}',
+  'act_youGot': 'سجّلت دفعة {name}',
+  'yourShare': 'حصتك {amount}',
+  'youLent': 'سلّفت {amount}',
+  'notInvolved': 'مو مشمول',
+  'noActivityTitle': 'لا شيء بعد',
+  'noActivityBody': 'مصاريف ودفعات كل مجموعاتك تظهر هنا.',
+  'showMore': 'اعرض المزيد',
+  'unreadN': '{n} جديد',
+  'newItem': 'جديد',
+  'profileEdit': 'الصورة والاسم واللون',
+  'photo': 'صورة',
+  'choosePhoto': 'اختر صورة',
+  'removePhoto': 'احذف الصورة',
+  'avatarEmoji': 'إيموجي',
+  'avatarInitial': 'الحرف الأول',
+  'colour': 'اللون',
+  'tone_violet': 'بنفسجي',
+  'tone_saffron': 'زعفراني',
+  'tone_mint': 'نعناعي',
+  'tone_coral': 'مرجاني',
+  'tone_sky': 'سماوي',
+  'tone_rose': 'وردي',
+  'tone_slate': 'رمادي',
+  'photoTooBig': 'الصورة كبيرة. جرّب صورة ثانية.',
+  'photoBad': 'استخدم صورة JPEG أو PNG أو WebP.',
+  'profileSaved': 'تم الحفظ',
+  'preview': 'معاينة',
+  'appearance': 'المظهر',
+  'overallYou': 'رصيدك',
+  'cover': 'الغلاف',
+  'coverAndName': 'الغلاف والاسم',
+  'icon_plane': 'سفر',
+  'icon_beach': 'بحر',
+  'icon_mountain': 'برّ',
+  'icon_car': 'مشوار بالسيارة',
+  'icon_home': 'بيت',
+  'icon_food': 'أكل',
+  'icon_coffee': 'قهوة',
+  'icon_moon': 'رمضان',
+  'icon_party': 'حفلة',
+  'icon_gift': 'هدايا',
+  'icon_cart': 'تسوق',
+  'icon_heart': 'عائلة',
+  'icon_ball': 'رياضة',
+  'icon_work': 'شغل',
+  'icon_book': 'دراسة',
+  'icon_music': 'موسيقى',
+  'splitEqually': 'بالتساوي',
+  'splitUnequally': 'مو بالتساوي',
+  'splitHow': 'طريقة التقسيم',
+  'dragHint': 'اسحب حصة على أي شخص، أو استخدم الأزرار تحت.',
+  'addShare': '+١ حصة',
+  'moreShare': 'حصة زيادة لـ {name}',
+  'lessShare': 'حصة أقل لـ {name}',
+  'sharesOf': '{name}: {n} حصص، {amount}',
+  'splitSummaryUnequal': 'تقسيم مو بالتساوي',
+  'duplicate': 'كرّر',
+  'duplicated': 'تم التكرار',
+  'edit': 'تعديل',
+  'changeCategory': 'غيّر التصنيف',
+  'categoryChanged': 'تم تغيير التصنيف',
+  'rowActions': 'إجراءات {title}',
+  'inviteBody': 'أصحابك يفتحون الرابط، يختارون أسماءهم وخلاص. بدون تطبيق أو حساب.',
+  'scanToJoin': 'امسح للانضمام',
+  'joined': 'انضم',
+  'notJoined': 'ما انضم بعد',
+  'shareLink': 'شارك الرابط',
+  'invitedYou': '{name} دعاك',
+  'joinMeta': '{n} أشخاص · {currency}',
+  'joinGroupX': 'انضم إلى {name}',
+  'someoneElse': 'أنا شخص ثاني',
+  'worksInBrowser': 'يشتغل هنا في المتصفح.',
+  'getAppLine': 'حمّل التطبيق للودجت والتذكيرات.',
+  'alreadyJoined': 'انضم من قبل',
+  'welcome1T': 'أضف مصروف بثلاث ضغطات',
+  'welcome1B': 'اكتب المبلغ، اختر عنوانًا مقترحًا، واحفظ. حصة كل واحد تنحسب لحالها.',
+  'welcome2T': 'سوِّ بأقل عدد دفعات',
+  'welcome2B': 'نص نص يحسب مين يدفع لمين بأقل عدد تحويلات.',
+  'welcome3T': 'أصحابك ينضمون من رابط',
+  'welcome3B': 'بدون تطبيق أو حساب. يختارون أسماءهم وخلاص.',
+  'startGroup': 'ابدأ مجموعة',
+  'addRepeating': 'أضف فاتورة تتكرر',
+  'noRepeating': 'لا فواتير متكررة بعد. الإيجار أو الإنترنت أو عاملة التنظيف تنضاف لحالها كل شهر.',
+  'plusFree': 'كل شي في نص نص يبقى مجاني. بلس يضيف إضافات للي يقسمون كثير.',
+  'plusB1T': 'فواتير تنضاف لحالها',
+  'plusB1B': 'الإيجار والإنترنت، كل شهر، في يومه.',
+  'plusB2T': 'قسّم الفاتورة حسب البنود',
+  'plusB2B': 'اختر مين أخذ إيش؛ الضريبة والبقشيش ينقسمون بعدل.',
+  'plusB3T': 'كل المظاهر وأسعار الصرف والرسوم',
+  'plusB3B': 'الليلي والزعفراني، والمصروف حسب التصنيف والشخص، والتصدير.',
+  'startPlus': 'ابدأ بلس',
+  'perMonth': '{price} بالشهر',
+  'perYear': '{price} بالسنة',
+  'billedBy': 'الدفع عن طريق آب ستور أو قوقل بلاي. تقدر تلغي أي وقت من إعدادات المتجر.',
+  'saveToPasswords': 'احفظ في كلمات المرور',
+  'savedToPasswords': 'انحفظ في كلمات المرور',
+  'categoryFor': 'تصنيف {title}',
+  'waitingHome': '{n} بانتظار المزامنة. بتنرفع لما ترجع متصل.',
+  'bodyCanOpen': 'افتح {name}',
   'cat_food': 'أكل',
   'cat_groceries': 'مقاضي',
   'cat_transport': 'مواصلات',

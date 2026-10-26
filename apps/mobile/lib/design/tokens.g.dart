@@ -12,6 +12,7 @@ class NNPalette {
     required this.surface,
     required this.surface2,
     required this.separator,
+    required this.edge,
     required this.text,
     required this.text2,
     required this.text3,
@@ -31,6 +32,7 @@ class NNPalette {
   final Color surface;
   final Color surface2;
   final Color separator;
+  final Color edge;
   final Color text;
   final Color text2;
   final Color text3;
@@ -78,6 +80,7 @@ class NNColors {
     surface: Color(0xFFFFFFFF),
     surface2: Color(0xFFE9E7F1),
     separator: Color(0xFFD9D6E5),
+    edge: Color(0xFF86809F),
     text: Color(0xFF15121F),
     text2: Color(0xFF57526D),
     text3: Color(0xFF6A6582),
@@ -98,6 +101,7 @@ class NNColors {
     surface: Color(0xFF18132E),
     surface2: Color(0xFF241D42),
     separator: Color(0xFF3A3160),
+    edge: Color(0xFF7C7499),
     text: Color(0xFFF4F2FA),
     text2: Color(0xFFB4ADD0),
     text3: Color(0xFF9D96BC),
@@ -122,6 +126,7 @@ class NNLooks {
     surface: Color(0xFFFFFFFF),
     surface2: Color(0xFFE9E7F1),
     separator: Color(0xFFD9D6E5),
+    edge: Color(0xFF86809F),
     text: Color(0xFF15121F),
     text2: Color(0xFF57526D),
     text3: Color(0xFF6A6582),
@@ -142,6 +147,7 @@ class NNLooks {
     surface: Color(0xFF18132E),
     surface2: Color(0xFF241D42),
     separator: Color(0xFF3A3160),
+    edge: Color(0xFF7C7499),
     text: Color(0xFFF4F2FA),
     text2: Color(0xFFB4ADD0),
     text3: Color(0xFF9D96BC),
@@ -162,6 +168,7 @@ class NNLooks {
     surface: Color(0xFF110D22),
     surface2: Color(0xFF1B1535),
     separator: Color(0xFF2E2652),
+    edge: Color(0xFF7C7499),
     text: Color(0xFFF4F2FA),
     text2: Color(0xFFB4ADD0),
     text3: Color(0xFFA49DC4),
@@ -188,6 +195,36 @@ class NNAmbient {
   static const highlightAlphaLight = 0.07;
   static const accentAlphaDark = 0.22;
   static const highlightAlphaDark = 0.08;
+}
+
+/// One cover or avatar colour: a soft tile and the icon or initial drawn on it.
+class NNCover {
+  const NNCover(this.bg, this.fg);
+  final Color bg;
+  final Color fg;
+}
+
+/// Two-tone covers for groups and avatar colours for people, by tone name.
+class NNCovers {
+  static const tones = <String>['violet', 'saffron', 'mint', 'coral', 'sky', 'rose', 'slate'];
+  static const light = <String, NNCover>{
+    'violet': NNCover(Color(0xFFE6E1FC), Color(0xFF3A2AA8)),
+    'saffron': NNCover(Color(0xFFFBEBC6), Color(0xFF7A4E00)),
+    'mint': NNCover(Color(0xFFD5F1E3), Color(0xFF0B6B40)),
+    'coral': NNCover(Color(0xFFFCDDD3), Color(0xFFA2350F)),
+    'sky': NNCover(Color(0xFFD7EAFB), Color(0xFF1F5B92)),
+    'rose': NNCover(Color(0xFFF9DCE7), Color(0xFF9B2C5A)),
+    'slate': NNCover(Color(0xFFE3E2EA), Color(0xFF45415A)),
+  };
+  static const dark = <String, NNCover>{
+    'violet': NNCover(Color(0xFF2E2566), Color(0xFFD6D0FF)),
+    'saffron': NNCover(Color(0xFF3D3010), Color(0xFFFFD978)),
+    'mint': NNCover(Color(0xFF103A2B), Color(0xFF8FE8BC)),
+    'coral': NNCover(Color(0xFF45231A), Color(0xFFFFB497)),
+    'sky': NNCover(Color(0xFF15324F), Color(0xFFA9D3FA)),
+    'rose': NNCover(Color(0xFF45192E), Color(0xFFF9AECB)),
+    'slate': NNCover(Color(0xFF2A2640), Color(0xFFCFCBE0)),
+  };
 }
 
 /// Font family for amounts and big titles, bundled in assets/fonts.

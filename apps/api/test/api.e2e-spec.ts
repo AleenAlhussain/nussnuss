@@ -55,7 +55,7 @@ describe('health and auth', () => {
     const { token, user } = await signUp('Talal');
     expect(token.length).toBeGreaterThan(30);
     const me = await as(token).get('/me').expect(200);
-    expect(me.body).toEqual({ id: user.id, name: 'Talal', locale: 'en', payTo: [] });
+    expect(me.body).toEqual({ id: user.id, name: 'Talal', locale: 'en', payTo: [], avatar: { kind: 'initial', tone: expect.any(String) } });
     await http.get('/me').expect(401);
     await http.get('/me').set('Authorization', 'Bearer nope').expect(401);
     await as(token).patch('/me').send({ locale: 'ar' }).expect(200);

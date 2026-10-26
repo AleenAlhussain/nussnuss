@@ -76,7 +76,7 @@ export class ExpensesService {
     });
     const items = body.items.filter((i) => i.value > 0);
     await tx.insert(expenseShares).values(items.map((i) => ({ expenseId: id, memberId: i.memberId, value: i.value })));
-    await this.groupsService.touch(tx, groupId, 'expense', id, 'create');
+    await this.groupsService.touch(tx, groupId, 'expense', id, 'create', createdBy);
     return true;
   }
 

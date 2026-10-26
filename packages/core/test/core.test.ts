@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
+import jsQR from 'jsqr';
 import {
   allocate,
+  categoryFromTitle,
+  contextIdeas,
+  COVER_TONES,
+  encodeQr,
+  groupCover,
+  initialOf,
+  parseCover,
+  toneFor,
   computeBalances,
   convertMinor,
   formatMoney,
@@ -273,5 +282,79 @@ describe('reading a receipt', () => {
     expect(r.total).toBe(5803);
     expect(parseReceipt('Machboos 4.250\nالإجمالي 4.250', 'KWD')).toEqual({ items: [{ name: 'Machboos', price: 4250 }], total: 4250 });
     expect(parseReceipt('nothing to see here', 'AED')).toEqual({ items: [], total: null });
+  });
+});
+
+describe('categories from the title', () => {
+  test('common words in English and Arabic', () => {
+    expect(categoryFromTitle('Fuel')).toBe('transport');
+    expect(categoryFromTitle('Petrol for the car')).toBe('transport');
+    expect(categoryFromTitle('Dinner at the souq')).toBe('food');
+    expect(categoryFromTitle('Water bill')).toBe('bills');
+    expect(categoryFromTitle('Water')).toBe('groceries');
+    expect(categoryFromTitle('عشاء')).toBe('food');
+    expect(categoryFromTitle('البنزين')).toBe('transport');
+    expect(categoryFromTitle('فاتورة الكهرباء')).toBe('bills');
+    expect(categoryFromTitle('هديّة لسارة')).toBe('shopping');
+    expect(categoryFromTitle('Hotel in Salalah')).toBe('stay');
+    expect(categoryFromTitle('Something else')).toBeNull();
+    expect(categoryFromTitle('')).toBeNull();
+  });
+});
+
+describe('covers and avatars', () => {
+  test('old emoji become drawn icons; own covers win', () => {
+    expect(groupCover({ emoji: '✈️' })).toEqual({ icon: 'plane', tone: 'sky' });
+    expect(groupCover({ emoji: '🏠' })).toEqual({ icon: 'home', tone: 'violet' });
+    expect(groupCover({ emoji: '🌙', cover: 'moon:saffron' })).toEqual({ icon: 'moon', tone: 'saffron' });
+    expect(groupCover({ emoji: '🤷' })).toEqual({ icon: 'food', tone: 'coral' });
+    expect(parseCover('plane:nope')).toBeNull();
+  });
+  test('tones and initials are stable', () => {
+    expect(toneFor('Omar')).toBe(toneFor(' omar '));
+    expect(COVER_TONES).toContain(toneFor('سارة'));
+    expect(initialOf('omar')).toBe('O');
+    expect(initialOf('  مها')).toBe('م');
+    expect(initialOf('')).toBe('?');
+  });
+  test('contextual ideas follow the cover icon', () => {
+    expect(contextIdeas(13, 'home')).toEqual(['groceries', 'rent', 'internet', 'electricity']);
+    expect(contextIdeas(20, 'moon')[0]).toBe('iftar');
+    expect(contextIdeas(9, 'plane')).toContain('hotel');
+  });
+});
+
+describe('QR codes', () => {
+  const decode = (text: string) => {
+    const code = encodeQr(text);
+    const scale = 4;
+    const margin = 4;
+    const n = (code.size + margin * 2) * scale;
+    const px = new Uint8ClampedArray(n * n * 4).fill(255);
+    for (let y = 0; y < code.size; y++)
+      for (let x = 0; x < code.size; x++)
+        if (code.modules[y][x])
+          for (let dy = 0; dy < scale; dy++)
+            for (let dx = 0; dx < scale; dx++) {
+              const i = (((y + margin) * scale + dy) * n + (x + margin) * scale + dx) * 4;
+              px[i] = px[i + 1] = px[i + 2] = 0;
+            }
+    return { code, read: jsQR(px, n, n)?.data };
+  };
+  test('a short invite link scans back', () => {
+    const { code, read } = decode('https://nussnuss.app/j/k7m2q9xd4p');
+    expect(read).toBe('https://nussnuss.app/j/k7m2q9xd4p');
+    expect(code.version).toBeLessThanOrEqual(4);
+  });
+  test('every version from 1 to 10 scans back, including Arabic', () => {
+    const seen = new Set<number>();
+    for (const len of [1, 10, 20, 30, 45, 60, 80, 100, 120, 150, 170, 190, 205]) {
+      const text = ('نص نص https://example.com/' + 'x'.repeat(len)).slice(0, Math.max(1, len));
+      const { code, read } = decode(text);
+      seen.add(code.version);
+      expect(read).toBe(text);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(8);
+    expect(() => encodeQr('x'.repeat(400))).toThrow();
   });
 });

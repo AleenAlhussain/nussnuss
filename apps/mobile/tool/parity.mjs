@@ -1,6 +1,7 @@
 // Random groups run through the TypeScript rules. test/parity_test.dart replays them through the Dart port
 // and expects identical balances, transfers, totals, formatting and parsing.
 //   npm run build:packages && node apps/mobile/tool/parity.mjs > apps/mobile/test/parity.json
+import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -35,3 +36,22 @@ for (let n = 0; n < N; n++) {
   cases.push({g, ids, bal, transfers: c.simplifyDebts(bal, ids), total: c.groupTotal(g), fmt: c.formatMoney(bal[ids[0]], gc, 'ar'), parsed: inputs.map(typed)});
 }
 console.log(JSON.stringify(cases));
+
+// Identity, categories and QR codes: written next to parity.json for test/parity_extras_test.dart.
+const titles = ['Fuel', 'Petrol for the car', 'Dinner at the souq', 'Water bill', 'Water', 'عشاء', 'البنزين', 'فاتورة الكهرباء',
+  'هديّة لسارة', 'Hotel in Salalah', 'Something else', '', 'Taxi to the beach', 'إيجار الشقة', 'Coffee ☕', 'Ice cream', 'واي فاي',
+  'Cinema tickets', 'Karak', 'سوبرماركت', 'Gym', 'Rent', 'PHARMACY', 'تأمين السيارة', 'ألعاب'];
+const names = ['Omar', ' omar ', 'Sara', 'سارة', 'مها', 'Lina', 'Ali', 'Mona', 'Talal', 'Former member 3fa9', '😀 Kim', ''];
+const emoji = ['✈️', '🏖️', '🏠', '🌙', '🎁', '🍽️', '🤷', '🚗', '☕', '⚽', '', '✈'];
+const qrTexts = ['https://nussnuss.app/j/k7m2q9xd4p', 'a', 'نص نص', 'https://example.com/' + 'x'.repeat(120), 'NussNuss '.repeat(20)];
+const extras = {
+  categories: titles.map((t) => [t, c.categoryFromTitle(t), c.normalizeWords(t)]),
+  tones: names.map((n) => [n, c.toneFor(n), c.initialOf(n), c.stableHash(n)]),
+  covers: emoji.map((e) => [e, c.coverKey(c.groupCover({ emoji: e }))]).concat([['own', c.coverKey(c.groupCover({ emoji: '🏠', cover: 'moon:saffron' }))]]),
+  ideas: ['plane', 'home', 'moon', 'gift', 'party', 'food', '', '✈️'].flatMap((k) => [3, 9, 13, 17, 21].map((h) => [k, h, c.contextIdeas(h, k)])),
+  qr: qrTexts.map((t) => {
+    const q = c.encodeQr(t);
+    return { text: t, version: q.version, mask: q.mask, rows: q.modules.map((r) => r.map((v) => (v ? '1' : '0')).join('')) };
+  }),
+};
+writeFileSync(join(root, 'apps/mobile/test/parity_extras.json'), JSON.stringify(extras));

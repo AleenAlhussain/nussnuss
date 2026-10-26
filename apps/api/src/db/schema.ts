@@ -28,8 +28,30 @@ export const users = pgTable('users', {
   recoveryCreatedAt: timestamp('recovery_created_at', { withTimezone: true }),
   /** How friends can pay this person: IBAN, InstaPay, a payment link and so on. */
   payTo: jsonb('pay_to').$type<PayTo[]>().notNull().default([]),
+  /** How the person looks to friends: their initial, an emoji or a photo, on a tone they chose. */
+  avatar: jsonb('avatar').$type<AvatarSetting>(),
+  /** When they last opened Activity, so new items show a dot. */
+  activitySeenAt: timestamp('activity_seen_at', { withTimezone: true }),
   createdAt: created(),
 });
+
+export type AvatarSetting =
+  | { kind: 'initial'; tone: string }
+  | { kind: 'emoji'; value: string; tone: string }
+  | { kind: 'photo'; id: string; tone: string };
+
+/** Profile photos, small (the apps send at most 256×256 JPEG or WebP). Served at /avatars/:id. */
+export const avatars = pgTable(
+  'avatars',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    mime: text('mime').notNull(),
+    data: text('data').notNull(),
+    createdAt: created(),
+  },
+  (t) => [index('avatars_user_idx').on(t.userId), check('avatars_mime', sql`${t.mime} in ('image/jpeg','image/png','image/webp')`)],
+);
 
 export type PayToKind = 'iban' | 'instapay' | 'stcpay' | 'phone' | 'paypal' | 'wise' | 'link';
 export interface PayTo {
@@ -110,6 +132,8 @@ export const groups = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
     emoji: text('emoji').notNull().default('🍽️'),
+    /** A drawn icon on a two-tone cover ("plane:sky"). Older groups have none and show one from the emoji. */
+    cover: text('cover'),
     currency: text('currency').notNull(),
     /** Increases on every change to the group or anything in it; the sync cursor. */
     version: integer('version').notNull().default(1),
@@ -228,9 +252,11 @@ export const changes = pgTable(
     entity: text('entity').notNull(),
     entityId: uuid('entity_id').notNull(),
     op: text('op').notNull(),
+    /** Who made the change, when a person did (Activity shows it). */
+    actor: uuid('actor').references(() => users.id, { onDelete: 'set null' }),
     at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('changes_group_version_idx').on(t.groupId, t.version)],
+  (t) => [index('changes_group_version_idx').on(t.groupId, t.version), index('changes_group_at_idx').on(t.groupId, t.at)],
 );
 
 /** Plus, Trip Pass and Looks. One row per store transaction. */
@@ -352,6 +378,7 @@ export const notifications = pgTable(
 
 export const schema = {
   users,
+  avatars,
   sessions,
   identities,
   linkCodes,

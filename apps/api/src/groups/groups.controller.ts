@@ -14,7 +14,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CURRENCIES } from '@nussnuss/core';
+import { CURRENCIES, parseCover } from '@nussnuss/core';
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { DB, type Db } from '../db/db.module.js';
@@ -26,15 +26,17 @@ const codes = new Set(CURRENCIES.map((c) => c.code));
 const currency = z.string().length(3).toUpperCase().refine((c) => codes.has(c), 'Unknown currency.');
 const personName = z.string().trim().min(1).max(40);
 const emoji = z.string().min(1).max(16);
+const cover = z.string().refine((c) => parseCover(c) !== null, 'Unknown cover.');
 
 const CreateGroup = z.object({
   name: z.string().trim().min(1).max(60),
   emoji: emoji.default('🍽️'),
+  cover: cover.optional(),
   currency,
   /** The other people, by name. The creator is added automatically under their own name. */
   members: z.array(personName).max(49).default([]),
 });
-const PatchGroup = z.object({ name: z.string().trim().min(1).max(60).optional(), emoji: emoji.optional(), currency: currency.optional() });
+const PatchGroup = z.object({ name: z.string().trim().min(1).max(60).optional(), emoji: emoji.optional(), cover: cover.optional(), currency: currency.optional() });
 const MemberBody = z.object({ name: personName });
 const Since = z.object({ since: z.coerce.number().int().min(0).default(0) });
 
@@ -64,12 +66,15 @@ export class GroupsController {
       keys.add(k);
     }
     const id = await this.db.transaction(async (tx) => {
-      const [g] = await tx.insert(groups).values({ name: body.name, emoji: body.emoji, currency: body.currency, createdBy: user.id }).returning();
+      const [g] = await tx
+        .insert(groups)
+        .values({ name: body.name, emoji: body.emoji, cover: body.cover ?? null, currency: body.currency, createdBy: user.id })
+        .returning();
       await tx.insert(members).values([
         { groupId: g.id, userId: user.id, name: user.displayName, nameKey: nameKey(user.displayName) },
         ...body.members.map((n) => ({ groupId: g.id, name: n.trim(), nameKey: nameKey(n) })),
       ]);
-      await this.groupsService.touch(tx, g.id, 'group', g.id, 'create');
+      await this.groupsService.touch(tx, g.id, 'group', g.id, 'create', user.id);
       return g.id;
     });
     return this.groupsService.detail(id, user.id);
@@ -97,7 +102,7 @@ export class GroupsController {
         }
       }
       await tx.update(groups).set(body).where(eq(groups.id, id));
-      await this.groupsService.touch(tx, id, 'group', id, 'update');
+      await this.groupsService.touch(tx, id, 'group', id, 'update', user.id);
     });
     return this.groupsService.detail(id, user.id);
   }
@@ -117,7 +122,7 @@ export class GroupsController {
     try {
       await this.db.transaction(async (tx) => {
         const [m] = await tx.insert(members).values({ groupId: id, name: body.name, nameKey: nameKey(body.name) }).returning();
-        await this.groupsService.touch(tx, id, 'member', m.id, 'create');
+        await this.groupsService.touch(tx, id, 'member', m.id, 'create', user.id);
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw new ConflictException('Someone in this group already has that name.');
@@ -142,7 +147,7 @@ export class GroupsController {
           .where(and(eq(members.id, memberId), eq(members.groupId, id)))
           .returning({ id: members.id });
         if (!r.length) throw new NotFoundException('Person not found.');
-        await this.groupsService.touch(tx, id, 'member', memberId, 'update');
+        await this.groupsService.touch(tx, id, 'member', memberId, 'update', user.id);
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw new ConflictException('Someone in this group already has that name.');

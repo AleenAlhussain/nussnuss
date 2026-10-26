@@ -59,7 +59,7 @@ export class ExpensesController {
         .where(eq(expenses.id, id));
       await tx.delete(expenseShares).where(eq(expenseShares.expenseId, id));
       await tx.insert(expenseShares).values(body.items.filter((i) => i.value > 0).map((i) => ({ expenseId: id, memberId: i.memberId, value: i.value })));
-      await this.groupsService.touch(tx, groupId, 'expense', id, 'update');
+      await this.groupsService.touch(tx, groupId, 'expense', id, 'update', user.id);
     });
     return this.groupsService.detail(groupId, user.id);
   }
@@ -71,7 +71,7 @@ export class ExpensesController {
     const groupId = await this.owned(user, id);
     await this.db.transaction(async (tx) => {
       await tx.update(expenses).set({ deletedAt: new Date() }).where(eq(expenses.id, id));
-      await this.groupsService.touch(tx, groupId, 'expense', id, 'delete');
+      await this.groupsService.touch(tx, groupId, 'expense', id, 'delete', user.id);
     });
     return this.groupsService.detail(groupId, user.id);
   }
@@ -81,7 +81,7 @@ export class ExpensesController {
     const groupId = await this.owned(user, id, true);
     await this.db.transaction(async (tx) => {
       await tx.update(expenses).set({ deletedAt: null }).where(eq(expenses.id, id));
-      await this.groupsService.touch(tx, groupId, 'expense', id, 'restore');
+      await this.groupsService.touch(tx, groupId, 'expense', id, 'restore', user.id);
     });
     return this.groupsService.detail(groupId, user.id);
   }

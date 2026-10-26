@@ -28,6 +28,7 @@ import { z } from 'zod';
 import { DB, type Db } from '../db/db.module.js';
 import { challenges, identities, linkCodes, members, passkeys, sessions, users } from '../db/schema.js';
 import { type AuthUser, CurrentUser, newToken, Public, sha256, Zod } from '../common/http.js';
+import { meView } from '../common/identity.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { linkCode, normalizeCode, recoveryCode } from './codes.js';
 
@@ -38,7 +39,6 @@ const IdTokenBody = z.object({ token: z.string().min(20).max(8000), name: displa
 const PasskeyRegisterBody = z.object({ challengeId: z.uuid(), response: z.record(z.string(), z.unknown()) });
 const PasskeyLoginBody = z.object({ challengeId: z.uuid(), response: z.record(z.string(), z.unknown()), device });
 
-const meView = (u: { id: string; displayName: string; locale: string }) => ({ id: u.id, name: u.displayName, locale: u.locale });
 
 const jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 const keySet = (url: string) => {
@@ -304,7 +304,7 @@ export class AccountsController {
     for (const m of mine) groupsOut.push(await this.groupsService.detail(m.groupId, user.id));
     return {
       exportedAt: new Date().toISOString(),
-      account: { id: u.id, name: u.displayName, locale: u.locale, payTo: u.payTo, createdAt: u.createdAt.toISOString() },
+      account: { id: u.id, name: u.displayName, locale: u.locale, payTo: u.payTo, avatar: u.avatar, createdAt: u.createdAt.toISOString() },
       groups: groupsOut,
     };
   }

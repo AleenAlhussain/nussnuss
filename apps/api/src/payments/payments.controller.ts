@@ -37,7 +37,7 @@ export class PaymentsController {
         .insert(payments)
         .values({ ...(body.id ? { id: body.id } : {}), groupId, fromMember: body.from, toMember: body.to, amountMinor: body.amount, createdBy: user.id })
         .returning({ id: payments.id });
-      await this.groupsService.touch(tx, groupId, 'payment', p.id, 'create');
+      await this.groupsService.touch(tx, groupId, 'payment', p.id, 'create', user.id);
       return p.id;
     });
     return { id, detail: await this.groupsService.detail(groupId, user.id) };
@@ -51,7 +51,7 @@ export class PaymentsController {
     await this.groupsService.memberOf(p.groupId, user.id);
     await this.db.transaction(async (tx) => {
       await tx.update(payments).set({ deletedAt: new Date() }).where(eq(payments.id, id));
-      await this.groupsService.touch(tx, p.groupId, 'payment', id, 'delete');
+      await this.groupsService.touch(tx, p.groupId, 'payment', id, 'delete', user.id);
     });
     return this.groupsService.detail(p.groupId, user.id);
   }

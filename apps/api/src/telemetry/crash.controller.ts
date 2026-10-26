@@ -34,3 +34,30 @@ export class CrashController {
     this.log.error(JSON.stringify({ app: body.app, version: body.version, message: scrub(body.message), stack: body.stack ? scrub(body.stack) : undefined }));
   }
 }
+
+/**
+ * How long the five main jobs take (phase 0 of the design plan): which job, how many milliseconds,
+ * whether it finished, the app and version. No account, device or group is sent or stored. Off unless
+ * TIMINGS=log; each timing is one JSON line in the server log, ready for any log tool to chart.
+ */
+const TimingBody = z.object({
+  app: z.enum(['web', 'ios', 'android']),
+  version: z.string().max(40),
+  job: z.enum(['add_expense', 'uneven_split', 'settle', 'invite', 'find_balance']),
+  ms: z.number().int().min(0).max(600_000),
+  ok: z.boolean(),
+});
+
+@Controller()
+export class TimingController {
+  private readonly log = new Logger('timing');
+
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Post('telemetry/timing')
+  @HttpCode(204)
+  report(@Body(new Zod(TimingBody)) body: z.infer<typeof TimingBody>) {
+    if (process.env.TIMINGS !== 'log') return;
+    this.log.log(JSON.stringify(body));
+  }
+}

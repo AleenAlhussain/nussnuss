@@ -62,5 +62,28 @@ for (const [label, c, mode] of palettes) {
   }
 }
 
+// Non-text contrast (WCAG 1.4.11): the edge of every text field and unselected chip needs 3:1 against
+// each surface it sits on, in every palette. The pairs above cover it; this names it in the report.
+for (const [label, c] of palettes) {
+  console.log(`\n[${label}] non-text contrast: field and chip edges`);
+  for (const bg of ['surface', 'surface2', 'bg']) {
+    const r = contrast(c.edge, c[bg]);
+    const ok = r >= 3;
+    if (!ok) failures++;
+    line(ok, `edge on ${bg}`, r, 3);
+  }
+}
+
+// Covers and avatar colours: the icon or initial on its tile.
+for (const mode of ['light', 'dark']) {
+  console.log(`\n[${mode}] covers and avatars`);
+  for (const [tone, c] of Object.entries(tokens.covers ?? {})) {
+    const r = contrast(c[mode].fg, c[mode].bg);
+    const ok = r >= 4.5;
+    if (!ok) failures++;
+    line(ok, `${tone} initial on its tile`, r, 4.5);
+  }
+}
+
 console.log(`\n${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

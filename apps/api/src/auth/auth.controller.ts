@@ -4,7 +4,9 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DB, type Db } from '../db/db.module.js';
 import { members, sessions, users } from '../db/schema.js';
+import { AVATAR_EMOJI, COVER_TONES } from '@nussnuss/core';
 import { type AuthUser, CurrentUser, newToken, Public, sha256, Zod } from '../common/http.js';
+import { meView } from '../common/identity.js';
 import { GroupsService } from '../groups/groups.service.js';
 
 const name = z.string().trim().min(1).max(40);
@@ -34,11 +36,16 @@ export const PayToItem = z
     if (v.kind === 'instapay' && !/^(https:\/\/[^\s]+|[^\s@]+@[^\s@]+)$/i.test(v.value)) bad('Use your InstaPay address (name@instapay) or link.');
   });
 
-const PatchMe = z
-  .object({ name: name.optional(), locale: locale.optional(), payTo: z.array(PayToItem).max(5).optional() })
-  .refine((v) => v.name !== undefined || v.locale !== undefined || v.payTo !== undefined, 'Nothing to change.');
+const tone = z.enum(COVER_TONES);
+/** Initial or emoji, on a tone. Photos go through POST /me/photo. */
+const AvatarBody = z.union([
+  z.object({ kind: z.literal('initial'), tone }),
+  z.object({ kind: z.literal('emoji'), value: z.enum(AVATAR_EMOJI), tone }),
+]);
 
-const meView = (u: { id: string; displayName: string; locale: string; payTo?: unknown }) => ({ id: u.id, name: u.displayName, locale: u.locale, payTo: u.payTo ?? [] });
+const PatchMe = z
+  .object({ name: name.optional(), locale: locale.optional(), payTo: z.array(PayToItem).max(5).optional(), avatar: AvatarBody.optional() })
+  .refine((v) => v.name !== undefined || v.locale !== undefined || v.payTo !== undefined || v.avatar !== undefined, 'Nothing to change.');
 
 @Controller()
 export class AuthController {
@@ -75,6 +82,7 @@ export class AuthController {
         ...(body.name ? { displayName: body.name } : {}),
         ...(body.locale ? { locale: body.locale } : {}),
         ...(body.payTo ? { payTo: body.payTo } : {}),
+        ...(body.avatar ? { avatar: body.avatar } : {}),
       })
       .where(eq(users.id, user.id))
       .returning();

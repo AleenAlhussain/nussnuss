@@ -11,3 +11,4 @@ coverage/
 
 # Written by CI before `flutter test` (tool/parity.mjs)
 test/parity.json
+test/parity_extras.json

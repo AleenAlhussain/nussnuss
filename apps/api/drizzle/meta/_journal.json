@@ -15,6 +15,13 @@
       "when": 1792932693259,
       "tag": "0001_accounts_plus_circles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793006606174,
+      "tag": "0002_identity_people_activity",
+      "breakpoints": true
     }
   ]
 }

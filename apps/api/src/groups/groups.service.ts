@@ -1,7 +1,8 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { computeBalances, groupTotal, simplifyDebts, type ExpenseLike, type SplitMode } from '@nussnuss/core';
+import { computeBalances, coverKey, groupCover, groupTotal, simplifyDebts, type ExpenseLike, type SplitMode, type Transfer } from '@nussnuss/core';
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { circleView } from '../circles/schedule.js';
+import { avatarView } from '../common/identity.js';
 import { DB, type Db, type Tx } from '../db/db.module.js';
 import {
   changes,
@@ -15,6 +16,7 @@ import {
   payments,
   recurring,
   users,
+  type AvatarSetting,
   type PayTo,
 } from '../db/schema.js';
 
@@ -37,6 +39,30 @@ export interface ExpenseView {
   spentAt: string;
   createdAt: string;
   updatedAt: string;
+  createdBy: string | null;
+}
+
+/** A member row with what the group screen needs from their account. */
+export interface MemberRow {
+  id: string;
+  groupId: string;
+  userId: string | null;
+  name: string;
+  nameKey: string;
+  payTo: PayTo[];
+  avatar: AvatarSetting | null;
+}
+
+/** One of the caller's groups with its balances worked out (Home, people, Activity). */
+export interface Computed {
+  group: typeof groups.$inferSelect;
+  me: string;
+  members: MemberRow[];
+  expenses: ExpenseView[];
+  payments: (typeof payments.$inferSelect)[];
+  balances: Record<string, number>;
+  transfers: Transfer[];
+  total: number;
 }
 
 @Injectable()
@@ -44,14 +70,14 @@ export class GroupsService {
   constructor(@Inject(DB) private readonly db: Db) {}
 
   /** Bumps the group's version and logs the change. Call inside the same transaction as the write. */
-  async touch(tx: Tx, groupId: string, entity: Entity, entityId: string, op: Op): Promise<number> {
+  async touch(tx: Tx, groupId: string, entity: Entity, entityId: string, op: Op, actor: string | null = null): Promise<number> {
     const [g] = await tx
       .update(groups)
       .set({ version: sql`${groups.version} + 1`, updatedAt: new Date() })
       .where(eq(groups.id, groupId))
       .returning({ version: groups.version });
     if (!g) return 0;
-    await tx.insert(changes).values({ groupId, version: g.version, entity, entityId, op });
+    await tx.insert(changes).values({ groupId, version: g.version, entity, entityId, op, actor });
     // NOTIFY is delivered only when the transaction commits, so listeners never see uncommitted versions.
     await tx.execute(sql`select pg_notify(${CHANGE_CHANNEL}, ${`${groupId}:${g.version}`})`);
     return g.version;
@@ -68,38 +94,76 @@ export class GroupsService {
     return m;
   }
 
-  async list(userId: string) {
-    const mine = await this.db
-      .select({ group: groups, memberId: members.id })
+  /** Every group the person is in, newest activity first, with balances and the settle-up plan. */
+  async mine(userId: string): Promise<Computed[]> {
+    const rows = await this.db
+      .select({ groupId: members.groupId, memberId: members.id })
       .from(members)
       .innerJoin(groups, eq(groups.id, members.groupId))
       .where(eq(members.userId, userId))
       .orderBy(desc(groups.updatedAt));
-    const out = [];
-    for (const { group, memberId } of mine) {
-      const d = await this.detailRows(group.id);
+    const out: Computed[] = [];
+    for (const r of rows) {
+      const d = await this.detailRows(r.groupId);
       const balances = computeBalances(d.core);
       out.push({
-        id: group.id,
-        name: group.name,
-        emoji: group.emoji,
-        currency: group.currency,
-        version: group.version,
-        updatedAt: group.updatedAt.toISOString(),
-        memberCount: d.members.length,
-        memberNames: d.members.map((m) => m.name),
+        group: d.group,
+        me: r.memberId,
+        members: d.members,
+        expenses: d.expenses,
+        payments: d.payments,
+        balances,
+        transfers: simplifyDebts(balances, d.members.map((m) => m.id)),
         total: groupTotal(d.core),
-        myBalance: balances[memberId] ?? 0,
       });
     }
     return out;
+  }
+
+  async list(userId: string) {
+    const all = await this.mine(userId);
+    return all.map((c) => {
+      const latestExpense = c.expenses.reduce<ExpenseView | null>((a, e) => (!a || e.createdAt > a.createdAt ? e : a), null);
+      const latestPayment = c.payments[0] ?? null;
+      const who = (memberId: string | null | undefined) => {
+        const m = c.members.find((x) => x.id === memberId);
+        return m ? { name: m.name, me: m.id === c.me } : null;
+      };
+      const byUser = (userId: string | null) => (userId ? c.members.find((m) => m.userId === userId) : undefined);
+      let lastActivity: Record<string, unknown> | null = null;
+      if (latestExpense && (!latestPayment || latestExpense.createdAt >= latestPayment.paidAt.toISOString())) {
+        const adder = byUser(latestExpense.createdBy) ?? c.members.find((m) => m.id === latestExpense.paidBy);
+        lastActivity = { kind: 'expense', who: adder ? { name: adder.name, me: adder.id === c.me } : null, title: latestExpense.title, at: latestExpense.createdAt };
+      } else if (latestPayment) {
+        lastActivity = { kind: 'payment', from: who(latestPayment.fromMember), to: who(latestPayment.toMember), at: latestPayment.paidAt.toISOString() };
+      }
+      const allEven = Object.values(c.balances).every((v) => v === 0);
+      return {
+        id: c.group.id,
+        name: c.group.name,
+        emoji: c.group.emoji,
+        cover: coverKey(groupCover(c.group)),
+        currency: c.group.currency,
+        version: c.group.version,
+        updatedAt: c.group.updatedAt.toISOString(),
+        memberCount: c.members.length,
+        memberNames: c.members.map((m) => m.name),
+        members: c.members.slice(0, 5).map((m) => ({ name: m.name, avatar: avatarView(m.avatar, m.name), me: m.id === c.me })),
+        expenseCount: c.expenses.length,
+        total: c.total,
+        myBalance: c.balances[c.me] ?? 0,
+        /** Everyone is even and something was spent: Home folds these away. */
+        settled: allEven && c.expenses.length > 0,
+        lastActivity,
+      };
+    });
   }
 
   private async detailRows(groupId: string) {
     const [g] = await this.db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
     if (!g) throw new NotFoundException('Group not found.');
     const ms = await this.db
-      .select({ member: members, payTo: users.payTo })
+      .select({ member: members, payTo: users.payTo, avatar: users.avatar })
       .from(members)
       .leftJoin(users, eq(users.id, members.userId))
       .where(eq(members.groupId, groupId))
@@ -137,6 +201,7 @@ export class GroupsService {
       spentAt: e.spentAt.toISOString(),
       createdAt: e.createdAt.toISOString(),
       updatedAt: e.updatedAt.toISOString(),
+      createdBy: e.createdBy,
     }));
     const core = {
       currency: g.currency,
@@ -144,7 +209,16 @@ export class GroupsService {
       expenses: expenseViews as ExpenseLike[],
       payments: pays.map((p) => ({ from: p.fromMember, to: p.toMember, amount: p.amountMinor })),
     };
-    return { group: g, members: ms.map((m) => ({ ...m.member, payTo: (m.payTo ?? []) as PayTo[] })), expenses: expenseViews, payments: pays, core };
+    const memberRows: MemberRow[] = ms.map((m) => ({
+      id: m.member.id,
+      groupId: m.member.groupId,
+      userId: m.member.userId,
+      name: m.member.name,
+      nameKey: m.member.nameKey,
+      payTo: (m.payTo ?? []) as PayTo[],
+      avatar: (m.avatar ?? null) as AvatarSetting | null,
+    }));
+    return { group: g, members: memberRows, expenses: expenseViews, payments: pays, core };
   }
 
   /** Everything a group screen needs, with balances and the settle-up plan computed from the rows. */
@@ -173,6 +247,7 @@ export class GroupsService {
       id: d.group.id,
       name: d.group.name,
       emoji: d.group.emoji,
+      cover: coverKey(groupCover(d.group)),
       currency: d.group.currency,
       version: d.group.version,
       createdBy: d.group.createdBy,
@@ -180,8 +255,15 @@ export class GroupsService {
       remindEvery: d.group.remindEvery,
       tripPassUntil: pass?.expiresAt?.toISOString() ?? null,
       me: me.id,
-      members: d.members.map((m) => ({ id: m.id, name: m.name, claimed: m.userId !== null, isMe: m.id === me.id, payTo: m.payTo })),
-      expenses: d.expenses,
+      members: d.members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        claimed: m.userId !== null,
+        isMe: m.id === me.id,
+        payTo: m.payTo,
+        avatar: avatarView(m.avatar, m.name),
+      })),
+      expenses: d.expenses.map(({ createdBy: _c, ...e }) => e),
       payments: d.payments.map((p) => ({ id: p.id, from: p.fromMember, to: p.toMember, amount: p.amountMinor, paidAt: p.paidAt.toISOString() })),
       total: groupTotal(d.core),
       balances,
