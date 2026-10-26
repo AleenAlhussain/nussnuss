@@ -1,11 +1,12 @@
 'use client';
 
 import { AnimatePresence, motion, useDragControls } from 'motion/react';
-import { CaretLeft, GearSix, Plus, UsersThree } from '@phosphor-icons/react';
+import { CaretLeft, ClockCounterClockwise, House, Plus, UserCircle } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useUnread } from '@/lib/badge';
 import { bouncy, haptic, sheetSpring, spring } from '@/lib/feel';
 import { useSession } from '@/lib/session';
 import { cx } from './ui';
@@ -82,13 +83,17 @@ export function Screen({
         <div
           aria-hidden
           className={cx('pointer-events-none absolute inset-x-0 top-0 transition-opacity duration-200', collapsed ? 'opacity-100' : 'opacity-0')}
+          data-testid="scroll-edge"
           style={{
-            height: 'calc(env(safe-area-inset-top, 0px) + var(--nn-layout-top-bar) + 16px)',
-            background: 'var(--nn-glass-fill)',
+            height: 'calc(env(safe-area-inset-top, 0px) + var(--nn-layout-top-bar) + 28px)',
+            // Apple's scroll edge effect: the background fades in over the glass towards the top, so what
+            // scrolls under the bar (a big amount) fades away instead of showing through behind the title.
+            background:
+              'linear-gradient(to bottom, color-mix(in srgb, var(--nn-bg) 62%, transparent) 0%, color-mix(in srgb, var(--nn-bg) 30%, transparent) 70%, transparent 100%), var(--nn-glass-fill)',
             WebkitBackdropFilter: 'blur(var(--nn-glass-blur)) saturate(var(--nn-glass-saturate))',
             backdropFilter: 'blur(var(--nn-glass-blur)) saturate(var(--nn-glass-saturate))',
-            WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 16px), transparent)',
-            maskImage: 'linear-gradient(to bottom, #000 calc(100% - 16px), transparent)',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 28px), transparent)',
+            maskImage: 'linear-gradient(to bottom, #000 calc(100% - 28px), transparent)',
           }}
         />
         <div
@@ -144,7 +149,8 @@ export function Screen({
 }
 
 /** Which tab a path belongs to, and where each tab was last (so switching tabs never loses your place). */
-const TAB_OF = (path: string) => (path.startsWith('/settings') || path === '/privacy' || path === '/terms' ? 'settings' : 'groups');
+export const TAB_OF = (path: string) =>
+  path.startsWith('/you') || path.startsWith('/settings') || path === '/privacy' || path === '/terms' ? 'you' : path.startsWith('/activity') ? 'activity' : 'home';
 const lastPath = (tab: string): string | null => {
   try {
     return sessionStorage.getItem(`nn:tab:${tab}`);
@@ -153,24 +159,74 @@ const lastPath = (tab: string): string | null => {
   }
 };
 
+/** Text is set large (Dynamic Type at the accessibility sizes, or the browser at 135% and up). */
+const bigText = () => typeof window !== 'undefined' && parseFloat(getComputedStyle(document.documentElement).fontSize) >= 21.5;
+
 /**
- * Floating glass capsule with the two tabs, and a separate tinted add button, like the iOS 26 tab bar.
- * Scrolling down shrinks it to an icon-only capsule; scrolling up brings the labels back. Each tab keeps
- * its own place; tapping the tab you are on scrolls to the top, and tapping it again goes to its first screen.
+ * Press and hold shows the control large in the middle of the screen, but only when text is large: the
+ * bars themselves keep their size so they never cover the content (HIG, large-content viewer).
+ */
+function useLargeContent() {
+  const [shown, setShown] = useState<{ label: string; icon: ReactNode } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const end = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    setShown(null);
+  };
+  const bind = (label: string, icon: ReactNode) => ({
+    onPointerDown: () => {
+      held.current = false;
+      if (!bigText()) return;
+      timer.current = setTimeout(() => {
+        held.current = true;
+        haptic('light');
+        setShown({ label, icon });
+      }, 450);
+    },
+    onPointerUp: end,
+    onPointerLeave: end,
+    onPointerCancel: end,
+    onContextMenu: (e: { preventDefault: () => void }) => {
+      if (bigText()) e.preventDefault();
+    },
+  });
+  const viewer = shown ? (
+    <div className="large-content" role="status" aria-live="polite" data-testid="large-content">
+      <div>
+        <span aria-hidden className="text-accent">
+          {shown.icon}
+        </span>
+        <span>{shown.label}</span>
+      </div>
+    </div>
+  ) : null;
+  return { bind, viewer, held };
+}
+
+/**
+ * Floating glass capsule with the three tabs (Home, Activity, You), icon over label, and a separate tinted
+ * add button, like the iOS 26 tab bar. Sizes are in points, not text units, so large text never makes the
+ * bar grow over the content; press and hold shows a large label instead. Scrolling down shrinks it a little.
+ * Each tab keeps its own place; tapping the tab you are on scrolls to the top, then goes to its first screen.
  */
 function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: boolean; onAdd?: () => void; onAddHold?: () => void; addLabel?: string; showTabs: boolean }) {
   const path = usePathname();
   const router = useRouter();
   const { t } = useSession();
+  const unread = useUnread();
   const current = TAB_OF(path);
+  const large = useLargeContent();
   useEffect(() => {
     try {
       sessionStorage.setItem(`nn:tab:${current}`, path);
     } catch {}
   }, [current, path]);
   const tabs = [
-    { key: 'groups', href: '/', label: t('groups'), icon: UsersThree },
-    { key: 'settings', href: '/settings', label: t('settings'), icon: GearSix },
+    { key: 'home', href: '/', label: t('tabHome'), icon: House },
+    { key: 'activity', href: '/activity', label: t('tabActivity'), icon: ClockCounterClockwise },
+    { key: 'you', href: '/you', label: t('tabYou'), icon: UserCircle },
   ];
   return (
     <nav
@@ -178,28 +234,37 @@ function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: bo
       className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', paddingInline: 'max(16px, env(safe-area-inset-left, 0px))' }}
     >
-      {/* A container, so the tab labels step aside (icons only) when large text would push the add button off screen. */}
-      <div className="@container flex w-full items-end justify-between gap-3" style={{ maxWidth: 'var(--nn-layout-max-content)' }}>
+      <div className="flex w-full items-end justify-between gap-3" style={{ maxWidth: 'var(--nn-layout-max-content)' }}>
         {showTabs ? (
           <motion.div
             initial={false}
-            animate={{ scale: compact ? 0.9 : 1, y: compact ? 4 : 0 }}
+            animate={{ scale: compact ? 0.92 : 1, y: compact ? 4 : 0 }}
             transition={spring}
-            className="glass pointer-events-auto flex origin-bottom-left items-center gap-1 rounded-full p-1.5 rtl:origin-bottom-right"
+            className="glass pointer-events-auto flex origin-bottom-left items-center rounded-full rtl:origin-bottom-right"
+            style={{ padding: 5, gap: 2 }}
             data-testid="tab-bar"
             data-compact={compact || undefined}
           >
             {tabs.map((tab) => {
               const on = tab.key === current;
               const target = on ? tab.href : (lastPath(tab.key) ?? tab.href);
+              const badge = tab.key === 'activity' && unread > 0 && !on;
+              const label = badge ? `${tab.label} (${t('unreadN', { n: unread })})` : tab.label;
+              const lc = large.bind(tab.label, <tab.icon size={56} weight="fill" />);
               return (
                 <Link
                   key={tab.key}
                   href={target}
                   aria-current={on ? 'page' : undefined}
-                  aria-label={tab.label}
+                  aria-label={label}
                   data-testid={`tab-${tab.key}`}
+                  {...lc}
                   onClick={(e) => {
+                    if (large.held.current) {
+                      large.held.current = false;
+                      e.preventDefault();
+                      return;
+                    }
                     haptic('selection');
                     if (!on) return;
                     e.preventDefault();
@@ -208,20 +273,25 @@ function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: bo
                     else if (path !== tab.href) router.push(tab.href);
                   }}
                   className={cx(
-                    'glass-press focus-ring flex h-12 items-center gap-2 rounded-full px-4 t-subhead font-semibold transition-colors',
-                    on ? 'on-glass-fill text-text' : 'text-text-2',
+                    'glass-press focus-ring relative flex flex-col items-center justify-center rounded-full transition-colors',
+                    on ? 'on-glass-fill text-accent' : 'text-text-2',
                   )}
+                  style={{ height: 54, minWidth: 68, paddingInline: 10, gap: 2 }}
                 >
-                  <tab.icon size={22} weight={on ? 'fill' : 'regular'} />
-                  <motion.span
-                    initial={false}
-                    animate={{ width: compact ? 0 : 'auto', opacity: compact ? 0 : 1 }}
-                    transition={spring}
-                    className="overflow-hidden whitespace-nowrap @max-[21.5rem]:sr-only"
-                    aria-hidden
-                  >
+                  <tab.icon size={24} weight={on ? 'fill' : 'regular'} aria-hidden />
+                  <span aria-hidden className="whitespace-nowrap font-semibold" style={{ fontSize: 11, lineHeight: '13px' }}>
                     {tab.label}
-                  </motion.span>
+                  </span>
+                  {badge ? (
+                    <span
+                      aria-hidden
+                      data-testid="activity-badge"
+                      className="absolute grid place-items-center rounded-full bg-danger font-bold text-white"
+                      style={{ top: 4, insetInlineEnd: 12, minWidth: 17, height: 17, paddingInline: 4, fontSize: 11 }}
+                    >
+                      {unread > 9 ? '9+' : unread}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
@@ -229,8 +299,9 @@ function TabBar({ compact, onAdd, onAddHold, addLabel, showTabs }: { compact: bo
         ) : (
           <span />
         )}
-        {onAdd ? <AddButton onClick={onAdd} onHold={onAddHold} label={addLabel ?? t('addExpense')} /> : null}
+        {onAdd ? <AddButton onClick={onAdd} onHold={onAddHold} label={addLabel ?? t('addExpense')} large={large} /> : null}
       </div>
+      {large.viewer}
     </nav>
   );
 }
@@ -242,7 +313,7 @@ export const ADD_MORPH = 'add-morph';
  * The one tinted glass control on the screen. A light follows the pointer across it, like light on glass.
  * Press and hold runs `onHold` (repeat the last expense); a normal press opens the sheet.
  */
-function AddButton({ onClick, onHold, label }: { onClick: () => void; onHold?: () => void; label: string }) {
+function AddButton({ onClick, onHold, label, large }: { onClick: () => void; onHold?: () => void; label: string; large: ReturnType<typeof useLargeContent> }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [light, setLight] = useState({ x: 30, y: 20 });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -261,9 +332,13 @@ function AddButton({ onClick, onHold, label }: { onClick: () => void; onHold?: (
       // Glass swells under the finger (and brightens) instead of shrinking.
       whileTap={{ scale: 1.04, filter: 'brightness(1.12)' }}
       transition={bouncy}
-      style={{ borderRadius: 999 }}
       onPointerDown={() => {
         held.current = false;
+        // Large text: holding shows the label large instead of repeating the last expense.
+        if (bigText()) {
+          large.bind(label, <Plus size={56} weight="bold" />).onPointerDown();
+          return;
+        }
         if (!onHold) return;
         cancel();
         timer.current = setTimeout(() => {
@@ -272,25 +347,33 @@ function AddButton({ onClick, onHold, label }: { onClick: () => void; onHold?: (
           onHold();
         }, 500);
       }}
-      onPointerUp={cancel}
-      onPointerLeave={cancel}
+      onPointerUp={() => {
+        cancel();
+        large.bind(label, null).onPointerUp();
+      }}
+      onPointerLeave={() => {
+        cancel();
+        large.bind(label, null).onPointerLeave();
+      }}
       onPointerCancel={cancel}
       onContextMenu={(e) => {
-        if (onHold) e.preventDefault();
+        if (onHold || bigText()) e.preventDefault();
       }}
       onPointerMove={(e) => {
         const r = ref.current?.getBoundingClientRect();
         if (r) setLight({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
       }}
       onClick={() => {
-        if (held.current) {
+        if (held.current || large.held.current) {
           held.current = false;
+          large.held.current = false;
           return;
         }
         haptic('light');
         onClick();
       }}
-      className="focus-ring pointer-events-auto relative grid h-16 w-16 place-items-center overflow-hidden rounded-full bg-accent text-on-accent shadow-[0_10px_30px_color-mix(in_srgb,var(--nn-accent)_45%,transparent)]"
+      className="focus-ring pointer-events-auto relative grid place-items-center overflow-hidden rounded-full bg-accent text-on-accent shadow-[0_10px_30px_color-mix(in_srgb,var(--nn-accent)_45%,transparent)]"
+      style={{ borderRadius: 999, width: 64, height: 64 }}
     >
       <span
         aria-hidden
@@ -372,7 +455,8 @@ export function Sheet({
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const first = setTimeout(() => {
-      const el = panel.current?.querySelector<HTMLElement>('[data-autofocus], input, button:not([data-grabber])');
+      // The field marked for it first (the group name), otherwise the first control.
+      const el = panel.current?.querySelector<HTMLElement>('[data-autofocus]') ?? panel.current?.querySelector<HTMLElement>('input, button:not([data-grabber])');
       el?.focus();
     }, 60);
     const onKey = (e: KeyboardEvent) => {

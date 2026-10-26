@@ -1,25 +1,42 @@
-import type { PayTo, SplitMode, Transfer } from '@nussnuss/core';
+import type { Avatar, CoverTone, PayTo, SplitMode, Transfer } from '@nussnuss/core';
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 const TOKEN_KEY = 'nn:token';
 
+export type { Avatar };
 export interface Me {
   id: string;
   name: string;
   locale: 'en' | 'ar';
   payTo: PayTo[];
+  avatar?: Avatar;
 }
+/** Someone shown with their look: a name, and their avatar when the server sent one. */
+export interface Who {
+  name: string;
+  me?: boolean;
+  avatar?: Avatar;
+}
+export type LastActivity =
+  | { kind: 'expense'; who: Who | null; title: string; at: string }
+  | { kind: 'payment'; from: Who | null; to: Who | null; at: string };
 export interface GroupSummary {
   id: string;
   name: string;
   emoji: string;
+  /** "icon:tone"; older servers leave it out. */
+  cover?: string;
   currency: string;
   version: number;
   updatedAt: string;
   memberCount: number;
   memberNames: string[];
+  members?: Who[];
+  expenseCount?: number;
   total: number;
   myBalance: number;
+  settled?: boolean;
+  lastActivity?: LastActivity | null;
 }
 export interface Member {
   id: string;
@@ -27,7 +44,63 @@ export interface Member {
   claimed: boolean;
   isMe: boolean;
   payTo?: PayTo[];
+  avatar?: Avatar;
 }
+export interface Money {
+  currency: string;
+  amount: number;
+}
+export interface GroupBrief {
+  id: string;
+  name: string;
+  emoji: string;
+  cover: string;
+  currency: string;
+}
+export interface PersonSummary {
+  key: string;
+  name: string;
+  avatar: Avatar;
+  /** + they owe you, − you owe them; biggest first. */
+  balances: Money[];
+  groups: number;
+}
+export type NextStep =
+  | { kind: 'pay' | 'collect'; person: { key: string; name: string; avatar: Avatar }; amount: number; currency: string; group: GroupBrief; memberId: string; payTo: PayTo[] }
+  | { kind: 'first' | 'invite'; group: GroupBrief };
+export interface Overview {
+  totals: Money[];
+  groups: number;
+  next: NextStep | null;
+  people: PersonSummary[];
+  unread: number;
+}
+export interface PersonDetail {
+  key: string;
+  name: string;
+  avatar: Avatar;
+  claimed: boolean;
+  balances: Money[];
+  groups: (GroupBrief & { amount: number; memberId: string; me: string; payTo: PayTo[] })[];
+  shared: { id: string; group: GroupBrief; title: string; category: string; currency: string; amount: number; paidByMe: boolean; at: string }[];
+}
+interface ActivityBase {
+  id: string;
+  op: 'create' | 'update';
+  at: string;
+  group: GroupBrief;
+  unread: boolean;
+  actor: Who | null;
+}
+export type ActivityItem =
+  | (ActivityBase & { kind: 'expense'; expense: { id: string; title: string; amount: number; category: string; paidBy: Who | null; impact: number } })
+  | (ActivityBase & { kind: 'payment'; payment: { id: string; amount: number; from: Who | null; to: Who | null } });
+export interface ActivityPage {
+  items: ActivityItem[];
+  next: string | null;
+  unread: number;
+}
+export type AvatarInput = { kind: 'initial'; tone: CoverTone } | { kind: 'emoji'; value: string; tone: CoverTone };
 export interface Expense {
   id: string;
   title: string;
@@ -53,6 +126,7 @@ export interface GroupDetail {
   id: string;
   name: string;
   emoji: string;
+  cover?: string;
   currency: string;
   version: number;
   createdBy: string | null;
@@ -123,8 +197,9 @@ export interface Notice {
 }
 export type Session = { token: string; user: Me };
 export interface InvitePreview {
-  group: { id: string; name: string; emoji: string; currency: string };
-  members: { id: string; name: string; claimed: boolean }[];
+  group: { id: string; name: string; emoji: string; cover?: string; currency: string };
+  members: { id: string; name: string; claimed: boolean; avatar?: Avatar }[];
+  invitedBy?: Who | null;
 }
 export interface ExpenseInput {
   id?: string;
@@ -226,10 +301,20 @@ export function saveBlob(blob: Blob, name: string) {
 export const api = {
   anonymous: (name: string, locale: string) => call<Session>('POST', '/auth/anonymous', { name, locale, device: deviceName() }, false),
   me: () => call<Me>('GET', '/me'),
-  patchMe: (b: Partial<{ name: string; locale: string; payTo: PayTo[] }>) => call<Me>('PATCH', '/me', b),
+  patchMe: (b: Partial<{ name: string; locale: string; payTo: PayTo[]; avatar: AvatarInput }>) => call<Me>('PATCH', '/me', b),
+  setPhoto: (data: string) => call<Me>('POST', '/me/photo', { data }),
+  removePhoto: () => call<Me>('DELETE', '/me/photo'),
   deleteMe: () => call<void>('DELETE', '/me'),
   groups: () => call<GroupSummary[]>('GET', '/groups'),
-  createGroup: (b: { name: string; emoji: string; currency: string; members: string[] }) => call<GroupDetail>('POST', '/groups', b),
+  createGroup: (b: { name: string; emoji: string; cover?: string; currency: string; members: string[] }) => call<GroupDetail>('POST', '/groups', b),
+  patchGroup: (id: string, b: Partial<{ name: string; cover: string; currency: string }>) => call<GroupDetail>('PATCH', `/groups/${id}`, b),
+  overview: () => call<Overview>('GET', '/overview'),
+  person: (key: string) => call<PersonDetail>('GET', `/people/${key}`),
+  settleAll: (key: string, groups?: string[]) => call<{ payments: { id: string; groupId: string }[]; person: PersonDetail }>('POST', `/people/${key}/settle`, groups ? { groups } : {}),
+  undoPayments: (ids: string[]) => call<{ undone: number }>('POST', '/payments/undo', { ids }),
+  activity: (opts: { before?: string; group?: string } = {}) =>
+    call<ActivityPage>('GET', `/activity${opts.before || opts.group ? '?' : ''}${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}`),
+  activitySeen: () => call<void>('POST', '/activity/seen'),
   group: (id: string) => call<GroupDetail>('GET', `/groups/${id}`),
   changes: (id: string, since: number) => call<{ version: number; changes: unknown[] }>('GET', `/groups/${id}/changes?since=${since}`),
   addMember: (id: string, name: string) => call<GroupDetail>('POST', `/groups/${id}/members`, { name }),
@@ -239,7 +324,7 @@ export const api = {
   restoreExpense: (id: string) => call<GroupDetail>('POST', `/expenses/${id}/restore`),
   pay: (groupId: string, t: Transfer & { id?: string }) => call<{ id: string; detail: GroupDetail }>('POST', `/groups/${groupId}/payments`, t),
   unpay: (id: string) => call<GroupDetail>('DELETE', `/payments/${id}`),
-  invite: (groupId: string) => call<{ token: string; expiresAt: string }>('POST', `/groups/${groupId}/invites`),
+  invite: (groupId: string) => call<{ token: string; path?: string; expiresAt: string }>('POST', `/groups/${groupId}/invites`),
   preview: (token: string) => call<InvitePreview>('GET', `/invites/${token}`, undefined, false),
   join: (token: string, b: { memberId: string } | { name: string }) => call<GroupDetail>('POST', `/invites/${token}/join`, b),
 
@@ -281,6 +366,19 @@ export const api = {
     call<GroupDetail>('POST', `/circles/${id}/${paid ? 'paid' : 'unpaid'}`, { round, memberId }),
   deleteCircle: (id: string) => call<GroupDetail>('DELETE', `/circles/${id}`),
 };
+
+/** Photos are served by the API; avatars carry a path relative to it. */
+export const avatarSrc = (url: string) => (/^https?:/.test(url) ? url : `${API_URL}${url}`);
+
+/** Anonymous task timings (phase 0 of the design plan). Never blocks, never throws, sends no token. */
+export function sendTiming(job: 'add_expense' | 'uneven_split' | 'settle' | 'invite' | 'find_balance', ms: number, ok = true) {
+  try {
+    const body = JSON.stringify({ app: 'web', version: '2.0.0', job, ms: Math.max(0, Math.min(600_000, Math.round(ms))), ok });
+    fetch(`${API_URL}/telemetry/timing`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  } catch {
+    /* measuring must never get in the way */
+  }
+}
 
 export const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto

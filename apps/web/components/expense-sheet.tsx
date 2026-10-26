@@ -1,9 +1,9 @@
 'use client';
 
-import { ArrowCounterClockwise, CaretDown, Minus, Plus, Trash, X } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, CaretDown, HandGrabbing, Minus, Plus, Trash, X } from '@phosphor-icons/react';
 import {
   CATEGORIES,
-  CURRENCIES,
+  categoryFromTitle,
   formatNumber,
   itemizedSplit,
   minorToInput,
@@ -23,14 +23,17 @@ import { haptic, shake, spring } from '@/lib/feel';
 import { money } from '@/lib/format';
 import { catKey, modeKey, type TKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
+import { timeEnd, timeStart } from '@/lib/timing';
+import { CurrencyButton, CurrencyList } from './currency';
 import { Sheet } from './glass';
 import { Keypad } from './keypad';
 import { usePaywall } from './paywall';
 import { Avatar, Button, Chip, cx, ErrorText, Segmented } from './ui';
 
-const TONES = ['#4F3BD6', '#B0265A', '#0B5FA5', '#9A5B00', '#0F7B4A', '#6B4E9E', '#B93A0E', '#2F6F73'];
+const TONES = ['violet', 'saffron', 'mint', 'coral', 'sky', 'rose', 'slate'].map((x) => `var(--nn-cover-${x}-fg)`);
 type Mode = SplitMode | 'items';
-const MODES: Mode[] = ['equal', 'exact', 'percent', 'shares', 'items'];
+/** The ways to split unevenly, behind "Unequally" (the split control stays two choices). */
+const UNEVEN: Exclude<Mode, 'equal'>[] = ['shares', 'exact', 'percent', 'items'];
 export type Every = 'none' | 'week' | 'month';
 
 interface Line {
@@ -69,11 +72,14 @@ export function ExpenseSheet({
   onSave,
   onDelete,
   onRepeat,
+  startEvery,
 }: {
   open: boolean;
   onClose: () => void;
   group: GroupDetail;
   editing?: Expense | null;
+  /** Opened from "Add a bill that repeats": starts as a monthly bill. */
+  startEvery?: Every;
   lastPayer?: string;
   onSave: (input: ExpenseInput, every: Every) => Promise<void>;
   onDelete?: (e: Expense) => void;
@@ -99,6 +105,7 @@ export function ExpenseSheet({
   const [rateLive, setRateLive] = useState(false);
   const [every, setEvery] = useState<Every>('none');
   const [details, setDetails] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [tried, setTried] = useState(false);
   // Counts failed saves: each one shakes the message (and the amount, when it is missing).
   const [miss, setMiss] = useState(0);
@@ -111,7 +118,7 @@ export function ExpenseSheet({
       suggestTitles({
         recent: group.expenses.map((e) => ({ title: e.title, category: e.category })),
         hour: new Date().getHours(),
-        emoji: group.emoji,
+        emoji: group.cover?.split(':')[0] ?? group.emoji,
         label: (k) => t(`sug_${k}` as TKey),
       }).map((s) => ({ label: s.title ?? t(`sug_${s.key}` as TKey), category: s.category })),
     // Suggestions are worked out once per opening, so chips don't shuffle while typing.
@@ -125,7 +132,8 @@ export function ExpenseSheet({
     setBusy(false);
     setLines([]);
     setRateLive(false);
-    setEvery('none');
+    setPicking(false);
+    setEvery(!editing && startEvery && startEvery !== 'none' && plus ? startEvery : 'none');
     if (editing) {
       setAmountText(minorToInput(editing.amount, editing.currency));
       setTitle(editing.title);
@@ -155,7 +163,7 @@ export function ExpenseSheet({
       setMode('equal');
       setCur(group.currency);
       setRateText('');
-      setDetails(false);
+      setDetails(!!startEvery && startEvery !== 'none');
       setIncluded(Object.fromEntries(people.map((p) => [p.id, true])));
       setValues(Object.fromEntries(people.map((p) => [p.id, ''])));
     }
@@ -183,7 +191,8 @@ export function ExpenseSheet({
     const k = name.trim().toLocaleLowerCase();
     const recent = group.expenses.find((e) => e.title.trim().toLocaleLowerCase() === k);
     if (recent) return recent.category;
-    return suggestions.find((s) => s.label.toLocaleLowerCase() === k)?.category ?? 'other';
+    // Ideas first, then the words in the title ("Fuel" is transport, "عشاء" is food).
+    return suggestions.find((s) => s.label.toLocaleLowerCase() === k)?.category ?? categoryFromTitle(name) ?? 'other';
   };
   const cat = category ?? categoryFor(shownTitle);
 
@@ -236,7 +245,7 @@ export function ExpenseSheet({
   const includedCount = people.filter((p) => included[p.id]).length;
   const summary = [
     paidBy === group.me ? t('youPaid') : t('paidByName', { name: payer?.name ?? '?' }),
-    mode === 'equal' ? (includedCount === people.length ? t('splitEqualAll') : t('splitEqualN', { n: includedCount })) : t(modeKey(mode as SplitMode)),
+    mode === 'equal' ? (includedCount === people.length ? t('splitEqualAll') : t('splitEqualN', { n: includedCount })) : `${t('splitSummaryUnequal')} (${t(`mode_${mode}` as TKey)})`,
     t(catKey(cat)),
     ...(cur !== group.currency ? [cur] : []),
     ...(every !== 'none' ? [t(`every_${every}`)] : []),
@@ -274,6 +283,7 @@ export function ExpenseSheet({
         every,
       );
       haptic('success');
+      if (mode !== 'equal') timeEnd('uneven_split', true);
     } finally {
       setBusy(false);
     }
@@ -292,22 +302,26 @@ export function ExpenseSheet({
       paywall.open({ groupId: group.id });
       return;
     }
+    if (m !== 'equal' && mode === 'equal') timeStart('uneven_split');
     setMode(m);
     setValues(Object.fromEntries(people.map((p) => [p.id, m === 'shares' ? '1' : ''])));
     if (m === 'items' && !lines.length) setLines([{ key: newId(), name: '', price: '', members: [...ids] }]);
   };
+  const lastUneven = useRef<Exclude<Mode, 'equal'>>('shares');
+  if (mode !== 'equal') lastUneven.current = mode;
 
-  const bar = people.map((p, i) => ({ id: p.id, part: owed?.[p.id] ?? 0, tone: TONES[i % TONES.length] })).filter((b) => b.part > 0);
+  const bar = people.map((p, i) => ({ id: p.id, name: p.isMe ? t('you') : p.name, part: owed?.[p.id] ?? 0, tone: TONES[i % TONES.length] })).filter((b) => b.part > 0);
   const last = !editing ? group.expenses[0] : undefined;
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title={editing ? t('editExpense') : t('addExpense')}
+      title={picking ? t('paidIn') : editing ? t('editExpense') : t('addExpense')}
       testId="expense-sheet"
       morph={!editing}
       footer={
+        picking ? null : (
         <div className="flex flex-col gap-2">
           <ErrorText nonce={miss} testId="expense-error">
             {message}
@@ -323,15 +337,29 @@ export function ExpenseSheet({
             </Button>
           </div>
         </div>
+        )
       }
     >
+      {picking ? (
+        <CurrencyList
+          value={cur}
+          extra={[group.currency]}
+          onBack={() => setPicking(false)}
+          onPick={(c) => {
+            setCur(c);
+            setRateLive(false);
+            if (c === group.currency) setRateText('');
+            setPicking(false);
+          }}
+        />
+      ) : (
       <div className="flex flex-col gap-5">
         {last && onRepeat ? (
           <button
             type="button"
             onClick={() => onRepeat(last)}
             data-testid="repeat-last"
-            className="focus-ring -mb-2 inline-flex h-11 max-w-full items-center gap-2 self-center rounded-full bg-surface px-4 t-subhead font-medium text-text-2 ring-1 ring-separator"
+            className="focus-ring -mb-2 inline-flex h-11 max-w-full items-center gap-2 self-center rounded-full bg-surface px-4 t-subhead font-medium text-text-2 ring-1 ring-edge"
           >
             <ArrowCounterClockwise size={18} aria-hidden />
             <span className="truncate">{t('repeatLast', { title: last.title })}</span>
@@ -357,7 +385,7 @@ export function ExpenseSheet({
               if (e.key === 'Enter') save();
             }}
             placeholder={suggestions[0]?.label ?? t('whatForPh')}
-            className="focus-ring h-12 rounded-control bg-surface px-4 t-body text-text ring-1 ring-separator placeholder:text-text-3"
+            className="field h-12 rounded-control bg-surface px-4 t-body text-text placeholder:text-text-3"
           />
           {suggestions.length ? (
             <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label={t('suggestions')}>
@@ -428,7 +456,7 @@ export function ExpenseSheet({
                 <div className="flex flex-col gap-2">
                   <span className="t-footnote font-medium text-text-2 ps-1">{t('paidBy')}</span>
                   <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="radiogroup" aria-label={t('paidBy')}>
-                    {people.map((p, i) => (
+                    {people.map((p) => (
                       <button
                         key={p.id}
                         type="button"
@@ -441,10 +469,10 @@ export function ExpenseSheet({
                         }}
                         className={cx(
                           'focus-ring flex h-11 shrink-0 items-center gap-2 rounded-full pe-4 ps-1 t-subhead font-medium',
-                          paidBy === p.id ? 'bg-accent text-on-accent' : 'bg-surface text-text ring-1 ring-separator',
+                          paidBy === p.id ? 'bg-accent text-on-accent' : 'bg-surface text-text ring-1 ring-edge',
                         )}
                       >
-                        <Avatar name={p.name} index={i} size={34} />
+                        <Avatar name={p.name} avatar={p.avatar} size={34} />
                         {p.isMe ? t('you') : p.name}
                       </button>
                     ))}
@@ -460,28 +488,50 @@ export function ExpenseSheet({
                       </span>
                     ) : null}
                   </div>
-                  <div className="-mx-5 overflow-x-auto px-5">
-                    <div className="min-w-[22rem]">
-                      <Segmented<Mode> label={t('split')} value={mode} testId="mode" onChange={pickMode} options={MODES.map((m) => ({ key: m, label: t(`mode_${m}` as TKey) }))} />
+                  <Segmented<'equal' | 'unequal'>
+                    label={t('split')}
+                    value={mode === 'equal' ? 'equal' : 'unequal'}
+                    testId="split-how"
+                    onChange={(v) => pickMode(v === 'equal' ? 'equal' : lastUneven.current)}
+                    options={[
+                      { key: 'equal', label: t('splitEqually') },
+                      { key: 'unequal', label: t('splitUnequally') },
+                    ]}
+                  />
+                  {mode !== 'equal' ? (
+                    <Segmented<Mode> label={t('splitHow')} value={mode} testId="mode" onChange={pickMode} options={UNEVEN.map((m) => ({ key: m, label: t(`mode_${m}` as TKey) }))} />
+                  ) : null}
+
+                  <div className="flex flex-col gap-1">
+                    <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-2" aria-hidden dir="ltr">
+                      {bar.map((b) => (
+                        <motion.span key={b.id} layout transition={spring} style={{ flexGrow: b.part, background: b.tone }} className="h-full" />
+                      ))}
                     </div>
+                    {bar.length > 1 ? (
+                      <div className="flex flex-wrap gap-x-3 t-caption text-text-2" data-testid="split-legend">
+                        {bar.map((b) => (
+                          <span key={b.id} className="inline-flex items-center gap-1 num whitespace-nowrap">
+                            <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: b.tone }} />
+                            {b.name} {money(b.part, cur, lang)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-2" aria-hidden dir="ltr">
-                    {bar.map((b) => (
-                      <motion.span key={b.id} layout transition={spring} style={{ flexGrow: b.part, background: b.tone }} className="h-full" />
-                    ))}
-                  </div>
+                  {mode === 'shares' ? <DragShares people={people} values={values} owed={owed} cur={cur} onAdd={(id) => setShares(id, 1)} /> : null}
 
                   {mode === 'items' ? (
                     <ReceiptLines lines={lines} setLines={setLines} people={people} cur={cur} rest={receipt?.rest ?? 0} />
                   ) : null}
 
                   <ul className="overflow-hidden rounded-card bg-surface">
-                    {people.map((p, i) => {
+                    {people.map((p) => {
                       const share = owed?.[p.id];
                       return (
                         <li key={p.id} className="flex min-h-14 items-center gap-3 border-b border-separator/60 px-4 py-2 last:border-0">
-                          <Avatar name={p.name} index={i} size={32} />
+                          <Avatar name={p.name} avatar={p.avatar} size={32} />
                           <span className="flex-1 truncate t-body text-text">{p.isMe ? `${p.name} (${t('you')})` : p.name}</span>
                           {mode !== 'exact' && share !== undefined && share > 0 ? <span className="t-subhead text-text-2 num">{money(share, cur, lang)}</span> : null}
                           {mode === 'equal' ? (
@@ -497,7 +547,7 @@ export function ExpenseSheet({
                               className="focus-ring h-6 w-6 accent-[var(--nn-accent)]"
                             />
                           ) : mode === 'shares' ? (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1" data-share-target={p.id}>
                               <button type="button" aria-label={`${p.name} −`} onClick={() => setShares(p.id, -1)} className="tap focus-ring grid place-items-center rounded-full bg-surface-2 text-text">
                                 <Minus size={18} />
                               </button>
@@ -516,7 +566,7 @@ export function ExpenseSheet({
                               value={values[p.id] ?? ''}
                               onChange={(e) => setValues((v) => ({ ...v, [p.id]: e.target.value }))}
                               placeholder={mode === 'percent' ? '%' : formatNumber(0, cur)}
-                              className="focus-ring h-11 w-24 rounded-control bg-surface-2 px-3 text-center t-body text-text num"
+                              className="field h-11 w-24 rounded-control bg-surface-2 px-3 text-center t-body text-text num"
                             />
                           )}
                         </li>
@@ -528,23 +578,9 @@ export function ExpenseSheet({
                 <div className="flex flex-col gap-2">
                   <span className="t-footnote font-medium text-text-2 ps-1">{t('paidIn')}</span>
                   <div className="flex gap-2">
-                    <select
-                      aria-label={t('paidIn')}
-                      data-testid="expense-currency"
-                      value={cur}
-                      onChange={(e) => {
-                        setCur(e.target.value);
-                        setRateLive(false);
-                        if (e.target.value === group.currency) setRateText('');
-                      }}
-                      className="focus-ring h-12 w-32 shrink-0 rounded-control bg-surface px-3 t-body text-text ring-1 ring-separator"
-                    >
-                      {CURRENCIES.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.code}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="w-36 shrink-0">
+                      <CurrencyButton compact value={cur} label={t('paidIn')} onClick={() => setPicking(true)} testId="expense-currency" />
+                    </div>
                     {cur !== group.currency ? (
                       <input
                         inputMode="decimal"
@@ -556,7 +592,7 @@ export function ExpenseSheet({
                           setRateLive(false);
                         }}
                         placeholder={t('rate')}
-                        className="focus-ring h-12 min-w-0 flex-1 rounded-control bg-surface px-4 t-body text-text ring-1 ring-separator num"
+                        className="field h-12 min-w-0 flex-1 rounded-control bg-surface px-4 t-body text-text num"
                       />
                     ) : null}
                   </div>
@@ -588,7 +624,92 @@ export function ExpenseSheet({
           ) : null}
         </AnimatePresence>
       </div>
+      )}
     </Sheet>
+  );
+}
+
+/**
+ * Drag to split: pick up "+1 share" and drop it on a person (their share grows), or use the − and +
+ * buttons in the list below, which do the same without dragging (WCAG 2.5.7).
+ */
+function DragShares({
+  people,
+  values,
+  owed,
+  cur,
+  onAdd,
+}: {
+  people: GroupDetail['members'];
+  values: Record<string, string>;
+  owed: Record<string, number> | null;
+  cur: string;
+  onAdd: (id: string) => void;
+}) {
+  const { t, prefs } = useSession();
+  const [drag, setDrag] = useState<{ x: number; y: number; over: string | null } | null>(null);
+  const targetAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest('[data-drop]') as HTMLElement | null)?.dataset.drop ?? null;
+  return (
+    <div className="flex flex-col gap-3 rounded-card bg-surface p-3" data-testid="drag-shares">
+      <p className="t-footnote text-text-2">{t('dragHint')}</p>
+      <div className="flex flex-wrap gap-2">
+        {people.map((p) => {
+          const n = Number(values[p.id]) || 0;
+          return (
+            <div
+              key={p.id}
+              data-drop={p.id}
+              className={cx('flex min-w-[76px] flex-col items-center gap-1 rounded-card px-2 py-2 transition-colors', drag?.over === p.id ? 'bg-accent-soft ring-2 ring-accent' : 'bg-surface-2')}
+              data-testid="share-drop"
+            >
+              <span className="relative">
+                <Avatar name={p.name} avatar={p.avatar} size={40} />
+                <span className="absolute -bottom-1 -end-2 rounded-full bg-accent px-1.5 t-caption font-bold text-on-accent num">×{n}</span>
+              </span>
+              <span className="max-w-[72px] truncate t-caption font-semibold text-text">{p.isMe ? t('you') : p.name}</span>
+              <span className="t-caption text-text-2 num whitespace-nowrap">{owed?.[p.id] ? money(owed[p.id], cur, prefs.lang) : '–'}</span>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="tap focus-ring inline-flex touch-none select-none items-center gap-2 self-start rounded-full bg-accent px-4 t-subhead font-semibold text-on-accent"
+        aria-describedby={undefined}
+        data-testid="share-token"
+        onPointerDown={(e) => {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          setDrag({ x: e.clientX, y: e.clientY, over: null });
+        }}
+        onPointerMove={(e) => {
+          if (!drag) return;
+          const over = targetAt(e.clientX, e.clientY);
+          if (over !== drag.over && over) haptic('selection');
+          setDrag({ x: e.clientX, y: e.clientY, over });
+        }}
+        onPointerUp={(e) => {
+          const over = drag ? targetAt(e.clientX, e.clientY) : null;
+          setDrag(null);
+          if (over) {
+            haptic('success');
+            onAdd(over);
+          }
+        }}
+        onPointerCancel={() => setDrag(null)}
+      >
+        <HandGrabbing size={18} aria-hidden />
+        {t('addShare')}
+      </button>
+      {drag ? (
+        <span
+          aria-hidden
+          className="pointer-events-none fixed z-[70] rounded-full bg-accent px-3 py-1 t-footnote font-bold text-on-accent shadow-lg"
+          style={{ left: drag.x, top: drag.y, transform: 'translate(-50%, -130%)' }}
+        >
+          +1
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -619,7 +740,7 @@ function ReceiptLines({
               maxLength={60}
               onChange={(e) => set(l.key, { name: e.target.value })}
               placeholder={t('itemName')}
-              className="focus-ring h-11 min-w-0 flex-1 rounded-control bg-surface-2 px-3 t-body text-text placeholder:text-text-3"
+              className="field h-11 min-w-0 flex-1 rounded-control bg-surface-2 px-3 t-body text-text placeholder:text-text-3"
             />
             <input
               aria-label={`${t('itemPrice')} ${n + 1}`}
@@ -628,14 +749,14 @@ function ReceiptLines({
               value={l.price}
               onChange={(e) => set(l.key, { price: e.target.value })}
               placeholder={formatNumber(0, cur)}
-              className="focus-ring h-11 w-24 rounded-control bg-surface-2 px-3 text-center t-body text-text num"
+              className="field h-11 w-24 rounded-control bg-surface-2 px-3 text-center t-body text-text num"
             />
             <button type="button" aria-label={`${t('delete')} ${l.name || n + 1}`} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="tap focus-ring grid place-items-center rounded-full text-text-2">
               <X size={18} />
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5" role="group" aria-label={l.name || `${t('itemName')} ${n + 1}`}>
-            {people.map((p, i) => {
+            {people.map((p) => {
               const on = l.members.includes(p.id);
               return (
                 <button
@@ -648,7 +769,7 @@ function ReceiptLines({
                   }}
                   className={cx('focus-ring flex h-11 items-center gap-1.5 rounded-full pe-3 ps-1 t-footnote font-medium', on ? 'bg-accent-soft text-on-accent-soft' : 'bg-surface-2 text-text-2')}
                 >
-                  <Avatar name={p.name} index={i} size={28} />
+                  <Avatar name={p.name} avatar={p.avatar} size={28} />
                   {p.isMe ? t('you') : p.name}
                 </button>
               );
@@ -657,7 +778,7 @@ function ReceiptLines({
         </div>
       ))}
       <div className="flex items-center justify-between gap-2">
-        <Button variant="plain" icon={<Plus size={18} />} onClick={() => setLines((ls) => [...ls, { key: newId(), name: '', price: '', members: people.map((p) => p.id) }])} data-testid="add-item">
+        <Button variant="plain" className="whitespace-nowrap" icon={<Plus size={18} />} onClick={() => setLines((ls) => [...ls, { key: newId(), name: '', price: '', members: people.map((p) => p.id) }])} data-testid="add-item">
           {t('addItem')}
         </Button>
         {rest > 0 ? <span className="t-footnote text-text-2 num">{t('itemsRest', { amount: money(rest, cur, prefs.lang) })}</span> : null}

@@ -1,7 +1,7 @@
 'use client';
 
-import { CaretRight, ChartBar, CoinVertical, DownloadSimple, Plus, Printer, Repeat, Ticket, Trash } from '@phosphor-icons/react';
-import { memberStats, parseAmount, spendingByCategory } from '@nussnuss/core';
+import { CaretRight, ChartBar, CoinVertical, DownloadSimple, PencilSimple, Plus, Printer, Repeat, Ticket, Trash } from '@phosphor-icons/react';
+import { groupCover, memberStats, parseAmount, spendingByCategory, type CoverIcon, type CoverTone } from '@nussnuss/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, saveBlob, type Circle, type GroupDetail } from '@/lib/api';
@@ -11,6 +11,7 @@ import { catKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
 import { groupHasPlus } from './expense-sheet';
 import { Sheet } from './glass';
+import { CategoryTile, CoverPicker, CoverTile, ProgressRing } from './identity';
 import { shortDate, usePaywall } from './paywall';
 import { useToast } from './toast';
 import { Avatar, Button, cx, DrawCheck, ErrorText, Field, Segmented } from './ui';
@@ -60,7 +61,7 @@ export function Switch({ on, onChange, label, testId }: { on: boolean; onChange:
       }}
       className="tap focus-ring grid shrink-0 place-items-center"
     >
-      <span className={cx('relative h-[31px] w-[51px] rounded-full transition-colors', on ? 'bg-success' : 'bg-surface-2 ring-1 ring-separator')}>
+      <span className={cx('relative h-[31px] w-[51px] rounded-full transition-colors', on ? 'bg-success' : 'bg-surface-2 ring-1 ring-edge')}>
         <span className={cx('absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow transition-[inset-inline-start]', on ? 'start-[22px]' : 'start-[2px]')} />
       </span>
     </button>
@@ -71,7 +72,7 @@ export function Switch({ on, onChange, label, testId }: { on: boolean; onChange:
 export function Spending({ g }: { g: GroupDetail }) {
   const { t, prefs } = useSession();
   const cats = spendingByCategory(g.expenses, g.currency);
-  const paid = g.members.map((m, i) => ({ m, i, v: memberStats({ currency: g.currency, members: g.members, expenses: g.expenses, payments: [] }, m.id).paid })).filter((x) => x.v > 0);
+  const paid = g.members.map((m) => ({ m, v: memberStats({ currency: g.currency, members: g.members, expenses: g.expenses, payments: [] }, m.id).paid })).filter((x) => x.v > 0);
   const maxC = Math.max(1, ...cats.map((c) => c.amount));
   const maxP = Math.max(1, ...paid.map((p) => p.v));
   if (!cats.length) return null;
@@ -80,7 +81,9 @@ export function Spending({ g }: { g: GroupDetail }) {
       <div className="flex flex-col gap-2">
         <h3 className="t-subhead font-semibold text-text-2">{t('byCategory')}</h3>
         {cats.map((c) => (
-          <div key={c.category} className="flex flex-col gap-1">
+          <div key={c.category} className="flex items-center gap-3">
+            <CategoryTile category={c.category} size={28} />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex justify-between t-footnote">
               <span className="text-text">{t(catKey(c.category))}</span>
               <span className="text-text-2 num">{money(c.amount, g.currency, prefs.lang)}</span>
@@ -88,14 +91,15 @@ export function Spending({ g }: { g: GroupDetail }) {
             <div className="h-2 overflow-hidden rounded-full bg-surface-2">
               <div className="h-full rounded-full bg-accent" style={{ width: `${(c.amount / maxC) * 100}%` }} />
             </div>
+            </div>
           </div>
         ))}
       </div>
       <div className="flex flex-col gap-2">
         <h3 className="t-subhead font-semibold text-text-2">{t('byPerson')}</h3>
-        {paid.map(({ m, i, v }) => (
+        {paid.map(({ m, v }) => (
           <div key={m.id} className="flex items-center gap-3">
-            <Avatar name={m.name} index={i} size={28} />
+            <Avatar name={m.name} avatar={m.avatar} size={28} />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex justify-between t-footnote">
                 <span className="truncate text-text">{m.isMe ? t('you') : m.name}</span>
@@ -119,6 +123,7 @@ export function GroupOptions({
   onChange,
   onOpenCircle,
   onNewCircle,
+  onAddRepeating,
 }: {
   open: boolean;
   onClose: () => void;
@@ -126,6 +131,8 @@ export function GroupOptions({
   onChange: (d: GroupDetail) => void;
   onOpenCircle: (c: Circle) => void;
   onNewCircle: () => void;
+  /** "Add a bill that repeats": opens the add sheet set to every month. */
+  onAddRepeating?: () => void;
 }) {
   const { t, prefs, plan } = useSession();
   const paywall = usePaywall();
@@ -133,16 +140,71 @@ export function GroupOptions({
   const router = useRouter();
   const plus = groupHasPlus(g, plan);
   const [showSpending, setShowSpending] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(g.name);
+  const [cover, setCover] = useState<{ icon: CoverIcon; tone: CoverTone }>(groupCover(g));
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (open) setShowSpending(false);
+    if (open) {
+      setShowSpending(false);
+      setEditing(false);
+      setName(g.name);
+      setCover(groupCover(g));
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  const saveCover = async () => {
+    if (!name.trim()) return setError(t('err_name'));
+    try {
+      onChange(await api.patchGroup(g.id, { name: name.trim(), cover: `${cover.icon}:${cover.tone}` }));
+      setEditing(false);
+      toast(t('profileSaved'), undefined, { done: true });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const buy = () => paywall.open({ groupId: g.id, onDone: () => api.group(g.id).then(onChange).catch(() => {}) });
   const needPlus = (run: () => void) => () => (plus ? run() : buy());
   const pass = g.tripPassUntil && Date.parse(g.tripPassUntil) > Date.now() ? g.tripPassUntil : null;
 
   return (
-    <Sheet open={open} onClose={onClose} title={t('groupMore')} testId="group-options">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={editing ? t('coverAndName') : t('groupMore')}
+      testId="group-options"
+      footer={
+        editing ? (
+          <div className="flex flex-col gap-2">
+            <ErrorText>{error}</ErrorText>
+            <Button block onClick={saveCover} data-testid="save-cover">
+              {t('save')}
+            </Button>
+          </div>
+        ) : undefined
+      }
+    >
+      {editing ? (
+        <div className="flex flex-col gap-5 pb-2" data-testid="cover-edit">
+          <div className="flex items-end gap-3">
+            <CoverTile cover={`${cover.icon}:${cover.tone}`} size={48} />
+            <Field className="flex-1" label={t('groupName')} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} data-testid="edit-group-name" />
+          </div>
+          <CoverPicker value={cover} onChange={setCover} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-5 pb-2">
+        <div className="overflow-hidden rounded-card bg-surface">
+          <Row
+            icon={<PencilSimple size={20} />}
+            title={t('coverAndName')}
+            sub={g.name}
+            onClick={() => setEditing(true)}
+            trailing={<CoverTile cover={g.cover} emoji={g.emoji} size={32} />}
+            testId="edit-cover"
+          />
+        </div>
         <div className="overflow-hidden rounded-card bg-surface">
           {pass ? (
             <Row icon={<Ticket size={20} />} title={t('tripPass')} sub={t('tripOnUntil', { date: shortDate(pass, prefs.lang) })} />
@@ -178,11 +240,11 @@ export function GroupOptions({
         </div>
         {showSpending && plus ? <Spending g={g} /> : null}
 
-        {g.recurring?.length ? (
-          <section className="flex flex-col gap-2">
-            <h3 className="t-subhead font-semibold text-text-2 ps-4">{t('recurringTitle')}</h3>
-            <div className="overflow-hidden rounded-card bg-surface" data-testid="recurring-list">
-              {g.recurring.map((r) => (
+        <section className="flex flex-col gap-2">
+          <h3 className="t-subhead font-semibold text-text-2 ps-4">{t('recurringTitle')}</h3>
+          <div className="overflow-hidden rounded-card bg-surface" data-testid="recurring-list">
+            {!g.recurring?.length ? <p className="border-b border-separator/60 px-4 py-3 t-footnote text-text-2" data-testid="no-repeating">{t('noRepeating')}</p> : null}
+              {(g.recurring ?? []).map((r) => (
                 <Row
                   key={r.id}
                   icon={<Repeat size={20} />}
@@ -204,9 +266,15 @@ export function GroupOptions({
                   }
                 />
               ))}
-            </div>
-          </section>
-        ) : null}
+            <Row
+              icon={<Plus size={20} />}
+              title={t('addRepeating')}
+              onClick={() => (plus ? onAddRepeating?.() : buy())}
+              trailing={plus ? <CaretRight size={18} className="text-text-3 rtl:-scale-x-100" /> : <PlusBadge />}
+              testId="add-repeating"
+            />
+          </div>
+        </section>
 
         <section className="flex flex-col gap-2">
           <h3 className="t-subhead font-semibold text-text-2 ps-4">{t('circles')}</h3>
@@ -241,6 +309,7 @@ export function GroupOptions({
           <Row icon={<Printer size={20} />} title={t('print')} onClick={needPlus(() => router.push(`/g/${g.id}/print`))} trailing={plus ? null : <PlusBadge />} testId="print" />
         </div>
       </div>
+      )}
     </Sheet>
   );
 }
@@ -268,9 +337,13 @@ export function CirclesCard({ g, onOpen }: { g: GroupDetail; onOpen: (c: Circle)
         const others = c.turns.length - 1;
         return (
           <button key={c.id} type="button" onClick={() => onOpen(c)} className="focus-ring flex items-center gap-3 rounded-card bg-surface p-4 text-start" data-testid="circle-card">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-row bg-highlight text-on-highlight" aria-hidden>
-              <CoinVertical size={22} weight="fill" />
-            </span>
+            {c.status === 'upcoming' ? (
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-row bg-highlight text-on-highlight" aria-hidden>
+                <CoinVertical size={22} weight="fill" />
+              </span>
+            ) : (
+              <ProgressRing value={r.paid.length} total={others} size={44} />
+            )}
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate t-headline text-text">{c.name}</span>
               <span className="truncate t-footnote text-text-2">
@@ -313,14 +386,14 @@ export function CircleSheet({ circle, g, onClose, onChange }: { circle: Circle |
             {c.rounds.map((r) => (
               <li key={r.round} className={cx('flex flex-col gap-2 rounded-card bg-surface p-4', c.current === r.round && 'ring-2 ring-accent')}>
                 <div className="flex items-center gap-3">
-                  <Avatar name={realName(r.receiver)} index={idx(r.receiver)} size={32} />
+                  <Avatar name={realName(r.receiver)} avatar={g.members[idx(r.receiver)]?.avatar} size={32} />
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="t-headline text-text">{r.receiver === g.me ? t('circleYouGet') : t('circleGets', { name: name(r.receiver) })}</span>
                     <span className="t-footnote text-text-2">
                       {t('circleRound', { n: r.round + 1 })} · {t('circleDue', { date: shortDate(r.dueOn, prefs.lang) })}
                     </span>
                   </span>
-                  <span className="t-footnote text-text-2 num">{t('circlePaidN', { paid: r.paid.length, total: c.turns.length - 1 })}</span>
+                  <ProgressRing value={r.paid.length} total={c.turns.length - 1} size={40} label={t('circlePaidN', { paid: r.paid.length, total: c.turns.length - 1 })} />
                 </div>
                 <div className="flex flex-wrap gap-2" role="group" aria-label={`${t('circleRound', { n: r.round + 1 })} · ${t('paid')}`}>
                   {c.turns
@@ -346,7 +419,7 @@ export function CircleSheet({ circle, g, onClose, onChange }: { circle: Circle |
                           )}
                           data-testid="circle-member"
                         >
-                          <Avatar name={realName(m)} index={idx(m)} size={28} />
+                          <Avatar name={realName(m)} avatar={g.members[idx(m)]?.avatar} size={28} />
                           {name(m)}
                           {paid ? <DrawCheck size={16} /> : late ? ` · ${t('late')}` : null}
                         </button>
@@ -461,7 +534,7 @@ export function NewCircleSheet({ open, g, onClose, onCreated }: { open: boolean;
             {order.map((id, i) => (
               <li key={id} className="flex min-h-14 items-center gap-3 border-b border-separator/60 px-4 py-2 last:border-0">
                 <span className="w-6 text-center t-headline text-text-2 num">{i + 1}</span>
-                <Avatar name={g.members[idx(id)]?.name ?? '?'} index={idx(id)} size={32} />
+                <Avatar name={g.members[idx(id)]?.name ?? '?'} avatar={g.members[idx(id)]?.avatar} size={32} />
                 <span className="flex-1 truncate t-body text-text">{g.members[idx(id)]?.isMe ? t('you') : g.members[idx(id)]?.name}</span>
                 {i > 0 ? (
                   <button
@@ -489,7 +562,7 @@ export function NewCircleSheet({ open, g, onClose, onCreated }: { open: boolean;
               {g.members
                 .filter((m) => !order.includes(m.id))
                 .map((m) => (
-                  <button key={m.id} type="button" onClick={() => setOrder((o) => [...o, m.id])} className="focus-ring inline-flex h-11 items-center gap-2 rounded-full bg-surface px-4 t-subhead text-text ring-1 ring-separator">
+                  <button key={m.id} type="button" onClick={() => setOrder((o) => [...o, m.id])} className="focus-ring inline-flex h-11 items-center gap-2 rounded-full bg-surface px-4 t-subhead text-text ring-1 ring-edge">
                     <Plus size={16} />
                     {m.isMe ? t('you') : m.name}
                   </button>

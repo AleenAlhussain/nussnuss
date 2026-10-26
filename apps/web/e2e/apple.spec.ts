@@ -52,7 +52,7 @@ test('glass: Clear, Tinted (the default) and Solid; solid with Increase Contrast
   const tinted = await rootVar(page, '--nn-glass-fill');
   expect(tinted).toContain('color-mix');
 
-  await page.getByTestId('tab-settings').click();
+  await page.getByTestId('tab-you').click();
   await page.getByTestId('settings-glass-clear').click();
   await expect(html).toHaveAttribute('data-glass', 'clear');
   const clear = await rootVar(page, '--nn-glass-fill');
@@ -75,7 +75,7 @@ test('glass: Clear, Tinted (the default) and Solid; solid with Increase Contrast
   expect(await rootVar(page, '--nn-glass-edge')).toContain('linear-gradient');
 
   // Glass never sits on glass: a toast shown over an open sheet is solid.
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page.getByTestId('group')).toBeVisible();
   await page.getByTestId('add').click();
   await expect(html).toHaveAttribute('data-sheet', /.+/);
@@ -97,24 +97,24 @@ test('navigation: tabs remember the screen, the active tab goes to the top then 
   await group(page, 'Dubai trip', ['Ali', 'Huda']);
   const groupUrl = page.url();
 
-  await page.getByTestId('tab-settings').click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByTestId('tab-you').click();
+  await expect(page).toHaveURL(/\/you$/);
   // Back to Groups lands on the group you were in, not the list.
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page).toHaveURL(groupUrl);
   await expect(page.getByTestId('group')).toBeVisible();
   // Tapping the tab you are on, at the top, goes to its first screen.
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page).toHaveURL(home);
 
   // Scrolled down, the first tap goes to the top and stays on the screen.
-  await page.getByTestId('tab-settings').click();
+  await page.getByTestId('tab-you').click();
   await expect(page.getByTestId('settings')).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 700));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
-  await page.getByTestId('tab-settings').click();
+  await page.getByTestId('tab-you').click();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5);
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/you$/);
   done();
 });
 
@@ -149,10 +149,10 @@ test('search: groups by name, people and expenses; inside a group by title, paye
   await search.fill('');
 
   // On the groups screen.
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page).toHaveURL(home);
   await group(page, 'Beach day', ['Lina']);
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page).toHaveURL(home);
   await expect(page.getByTestId('group-card')).toHaveCount(2);
   const find = page.getByTestId('search');
@@ -168,7 +168,7 @@ test('search: groups by name, people and expenses; inside a group by title, paye
   await expect(page.getByTestId('group')).toBeVisible();
 
   // The search that led somewhere comes back as a recent search.
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page).toHaveURL(home);
   await page.getByTestId('search').focus();
   await expect(page.getByTestId('recent-search')).toHaveText(['grocer']);
@@ -249,7 +249,7 @@ test('reduce motion: no step back, no shake, the group card opens without a zoom
   expect(await page.getByTestId('expense-error').evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
   await page.getByTestId('sheet-close').click();
 
-  await page.getByTestId('tab-groups').click();
+  await page.getByTestId('tab-home').click();
   await expect(page).toHaveURL(home);
   await page.getByTestId('group-card').first().click();
   await expect(page.getByTestId('group')).toBeVisible();

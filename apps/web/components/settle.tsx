@@ -3,7 +3,7 @@
 import { ArrowRight, BellRinging, Check, CheckCircle, Copy, ArrowSquareOut, ShareFat } from '@phosphor-icons/react';
 import { payAction, type PayTo, type Transfer } from '@nussnuss/core';
 import { AnimatePresence, motion, useMotionValue, useTransform } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { saveBlob, type GroupDetail } from '@/lib/api';
 import { haptic, spring } from '@/lib/feel';
 import { money } from '@/lib/format';
@@ -12,6 +12,7 @@ import { useSession } from '@/lib/session';
 import { SettledMoment } from './coin';
 import { summaryCard } from './summary-card';
 import { useToast } from './toast';
+import { FitLine } from './identity';
 import { Avatar, Button } from './ui';
 
 /** Shares text with the phone's share sheet where there is one, otherwise straight to WhatsApp. */
@@ -29,7 +30,7 @@ export async function shareText(text: string) {
 
 export const methodName = (p: PayTo, t: (k: TKey) => string) => p.label || t(`pay_${p.kind}` as TKey);
 
-function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; onPay: (t: Transfer) => void }) {
+function TransferCard({ group, tr, onPay, nudge }: { group: GroupDetail; tr: Transfer; onPay: (t: Transfer) => void; nudge?: boolean }) {
   const { t, prefs } = useSession();
   const toast = useToast();
   const rtl = prefs.lang === 'ar';
@@ -37,7 +38,6 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
   const reveal = useTransform(x, rtl ? [-140, 0] : [0, 140], rtl ? [1, 0] : [0, 1]);
   // Past the point where letting go marks it paid, the tick pops and you feel a light tick.
   const [armed, setArmed] = useState(false);
-  const idx = (id: string) => group.members.findIndex((m) => m.id === id);
   const member = (id: string) => group.members.find((p) => p.id === id);
   const name = (id: string) => {
     const m = member(id);
@@ -91,13 +91,15 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
             onPay(tr);
           }
         }}
-        className="relative flex flex-col gap-3 bg-surface p-4"
+        className={`relative flex flex-col gap-3 bg-surface p-4 ${nudge ? 'nudge' : ''}`}
+        data-testid="transfer-card"
       >
+        {/* Names on the first line, the amount on its own line: long amounts never squeeze the names. */}
         <div className="flex items-center gap-3">
-          <Avatar name={member(tr.from)?.name ?? '?'} index={idx(tr.from)} />
-          <ArrowRight size={16} className="text-text-3 rtl:-scale-x-100" aria-hidden />
-          <Avatar name={member(tr.to)?.name ?? '?'} index={idx(tr.to)} />
-          <p className="min-w-0 flex-1 t-body text-text">
+          <Avatar name={member(tr.from)?.name ?? '?'} avatar={member(tr.from)?.avatar} />
+          <ArrowRight size={16} className="shrink-0 text-text-3 rtl:-scale-x-100" aria-hidden />
+          <Avatar name={member(tr.to)?.name ?? '?'} avatar={member(tr.to)?.avatar} />
+          <p className="min-w-0 flex-1 t-body text-text" data-testid="transfer-names">
             {iOwe ? (
               t('youPayTo', { name: name(tr.to) })
             ) : owesMe ? (
@@ -108,7 +110,11 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
               </>
             )}
           </p>
-          <span className="t-headline text-text num">{amount}</span>
+        </div>
+        <div className="min-w-0">
+          <FitLine className="t-title-2 text-text num" testId="transfer-amount">
+            {amount}
+          </FitLine>
         </div>
         {ways.length ? (
           <div className="flex flex-col gap-2" data-testid="pay-with">
@@ -166,11 +172,24 @@ function TransferCard({ group, tr, onPay }: { group: GroupDetail; tr: Transfer; 
   );
 }
 
+const HINT_KEY = 'nn:swipe-hint-seen';
+
 export function SettlePlan({ group, onPay }: { group: GroupDetail; onPay: (t: Transfer) => void }) {
   const { t, prefs } = useSession();
   const toast = useToast();
   const lang = prefs.lang;
   const [sharing, setSharing] = useState(false);
+  // "Swipe right to mark as paid" shows the first time only, with a small nudge of the first card.
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!group.transfers.length) return;
+    try {
+      if (!localStorage.getItem(HINT_KEY)) {
+        setHint(true);
+        localStorage.setItem(HINT_KEY, '1');
+      }
+    } catch {}
+  }, [group.transfers.length]);
 
   const shareSummary = async () => {
     setSharing(true);
@@ -200,13 +219,14 @@ export function SettlePlan({ group, onPay }: { group: GroupDetail; onPay: (t: Tr
         <SettledMoment title={t('allSettled')} body={t('allSettledBody')} />
       ) : (
         <div className="flex flex-col gap-2">
-          <p id="swipe-hint" className="t-footnote text-text-2 ps-1">
+          {/* Screen readers always hear the hint; it shows on screen only the first time. */}
+          <p id="swipe-hint" className={hint ? 't-footnote text-text-2 ps-1' : 'sr-only'} data-testid="swipe-hint" data-shown={hint ? 'true' : undefined}>
             {t('swipeHint')}
           </p>
           <ul className="flex flex-col gap-3">
             <AnimatePresence initial={false}>
-              {group.transfers.map((tr) => (
-                <TransferCard key={`${tr.from}-${tr.to}`} group={group} tr={tr} onPay={onPay} />
+              {group.transfers.map((tr, i) => (
+                <TransferCard key={`${tr.from}-${tr.to}`} group={group} tr={tr} onPay={onPay} nudge={hint && i === 0} />
               ))}
             </AnimatePresence>
           </ul>
@@ -218,13 +238,14 @@ export function SettlePlan({ group, onPay }: { group: GroupDetail; onPay: (t: Tr
         </Button>
       ) : null}
       <ul className="overflow-hidden rounded-card bg-surface" aria-label="Balances">
-        {group.members.map((m, i) => {
+        {group.members.map((m) => {
           const b = group.balances[m.id] ?? 0;
           return (
             <li key={m.id} className="flex min-h-14 items-center gap-3 border-b border-separator/60 px-4 py-2 last:border-0">
-              <Avatar name={m.name} index={i} size={32} />
+              <Avatar name={m.name} avatar={m.avatar} size={32} />
               <span className="flex-1 truncate t-body text-text">{m.isMe ? `${m.name} (${t('you')})` : m.name}</span>
-              <span className={`t-subhead font-semibold num ${b > 0 ? 'text-success' : b < 0 ? 'text-danger' : 'text-text-2'}`} data-testid={`balance-${m.name}`}>
+              {/* Owing is not an error: plain text, never red. */}
+              <span className={`t-subhead font-semibold num whitespace-nowrap ${b > 0 ? 'text-success' : b < 0 ? 'text-text' : 'text-text-2'}`} data-testid={`balance-${m.name}`}>
                 {b > 0 ? t('getsBack', { amount: money(b, group.currency, lang) }) : b < 0 ? t('owes', { amount: money(-b, group.currency, lang) }) : t('even')}
               </span>
             </li>

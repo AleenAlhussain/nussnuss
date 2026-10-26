@@ -1,6 +1,6 @@
 'use client';
 
-import { BellRinging, ChartPieSlice, Check, CurrencyCircleDollar, FileCsv, Palette, Receipt, Repeat } from '@phosphor-icons/react';
+import { Check, Palette, Receipt, Repeat } from '@phosphor-icons/react';
 import { createContext, useCallback, useContext, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/feel';
@@ -24,15 +24,21 @@ export function usePaywall() {
   return c;
 }
 
-const FEATURES: [ComponentType<{ size?: number; weight?: 'duotone' }>, TKey][] = [
-  [Repeat, 'plusF_recurring'],
-  [BellRinging, 'plusF_reminders'],
-  [CurrencyCircleDollar, 'plusF_rates'],
-  [Receipt, 'plusF_items'],
-  [ChartPieSlice, 'plusF_charts'],
-  [FileCsv, 'plusF_export'],
-  [Palette, 'plusF_looks'],
+/** Three benefits, not seven features: what Plus changes for someone who splits a lot. */
+const BENEFITS: [ComponentType<{ size?: number; weight?: 'duotone' }>, TKey, TKey][] = [
+  [Repeat, 'plusB1T', 'plusB1B'],
+  [Receipt, 'plusB2T', 'plusB2B'],
+  [Palette, 'plusB3T', 'plusB3B'],
 ];
+
+/** Store prices, when the operator has set them for the web (the phone apps show the store's own prices). */
+const PRICES: Partial<Record<'monthly' | 'yearly' | 'trip', string>> = (() => {
+  try {
+    return JSON.parse(process.env.NEXT_PUBLIC_PLUS_PRICES ?? '{}');
+  } catch {
+    return {};
+  }
+})();
 
 type Product = 'nussnuss.plus.yearly' | 'nussnuss.plus.monthly' | 'nussnuss.trip_pass';
 const DEV = process.env.NEXT_PUBLIC_DEV_PURCHASES === 'true';
@@ -57,10 +63,10 @@ export function PaywallProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ open }), [open]);
   const pass = opts?.groupId ? plan?.tripPasses.find((p) => p.groupId === opts.groupId) : undefined;
 
-  const choices: { id: Product; title: string; body?: string; badge?: string }[] = [
-    { id: 'nussnuss.plus.yearly', title: t('planYearly'), badge: t('planYearlySave') },
-    { id: 'nussnuss.plus.monthly', title: t('planMonthly') },
-    ...(opts?.groupId ? [{ id: 'nussnuss.trip_pass' as Product, title: t('tripPass'), body: t('tripPassBody') }] : []),
+  const choices: { id: Product; title: string; price?: string; body?: string; badge?: string }[] = [
+    { id: 'nussnuss.plus.yearly', title: t('planYearly'), price: PRICES.yearly ? t('perYear', { price: PRICES.yearly }) : undefined, badge: t('planYearlySave') },
+    { id: 'nussnuss.plus.monthly', title: t('planMonthly'), price: PRICES.monthly ? t('perMonth', { price: PRICES.monthly }) : undefined },
+    ...(opts?.groupId ? [{ id: 'nussnuss.trip_pass' as Product, title: t('tripPass'), price: PRICES.trip, body: t('tripPassBody') }] : []),
   ];
 
   const devBuy = async () => {
@@ -84,9 +90,9 @@ export function PaywallProvider({ children }: { children: ReactNode }) {
       {children}
       <Sheet open={!!opts} onClose={() => setOpts(null)} title={t('plus')} testId="paywall">
         <div className="flex flex-col gap-5 pb-2">
-          <div className="flex flex-col items-center gap-3 pt-1 text-center">
-            <Coin size={64} />
-            <p className="max-w-xs t-title-3 text-text">{t('plusTagline')}</p>
+          <div className="flex flex-col items-center gap-2 pt-1 text-center">
+            <Coin size={56} />
+            <p className="max-w-xs t-subhead text-text-2">{t('plusFree')}</p>
             {plan?.plus && plan.plusUntil ? (
               <p className="rounded-full bg-success-soft px-3 py-1 t-footnote font-semibold text-success" data-testid="plus-on">
                 {t('plusOnUntil', { date: shortDate(plan.plusUntil, prefs.lang) })}
@@ -95,17 +101,20 @@ export function PaywallProvider({ children }: { children: ReactNode }) {
               <p className="rounded-full bg-success-soft px-3 py-1 t-footnote font-semibold text-success">{t('tripOnUntil', { date: shortDate(pass.until, prefs.lang) })}</p>
             ) : null}
           </div>
-          <ul className="flex flex-col gap-1 rounded-card bg-surface p-2">
-            {FEATURES.map(([Icon, key]) => (
-              <li key={key} className="flex min-h-11 items-center gap-3 px-2 t-body text-text">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-row bg-accent-soft text-on-accent-soft" aria-hidden>
+          <ul className="flex flex-col gap-1 rounded-card bg-surface p-2" data-testid="plus-benefits">
+            {BENEFITS.map(([Icon, title, body]) => (
+              <li key={title} className="flex items-start gap-3 px-2 py-2">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-row bg-accent-soft text-on-accent-soft" aria-hidden>
                   <Icon size={20} weight="duotone" />
                 </span>
-                {t(key)}
+                <span className="flex min-w-0 flex-col">
+                  <span className="t-headline text-text">{t(title)}</span>
+                  <span className="t-footnote text-text-2">{t(body)}</span>
+                </span>
               </li>
             ))}
           </ul>
-          <div role="radiogroup" aria-label={t('yourPlan')} className="flex flex-col gap-2">
+          <div role="radiogroup" aria-label={t('yourPlan')} className="grid grid-cols-2 gap-2" data-testid="plan-cards">
             {choices.map((c) => (
               <button
                 key={c.id}
@@ -118,17 +127,19 @@ export function PaywallProvider({ children }: { children: ReactNode }) {
                 }}
                 data-testid={`plan-${c.id}`}
                 className={cx(
-                  'focus-ring flex min-h-14 items-center gap-3 rounded-card px-4 py-3 text-start transition-colors',
-                  pick === c.id ? 'bg-accent-soft ring-2 ring-accent' : 'bg-surface ring-1 ring-separator',
+                  'focus-ring relative flex min-h-24 flex-col items-start gap-1 rounded-card p-3 text-start transition-colors',
+                  c.id === 'nussnuss.trip_pass' && 'col-span-2',
+                  pick === c.id ? 'bg-accent-soft ring-2 ring-accent' : 'bg-surface ring-1 ring-edge',
                 )}
               >
-                <span className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-full', pick === c.id ? 'bg-accent text-on-accent' : 'ring-2 ring-separator')} aria-hidden>
-                  {pick === c.id ? <Check size={14} weight="bold" /> : null}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col">
+                <span className="flex w-full items-center justify-between gap-2">
                   <span className="t-headline text-text">{c.title}</span>
-                  {c.body ? <span className="t-footnote text-text-2">{c.body}</span> : null}
+                  <span className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-full', pick === c.id ? 'bg-accent text-on-accent' : 'ring-2 ring-edge')} aria-hidden>
+                    {pick === c.id ? <Check size={14} weight="bold" /> : null}
+                  </span>
                 </span>
+                {c.price ? <span className="t-title-3 text-text num" data-testid="plan-price">{c.price}</span> : null}
+                {c.body ? <span className="t-footnote text-text-2">{c.body}</span> : null}
                 {c.badge ? <span className="rounded-full bg-highlight px-2 py-0.5 t-caption font-semibold text-on-highlight">{c.badge}</span> : null}
               </button>
             ))}
@@ -141,7 +152,15 @@ export function PaywallProvider({ children }: { children: ReactNode }) {
               {t('devBuy')}
             </Button>
           ) : null}
-          <p className="text-center t-footnote text-text-3">{t('cancelAnytime')}</p>
+          <p className="text-center t-footnote text-text-2">{t('billedBy')}</p>
+          <div className="flex justify-center gap-4 t-footnote font-semibold">
+            <a href="/terms" className="focus-ring tap inline-flex items-center rounded-full px-2 text-accent">
+              {t('terms')}
+            </a>
+            <a href="/privacy" className="focus-ring tap inline-flex items-center rounded-full px-2 text-accent">
+              {t('privacy')}
+            </a>
+          </div>
         </div>
       </Sheet>
     </Ctx.Provider>

@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+/** The currency picker: a list in the sheet, the same as in the phone app. */
+async function pickCurrency(page: Page, code: string) {
+  await page.getByTestId('group-currency').click();
+  await page.getByTestId(`currency-${code}`).click();
+  await expect(page.getByTestId('currency-list')).toBeHidden();
+}
+
 const SHOTS = process.env.SHOTS_DIR ?? 'test-results/screens';
 
 function guard(page: Page) {
@@ -37,7 +44,7 @@ async function newGroup(page: Page, name: string, people: string[]) {
   if (!(await page.getByTestId('new-group-sheet').isVisible())) await page.getByTestId('add').click();
   await expect(page.getByTestId('new-group-sheet')).toBeVisible();
   await page.getByTestId('group-name').fill(name);
-  await page.getByTestId('group-currency').selectOption('OMR');
+  await pickCurrency(page, 'OMR');
   for (const p of people) {
     await page.getByTestId('person-name').fill(p);
     await page.getByTestId('add-person').click();
@@ -90,6 +97,7 @@ test('welcome, first group, expenses with the keypad, settle up, undo', async ({
   await page.getByTestId('title').fill('Fuel');
   await page.getByTestId('details').click();
   await page.getByTestId('payer').nth(1).click();
+  await page.getByTestId('split-how-unequal').click();
   await page.getByTestId('mode-shares').click();
   await page.getByRole('button', { name: 'Omar +' }).click();
   await expect(page.getByTestId('share-count').nth(2)).toHaveText('2');
@@ -141,8 +149,8 @@ test('a friend joins from the link without the app, in Arabic', async ({ page, b
   await start(page, 'Talal');
   await newGroup(page, 'Flat 12', ['Sara']);
   await page.getByTestId('share').click();
-  await expect(page.getByTestId('invite-link')).toContainText('/join/');
-  const link = (await page.getByTestId('invite-link').textContent())!.trim();
+  await expect(page.getByTestId('invite-link')).toContainText('/j/');
+  const link = (await page.getByTestId('invite-qr').getAttribute('data-text'))!;
   await still(page);
   await page.screenshot({ path: `${SHOTS}/07-share.png` });
 
@@ -177,7 +185,7 @@ test('settings: frosted glass and dark mode @desktop', async ({ page }) => {
   await still(page);
   await page.screenshot({ path: `${SHOTS}/10-group-dark-${test.info().project.name}.png` });
   await a11y(page, 'group dark');
-  await page.goto('/settings');
+  await page.goto('/you');
   await page.getByTestId('settings-glass-frosted').click();
   await expect(page.locator('html')).toHaveAttribute('data-glass', 'frosted');
   await still(page);

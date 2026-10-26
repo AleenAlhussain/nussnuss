@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+/** The currency picker: a list in the sheet, the same as in the phone app. */
+async function pickCurrency(page: Page, code: string) {
+  await page.getByTestId('group-currency').click();
+  await page.getByTestId(`currency-${code}`).click();
+  await expect(page.getByTestId('currency-list')).toBeHidden();
+}
+
 /** The enhancement plan, end to end: three-tap add, nudges, sharing, accounts, offline, Plus, circles. */
 const SHOTS = process.env.SHOTS_DIR ?? 'test-results/screens';
 
@@ -27,7 +34,7 @@ async function start(page: Page, name: string) {
 async function group(page: Page, name: string, people: string[], currency = 'AED') {
   if (!(await page.getByTestId('new-group-sheet').isVisible())) await page.getByTestId('add').click();
   await page.getByTestId('group-name').fill(name);
-  await page.getByTestId('group-currency').selectOption(currency);
+  await pickCurrency(page, currency);
   for (const p of people) {
     await page.getByTestId('person-name').fill(p);
     await page.getByTestId('add-person').click();
@@ -39,7 +46,7 @@ async function amount(page: Page, digits: string) {
   for (const d of digits) await page.getByRole('button', { name: d === '.' ? 'Decimal point' : d, exact: true }).click();
 }
 async function plus(page: Page) {
-  await page.goto('/settings');
+  await page.goto('/you');
   await page.getByTestId('plan-row').click();
   await page.getByTestId('dev-buy').click();
   await expect(page.getByTestId('toast')).toContainText('Plus is on');
@@ -104,7 +111,7 @@ test('settle up: remind, pay with, and the share card; a friend pays with my IBA
   const done = guard(page);
   await start(page, 'Huda');
   await page.keyboard.press('Escape');
-  await page.goto('/settings');
+  await page.goto('/you');
   await page.getByTestId('add-pay-to').click();
   await page.getByTestId('pay-kind-iban').click();
   await page.getByTestId('pay-value').fill('ae07 0331 2345 6789 0123 456');
@@ -126,8 +133,8 @@ test('settle up: remind, pay with, and the share card; a friend pays with my IBA
   await a11y(page, 'settle with remind');
 
   await page.getByTestId('share').click();
-  await expect(page.getByTestId('invite-link')).toContainText('/join/');
-  const link = (await page.getByTestId('invite-link').textContent())!.trim();
+  await expect(page.getByTestId('invite-link')).toContainText('/j/');
+  const link = (await page.getByTestId('invite-qr').getAttribute('data-text'))!;
   const friend = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'], viewport: { width: 390, height: 844 } });
   const fp = await friend.newPage();
   await fp.goto(link);
@@ -160,7 +167,7 @@ test('accounts: a recovery code and a device code bring the account to a new bro
   const done = guard(page);
   await start(page, 'Mona');
   await group(page, 'Gym', ['Rana']);
-  await page.goto('/settings');
+  await page.goto('/you');
   await expect(page.getByTestId('account-status')).toContainText('Keep your groups');
   await page.getByTestId('make-recovery').click();
   const recovery = (await page.getByTestId('shown-code').textContent())!.trim();
@@ -178,7 +185,7 @@ test('accounts: a recovery code and a device code bring the account to a new bro
   await op.getByTestId('code').fill(recovery.toLowerCase());
   await op.getByTestId('code-continue').click();
   await expect(op.getByTestId('groups')).toBeVisible();
-  await expect(op.getByText('Gym')).toBeVisible();
+  await expect(op.getByTestId('group-card')).toContainText('Gym');
 
   await page.getByTestId('link-device').click();
   const short = (await page.getByTestId('shown-code').textContent())!.trim();
@@ -190,7 +197,7 @@ test('accounts: a recovery code and a device code bring the account to a new bro
   await tp.getByTestId('have-account').click();
   await tp.getByTestId('code').fill(short);
   await tp.getByTestId('code-continue').click();
-  await expect(tp.getByText('Gym')).toBeVisible();
+  await expect(tp.getByTestId('group-card')).toContainText('Gym');
   // Used once: the same code no longer works.
   const fourth = await browser.newContext();
   const fp = await fourth.newPage();
@@ -251,6 +258,7 @@ test('Plus: recurring bills, items, spending, CSV, reminders, looks', async ({ p
   await amount(page, '100');
   await page.getByTestId('title').fill('Dinner');
   await page.getByTestId('details').click();
+  await page.getByTestId('split-how-unequal').click();
   await page.getByTestId('mode-items').click();
   await page.getByTestId('item-price').first().fill('45');
   await page.getByTestId('add-item').click();
@@ -277,7 +285,7 @@ test('Plus: recurring bills, items, spending, CSV, reminders, looks', async ({ p
   expect(csv.suggestedFilename()).toBe('Our flat.csv');
   await page.keyboard.press('Escape');
 
-  await page.goto('/settings');
+  await page.goto('/you');
   await page.getByTestId('look-night').click();
   await expect(page.locator('html')).toHaveAttribute('data-look', 'night');
   await still(page);
@@ -341,7 +349,7 @@ test('large text: at 200% nothing spills sideways on the main screens', async ({
   await page.getByTestId('details').click();
   await big('add');
   await page.keyboard.press('Escape');
-  await page.goto('/settings');
+  await page.goto('/you');
   await big('settings');
   done();
 });

@@ -3,7 +3,7 @@
 import { prefersReducedMotion } from './feel';
 
 type Router = { push: (href: string) => void };
-type VT = { startViewTransition?: (cb: () => Promise<void>) => { finished: Promise<void> } };
+type VT = { startViewTransition?: (cb: () => Promise<void>) => { finished: Promise<void>; ready: Promise<void> } };
 
 /**
  * Opens a page so that `from` (a card) grows into the element on the new page marked
@@ -17,22 +17,28 @@ export function openWith(router: Router, href: string, from: HTMLElement | null,
     return;
   }
   from.style.viewTransitionName = name;
-  doc.startViewTransition(
+  const vt = doc.startViewTransition(
     () =>
       new Promise<void>((resolve) => {
         router.push(href);
         const started = performance.now();
+        // Timers, not animation frames: the browser holds rendering (and frames) while it waits for this.
         const wait = () => {
           const target = document.querySelector<HTMLElement>(`[data-vt="${name}"]`);
           if (target && !from.isConnected) {
             target.style.viewTransitionName = name;
             resolve();
           } else if (performance.now() - started > 450) resolve();
-          else requestAnimationFrame(wait);
+          else setTimeout(wait, 16);
         };
-        requestAnimationFrame(wait);
+        setTimeout(wait, 16);
       }),
-  ).finished.finally(() => {
-    document.querySelectorAll<HTMLElement>(`[data-vt="${name}"]`).forEach((el) => (el.style.viewTransitionName = ''));
-  });
+  );
+  // A skipped transition rejects `ready`; that is fine, the page has still changed.
+  vt.ready.catch(() => {});
+  vt.finished
+    .catch(() => {})
+    .finally(() => {
+      document.querySelectorAll<HTMLElement>(`[data-vt="${name}"]`).forEach((el) => (el.style.viewTransitionName = ''));
+    });
 }

@@ -37,6 +37,8 @@ jobs:
           npm run tokens
           node apps/mobile/tool/generate.mjs
           git diff --exit-code -- apps/mobile/lib || (echo "::error::Run 'npm run tokens && node apps/mobile/tool/generate.mjs' and commit the result." && exit 1)
+      - name: Glossary (the same words on web, iPhone and Android)
+        run: node scripts/glossary.mjs
       - name: Type-check the API and the web app
         run: |
           npm run typecheck -w @nussnuss/api

@@ -1,43 +1,56 @@
 'use client';
 
-import { CURRENCIES } from '@nussnuss/core';
-import { Copy, ShareFat, WhatsappLogo, X } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { Check, Copy, ShareFat, WhatsappLogo, X } from '@phosphor-icons/react';
+import { encodeQr, qrPath, toneOfIcon, type CoverIcon, type CoverTone } from '@nussnuss/core';
+import { useEffect, useMemo, useState } from 'react';
 import { api, type GroupDetail } from '@/lib/api';
 import type { TKey } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
+import { timeEnd, timeStart } from '@/lib/timing';
+import { CurrencyButton, CurrencyList, guessCurrency } from './currency';
 import { Sheet } from './glass';
+import { Avatar, COVER_ICON, CoverPicker, CoverTile } from './identity';
 import { useToast } from './toast';
-import { Button, Chip, Field } from './ui';
+import { Button, Chip, ErrorText, Field } from './ui';
 
-const EMOJIS = ['🏝️', '🏕️', '✈️', '🏠', '🍽️', '☕', '🎉', '⚽', '🚗', '🛒', '🎓', '💼', '🌙', '🎁', '💍'];
+/** An emoji for each cover, still sent so older copies of the app show something sensible. */
+const ICON_EMOJI: Record<CoverIcon, string> = {
+  plane: '✈️',
+  beach: '🏖️',
+  mountain: '🏔️',
+  car: '🚗',
+  home: '🏠',
+  food: '🍽️',
+  coffee: '☕',
+  moon: '🌙',
+  party: '🎉',
+  gift: '🎁',
+  cart: '🛒',
+  heart: '❤️',
+  ball: '⚽',
+  work: '💼',
+  book: '📚',
+  music: '🎵',
+};
 
-/** Starting points: each sets the emoji (which also tunes the title suggestions) and a name. */
-const TEMPLATES: { key: string; emoji: string; name?: TKey }[] = [
-  { key: 'trip', emoji: '✈️' },
-  { key: 'flat', emoji: '🏠', name: 'tplName_flat' },
-  { key: 'dinner', emoji: '🍽️', name: 'tplName_dinner' },
-  { key: 'iftar', emoji: '🌙', name: 'tplName_iftar' },
-  { key: 'eid', emoji: '🎁', name: 'tplName_eid' },
-  { key: 'wedding', emoji: '💍', name: 'tplName_wedding' },
-  { key: 'office', emoji: '💼', name: 'tplName_office' },
+/** Starting points: each sets the cover (which also tunes the title suggestions) and a name. */
+const TEMPLATES: { key: string; icon: CoverIcon; name?: TKey }[] = [
+  { key: 'trip', icon: 'plane' },
+  { key: 'flat', icon: 'home', name: 'tplName_flat' },
+  { key: 'dinner', icon: 'food', name: 'tplName_dinner' },
+  { key: 'iftar', icon: 'moon', name: 'tplName_iftar' },
+  { key: 'eid', icon: 'gift', name: 'tplName_eid' },
+  { key: 'wedding', icon: 'heart', name: 'tplName_wedding' },
+  { key: 'office', icon: 'work', name: 'tplName_office' },
 ];
 
-function guessCurrency(): string {
-  try {
-    const region = new Intl.Locale(navigator.language).maximize().region;
-    const map: Record<string, string> = { AE: 'AED', SA: 'SAR', KW: 'KWD', QA: 'QAR', BH: 'BHD', OM: 'OMR', EG: 'EGP', JO: 'JOD', SY: 'SYP', LB: 'LBP', IQ: 'IQD', MA: 'MAD', TR: 'TRY', GB: 'GBP', US: 'USD', DE: 'EUR', FR: 'EUR', IN: 'INR' };
-    if (region && map[region]) return map[region];
-  } catch {}
-  return 'AED';
-}
-
 export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (g: GroupDetail) => void }) {
-  const { t, prefs, me } = useSession();
+  const { t, me } = useSession();
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState(EMOJIS[0]);
+  const [cover, setCover] = useState<{ icon: CoverIcon; tone: CoverTone }>({ icon: 'plane', tone: 'sky' });
   const [tpl, setTpl] = useState<string | null>(null);
   const [cur, setCur] = useState('AED');
+  const [picking, setPicking] = useState(false);
   const [people, setPeople] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +59,10 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
   useEffect(() => {
     if (open) {
       setName('');
-      setEmoji(EMOJIS[0]);
+      setCover({ icon: 'plane', tone: 'sky' });
       setTpl(null);
       setCur(guessCurrency());
+      setPicking(false);
       setPeople([]);
       setDraft('');
       setError(null);
@@ -72,7 +86,7 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
     if (!all.length) return setError(t('err_people'));
     setBusy(true);
     try {
-      const g = await api.createGroup({ name: name.trim(), emoji, currency: cur, members: all });
+      const g = await api.createGroup({ name: name.trim(), emoji: ICON_EMOJI[cover.icon], cover: `${cover.icon}:${cover.tone}`, currency: cur, members: all });
       onCreated(g);
     } catch (e) {
       setError((e as Error).message);
@@ -86,7 +100,7 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
     const prevName = prev?.name ? t(prev.name) : '';
     // A name the person typed themselves is never replaced.
     if (!name.trim() || name === prevName) setName(k.name ? t(k.name) : '');
-    setEmoji(k.emoji);
+    setCover({ icon: k.icon, tone: toneOfIcon(k.icon) });
     setTpl(k.key);
   };
 
@@ -94,108 +108,114 @@ export function NewGroupSheet({ open, onClose, onCreated }: { open: boolean; onC
     <Sheet
       open={open}
       onClose={onClose}
-      title={t('newGroup')}
+      title={picking ? t('currency') : t('newGroup')}
       testId="new-group-sheet"
       morph
       footer={
-        <div className="flex flex-col gap-2">
-          {error ? <p className="text-center t-footnote text-danger" role="alert">{error}</p> : null}
-          <Button block onClick={create} disabled={busy} data-testid="create-group">
-            {t('create')}
-          </Button>
-        </div>
+        picking ? null : (
+          <div className="flex flex-col gap-2">
+            <ErrorText>{error}</ErrorText>
+            <Button block onClick={create} disabled={busy} data-testid="create-group">
+              {t('create')}
+            </Button>
+          </div>
+        )
       }
     >
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-2">
-          <span className="t-footnote font-medium text-text-2 ps-1">{t('whatKind')}</span>
-          <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label={t('whatKind')}>
-            {TEMPLATES.map((k) => (
-              <Chip key={k.key} selected={tpl === k.key} onClick={() => pickTemplate(k)} testId={`tpl-${k.key}`}>
-                <span aria-hidden>{k.emoji}</span>
-                {t(`tpl_${k.key}` as TKey)}
-              </Chip>
-            ))}
+      {picking ? (
+        <CurrencyList
+          value={cur}
+          onBack={() => setPicking(false)}
+          onPick={(c) => {
+            setCur(c);
+            setPicking(false);
+          }}
+        />
+      ) : (
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <span className="t-footnote font-medium text-text-2 ps-1">{t('whatKind')}</span>
+            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label={t('whatKind')}>
+              {TEMPLATES.map((k) => {
+                const I = COVER_ICON[k.icon];
+                return (
+                  <Chip key={k.key} selected={tpl === k.key} onClick={() => pickTemplate(k)} testId={`tpl-${k.key}`}>
+                    <I size={18} weight="duotone" aria-hidden />
+                    {t(`tpl_${k.key}` as TKey)}
+                  </Chip>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex items-end gap-3">
+            <CoverTile cover={`${cover.icon}:${cover.tone}`} size={48} testId="new-cover" />
+            <Field className="flex-1" label={t('groupName')} placeholder={t('groupNamePh')} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} data-testid="group-name" data-autofocus />
+          </div>
+          <CoverPicker value={cover} onChange={setCover} />
+          <CurrencyButton value={cur} onClick={() => setPicking(true)} label={t('currency')} testId="group-currency" />
+          <div className="flex flex-col gap-2">
+            <span className="t-footnote font-medium text-text-2 ps-1">{t('people')}</span>
+            <ul className="flex flex-wrap gap-2">
+              <li className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-soft ps-1 pe-4 t-subhead font-medium text-on-accent-soft">
+                {me ? <Avatar name={me.name} avatar={me.avatar} size={34} /> : null}
+                {me?.name} ({t('you')})
+              </li>
+              {people.map((p) => (
+                <li key={p} className="inline-flex h-11 items-center gap-2 rounded-full bg-surface ps-1 pe-1 t-subhead font-medium text-text ring-1 ring-edge" data-testid="person-chip">
+                  <Avatar name={p} size={34} />
+                  {p}
+                  <button type="button" aria-label={`${t('delete')} ${p}`} onClick={() => setPeople((x) => x.filter((y) => y !== p))} className="tap focus-ring grid place-items-center rounded-full text-text-2">
+                    <X size={16} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                add();
+              }}
+            >
+              <input
+                aria-label={t('personPh')}
+                data-testid="person-name"
+                value={draft}
+                maxLength={40}
+                aria-invalid={error === t('err_dup')}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (error) setError(null);
+                }}
+                placeholder={t('personPh')}
+                className="field h-12 min-w-0 flex-1 rounded-control bg-surface px-4 t-body text-text placeholder:text-text-3"
+              />
+              <Button type="submit" variant="secondary" data-testid="add-person">
+                {t('addPerson')}
+              </Button>
+            </form>
           </div>
         </div>
-        <Field label={t('groupName')} placeholder={t('groupNamePh')} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} data-testid="group-name" data-autofocus />
-        <div role="radiogroup" aria-label="Emoji" className="grid grid-cols-5 gap-2 sm:grid-cols-8">
-          {EMOJIS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              role="radio"
-              aria-checked={emoji === e}
-              aria-label={e}
-              onClick={() => setEmoji(e)}
-              className={`focus-ring grid h-12 place-items-center rounded-control text-2xl ${emoji === e ? 'bg-accent-soft ring-2 ring-accent' : 'bg-surface'}`}
-            >
-              {e}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="grp-cur" className="t-footnote font-medium text-text-2 ps-1">
-            {t('currency')}
-          </label>
-          <select
-            id="grp-cur"
-            data-testid="group-currency"
-            value={cur}
-            onChange={(e) => setCur(e.target.value)}
-            className="focus-ring h-12 rounded-control bg-surface px-3 t-body text-text ring-1 ring-separator"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.code} · {prefs.lang === 'ar' ? c.ar : c.en}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-2">
-          <span className="t-footnote font-medium text-text-2 ps-1">{t('people')}</span>
-          <ul className="flex flex-wrap gap-2">
-            <li className="inline-flex h-11 items-center rounded-full bg-accent-soft px-4 t-subhead font-medium text-on-accent-soft">
-              {me?.name} ({t('you')})
-            </li>
-            {people.map((p) => (
-              <li key={p} className="inline-flex h-11 items-center gap-1 rounded-full bg-surface ps-4 pe-1 t-subhead font-medium text-text ring-1 ring-separator" data-testid="person-chip">
-                {p}
-                <button type="button" aria-label={`${t('delete')} ${p}`} onClick={() => setPeople((x) => x.filter((y) => y !== p))} className="tap focus-ring grid place-items-center rounded-full text-text-2">
-                  <X size={16} />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              add();
-            }}
-          >
-            <input
-              aria-label={t('personPh')}
-              data-testid="person-name"
-              value={draft}
-              maxLength={40}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                if (error) setError(null);
-              }}
-              placeholder={t('personPh')}
-              className={`focus-ring h-12 flex-1 rounded-control bg-surface px-4 t-body text-text placeholder:text-text-3 ${error === t('err_dup') ? 'ring-2 ring-danger' : 'ring-1 ring-separator'}`}
-            />
-            <Button type="submit" variant="secondary" data-testid="add-person">
-              {t('addPerson')}
-            </Button>
-          </form>
-        </div>
-      </div>
+      )}
     </Sheet>
   );
 }
 
+/** A QR code friends can scan from your screen. Always dark on white, so every camera reads it. */
+export function QrCode({ text, size = 168, label }: { text: string; size?: number; label: string }) {
+  const { d, n } = useMemo(() => {
+    const p = qrPath(encodeQr(text), 3);
+    return { d: p.d, n: p.size };
+  }, [text]);
+  return (
+    <svg viewBox={`0 0 ${n} ${n}`} width={size} height={size} role="img" aria-label={label} shapeRendering="crispEdges" className="rounded-control" data-testid="invite-qr" data-text={text}>
+      <rect width={n} height={n} fill="#FFFFFF" />
+      <path d={d} fill="#15121F" />
+    </svg>
+  );
+}
+
+/** Invite friends: a preview of the group, a QR code, a short link, and ways to send it. */
 export function ShareSheet({ open, onClose, group }: { open: boolean; onClose: () => void; group: GroupDetail }) {
   const { t } = useSession();
   const toast = useToast();
@@ -203,10 +223,11 @@ export function ShareSheet({ open, onClose, group }: { open: boolean; onClose: (
 
   useEffect(() => {
     if (!open) return;
+    timeStart('invite');
     setLink(null);
     api
       .invite(group.id)
-      .then((r) => setLink(`${window.location.origin}/join/${r.token}`))
+      .then((r) => setLink(`${window.location.origin}${r.path ?? `/join/${r.token}`}`))
       .catch(() => setLink(''));
   }, [open, group.id]);
 
@@ -214,39 +235,80 @@ export function ShareSheet({ open, onClose, group }: { open: boolean; onClose: (
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
-      toast(t('copied'));
+      toast(t('copied'), undefined, { done: true });
+      timeEnd('invite', true);
     } catch {
       toast(link);
     }
   };
   const message = `${t('shareMessage', { name: group.name })} ${link ?? ''}`;
   const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+  const shown = link ? link.replace(/^https?:\/\//, '') : '…';
 
   return (
     <Sheet open={open} onClose={onClose} title={t('shareTitle')} testId="share-sheet">
       <div className="flex flex-col gap-4 pb-2">
-        <p className="t-subhead text-text-2">{t('shareBody')}</p>
-        <div className="rounded-control bg-surface px-4 py-3 t-footnote text-text-2 break-all num" data-testid="invite-link" dir="ltr">
-          {link ?? '…'}
+        <div className="flex items-center gap-3 rounded-card bg-surface p-4" data-testid="invite-preview">
+          <CoverTile cover={group.cover} emoji={group.emoji} size={52} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate t-headline text-text">{group.name}</span>
+            <span className="t-footnote text-text-2">{t('joinMeta', { n: group.members.length, currency: group.currency })}</span>
+          </span>
         </div>
-        <Button block icon={<WhatsappLogo size={22} weight="fill" />} disabled={!link} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener')}>
-          {t('sendWhatsApp')}
-        </Button>
+        <p className="t-subhead text-text-2">{t('inviteBody')}</p>
+        <div className="flex flex-col items-center gap-3 rounded-card bg-surface p-4">
+          {link ? <QrCode text={link} label={`${t('scanToJoin')}: ${shown}`} /> : <div className="shimmer h-[168px] w-[168px] rounded-control" />}
+          <span className="t-footnote font-semibold text-text-2">{t('scanToJoin')}</span>
+          <div className="flex w-full items-center gap-2">
+            <span className="min-w-0 flex-1 truncate rounded-control bg-surface-2 px-3 py-2.5 t-subhead font-semibold text-text num" data-testid="invite-link" dir="ltr">
+              {shown}
+            </span>
+            <Button variant="secondary" icon={<Copy size={18} />} disabled={!link} onClick={copy} data-testid="copy-link">
+              {t('copy')}
+            </Button>
+          </div>
+        </div>
+        <ul className="overflow-hidden rounded-card bg-surface" aria-label={t('people')}>
+          {group.members.map((m) => (
+            <li key={m.id} className="flex min-h-14 items-center gap-3 border-b border-separator/60 px-4 py-2 last:border-0">
+              <Avatar name={m.name} avatar={m.avatar} size={36} />
+              <span className="flex-1 truncate t-body text-text">{m.isMe ? `${m.name} (${t('you')})` : m.name}</span>
+              <span className={`inline-flex items-center gap-1 t-footnote ${m.claimed ? 'text-success' : 'text-text-2'}`}>
+                {m.claimed ? <Check size={14} weight="bold" aria-hidden /> : null}
+                {m.claimed ? t('joined') : t('notJoined')}
+              </span>
+            </li>
+          ))}
+        </ul>
         {canShare ? (
           <Button
             block
-            variant="secondary"
             icon={<ShareFat size={20} />}
             disabled={!link}
             data-testid="native-share"
-            onClick={() => navigator.share({ title: group.name, text: t('shareMessage', { name: group.name }), url: link ?? undefined }).catch(() => {})}
+            onClick={() =>
+              navigator
+                .share({ title: group.name, text: t('shareMessage', { name: group.name }), url: link ?? undefined })
+                .then(() => timeEnd('invite', true))
+                .catch(() => {})
+            }
           >
-            {t('share')}
+            {t('shareLink')}
           </Button>
         ) : null}
-        <Button block variant="secondary" icon={<Copy size={20} />} disabled={!link} onClick={copy} data-testid="copy-link">
-          {t('copyLink')}
+        <Button
+          block
+          variant={canShare ? 'secondary' : 'primary'}
+          icon={<WhatsappLogo size={22} weight="fill" />}
+          disabled={!link}
+          onClick={() => {
+            timeEnd('invite', true);
+            window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+          }}
+        >
+          {t('sendWhatsApp')}
         </Button>
+        <p className="text-center t-footnote text-text-3">{t('shareBody')}</p>
       </div>
     </Sheet>
   );

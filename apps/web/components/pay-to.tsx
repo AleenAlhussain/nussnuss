@@ -112,7 +112,7 @@ export function PayToSection() {
                 aria-checked={kind === k}
                 onClick={() => setKind(k)}
                 data-testid={`pay-kind-${k}`}
-                className={`focus-ring inline-flex h-11 items-center rounded-full px-4 t-subhead font-medium ${kind === k ? 'bg-accent text-on-accent' : 'bg-surface text-text ring-1 ring-separator'}`}
+                className={`focus-ring inline-flex h-11 items-center rounded-full px-4 t-subhead font-medium ${kind === k ? 'bg-accent text-on-accent' : 'bg-surface text-text ring-1 ring-edge'}`}
               >
                 {t(`pay_${k}` as TKey)}
               </button>

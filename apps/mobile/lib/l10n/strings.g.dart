@@ -484,6 +484,7 @@ class NNStrings {
   String get billedBy => _m['billedBy']!;
   String get saveToPasswords => _m['saveToPasswords']!;
   String get savedToPasswords => _m['savedToPasswords']!;
+  String get passwordsOffered => _m['passwordsOffered']!;
   String get categoryFor => _m['categoryFor']!;
   String get waitingHome => _m['waitingHome']!;
   String get bodyCanOpen => _m['bodyCanOpen']!;
@@ -957,6 +958,7 @@ const _en = <String, String>{
   'billedBy': 'Billed through the App Store or Google Play. Cancel any time in your store settings.',
   'saveToPasswords': 'Save to Passwords',
   'savedToPasswords': 'Saved to your passwords',
+  'passwordsOffered': 'Your browser offered to save it. Tap Save there.',
   'categoryFor': 'Category for {title}',
   'waitingHome': '{n} waiting to sync. They’ll go up when you’re online.',
   'bodyCanOpen': 'Open {name}',
@@ -1430,6 +1432,7 @@ const _ar = <String, String>{
   'billedBy': 'الدفع عن طريق آب ستور أو قوقل بلاي. تقدر تلغي أي وقت من إعدادات المتجر.',
   'saveToPasswords': 'احفظ في كلمات المرور',
   'savedToPasswords': 'انحفظ في كلمات المرور',
+  'passwordsOffered': 'عرض المتصفح حفظه. اضغط حفظ هناك.',
   'categoryFor': 'تصنيف {title}',
   'waitingHome': '{n} بانتظار المزامنة. بتنرفع لما ترجع متصل.',
   'bodyCanOpen': 'افتح {name}',

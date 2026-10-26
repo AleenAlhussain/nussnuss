@@ -20,6 +20,7 @@
     "test:web": "npm run test:e2e -w @nussnuss/web",
     "dev:api": "npm run start:dev -w @nussnuss/api",
     "dev:web": "npm run dev -w @nussnuss/web",
-    "tokens": "npm run build -w @nussnuss/tokens"
+    "tokens": "npm run build -w @nussnuss/tokens",
+    "glossary": "node scripts/glossary.mjs"
   }
 }

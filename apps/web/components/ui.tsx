@@ -62,10 +62,7 @@ export function Field({
         id={id}
         aria-invalid={!!error}
         aria-describedby={error || hint ? `${id}-d` : undefined}
-        className={cx(
-          'focus-ring h-12 rounded-control bg-surface px-4 t-body text-text placeholder:text-text-3',
-          error ? 'ring-2 ring-danger' : 'ring-1 ring-separator',
-        )}
+        className={cx('field h-12 rounded-control bg-surface px-4 t-body text-text placeholder:text-text-3', error && 'field-error')}
         {...rest}
       />
       {error || hint ? (
@@ -152,19 +149,7 @@ export function Segmented<K extends string>({
   );
 }
 
-const TONES = ['#4F3BD6', '#B0265A', '#0B5FA5', '#9A5B00', '#0F7B4A', '#6B4E9E', '#B93A0E', '#2F6F73'];
-export function Avatar({ name, index = 0, size = 36 }: { name: string; index?: number; size?: number }) {
-  const initials = name.trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
-  return (
-    <span
-      aria-hidden
-      className="inline-grid shrink-0 place-items-center rounded-full font-semibold text-white"
-      style={{ width: size, height: size, fontSize: size * 0.38, background: TONES[index % TONES.length] }}
-    >
-      {initials}
-    </span>
-  );
-}
+export { Avatar } from './identity';
 
 export function Chip({ selected, onClick, children, testId }: { selected?: boolean; onClick?: () => void; children: ReactNode; testId?: string }) {
   return (
@@ -178,7 +163,7 @@ export function Chip({ selected, onClick, children, testId }: { selected?: boole
       }}
       className={cx(
         'focus-ring inline-flex h-11 items-center gap-2 rounded-full px-4 t-subhead font-medium transition-colors',
-        selected ? 'bg-accent text-on-accent' : 'bg-surface text-text ring-1 ring-separator',
+        selected ? 'bg-accent text-on-accent' : 'bg-surface text-text ring-1 ring-edge',
       )}
     >
       {children}
@@ -186,14 +171,38 @@ export function Chip({ selected, onClick, children, testId }: { selected?: boole
   );
 }
 
-export function Empty({ icon, title, body, children }: { icon: ReactNode; title: string; body: string; children?: ReactNode }) {
+/** An empty screen: the coin with its halves apart (nothing shared yet), one line, one button. */
+export function Empty({ icon, title, body, children, testId }: { icon?: ReactNode; title: string; body?: string; children?: ReactNode; testId?: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-      <div className="grid h-20 w-20 place-items-center rounded-full bg-accent-soft text-on-accent-soft">{icon}</div>
+    <div className="flex flex-col items-center gap-3 px-6 py-14 text-center" data-testid={testId ?? 'empty'}>
+      {icon ?? <ApartCoin />}
       <h2 className="t-title-3 text-text">{title}</h2>
-      <p className="max-w-xs t-subhead text-text-2">{body}</p>
+      {body ? <p className="max-w-xs t-subhead text-text-2">{body}</p> : null}
       {children ? <div className="mt-3 flex w-full max-w-xs flex-col gap-2">{children}</div> : null}
     </div>
+  );
+}
+
+/** The two halves of the coin, drifted apart and waiting to be joined. */
+export function ApartCoin({ size = 64 }: { size?: number }) {
+  const half = size / 2;
+  return (
+    <span aria-hidden dir="ltr" className="relative mb-2 inline-flex items-center" style={{ width: size * 1.5, height: size * 1.1 }} data-testid="apart-coin">
+      <motion.span
+        initial={{ x: 0, rotate: 0 }}
+        animate={{ x: -size * 0.12, rotate: -8 }}
+        transition={spring}
+        className="absolute bg-accent"
+        style={{ left: size * 0.2, width: half, height: size, borderTopLeftRadius: half, borderBottomLeftRadius: half, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)' }}
+      />
+      <motion.span
+        initial={{ x: 0, rotate: 0 }}
+        animate={{ x: size * 0.12, y: size * 0.08, rotate: 10 }}
+        transition={spring}
+        className="absolute bg-highlight"
+        style={{ left: size * 0.2 + half + size * 0.08, width: half, height: size, borderTopRightRadius: half, borderBottomRightRadius: half, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' }}
+      />
+    </span>
   );
 }
 

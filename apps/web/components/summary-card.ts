@@ -70,7 +70,7 @@ export async function summaryCard(g: GroupDetail, lang: Lang, t: (k: 'summaryTit
   ctx.fillText(t('summaryTitle'), start, 300);
   ctx.fillStyle = C.text;
   ctx.font = `700 76px ${display}`;
-  ctx.fillText(fit(ctx, `${g.emoji} ${g.name}`.trim(), W - pad * 2), start, 392);
+  ctx.fillText(fit(ctx, g.name.trim(), W - pad * 2), start, 392);
   ctx.fillStyle = C.text2;
   ctx.font = `500 36px ${display}`;
   ctx.fillText(`${t('total')} · ${money(g.total, g.currency, lang)}`, start, 452);

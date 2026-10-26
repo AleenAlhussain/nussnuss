@@ -169,6 +169,45 @@ export function SignInSheet({ open, onClose }: { open: boolean; onClose: () => v
   );
 }
 
+type PasswordCredentialCtor = new (d: { id: string; password: string; name?: string }) => Credential;
+
+/**
+ * "Save to Passwords": hands the recovery code to the browser's password manager where it offers that
+ * (the Credential Management API), and says so only once it has really been stored.
+ */
+function SaveToPasswords({ code }: { code: string }) {
+  const { t, me } = useSession();
+  const toast = useToast();
+  const [can, setCan] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setCan(typeof window !== 'undefined' && 'PasswordCredential' in window && !!navigator.credentials?.store), []);
+  if (!can) return null;
+  return (
+    <Button
+      block
+      variant="secondary"
+      icon={<Key size={20} />}
+      disabled={saved}
+      data-testid="save-to-passwords"
+      onClick={async () => {
+        try {
+          const Ctor = (window as unknown as { PasswordCredential: PasswordCredentialCtor }).PasswordCredential;
+          const cred = new Ctor({ id: `${me?.name ?? 'NussNuss'} (NussNuss)`, password: code, name: 'NussNuss recovery code' });
+          // The browser asks the person; it doesn't tell us their answer, so we only say it was offered.
+          await navigator.credentials.store(cred);
+          setSaved(true);
+          haptic('success');
+          toast(t('passwordsOffered'));
+        } catch {
+          toast(t('error'));
+        }
+      }}
+    >
+      {t('saveToPasswords')}
+    </Button>
+  );
+}
+
 function CodeSheet({ code, onClose, title, body, expiresAt }: { code: string | null; onClose: () => void; title: string; body: string; expiresAt?: string }) {
   const { t, prefs } = useSession();
   const toast = useToast();
@@ -193,6 +232,7 @@ function CodeSheet({ code, onClose, title, body, expiresAt }: { code: string | n
         >
           {t('copy')}
         </Button>
+        {code && !expiresAt ? <SaveToPasswords code={code} /> : null}
         <Button block onClick={onClose}>
           {t('done')}
         </Button>

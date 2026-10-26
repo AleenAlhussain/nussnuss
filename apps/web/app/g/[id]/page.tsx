@@ -1,48 +1,75 @@
 'use client';
 
-import { Airplane, Basket, Car, CloudArrowUp, Coffee, DotsThree, House, MagnifyingGlass, Receipt, ShareNetwork, ShoppingBag, Sparkle, Tag } from '@phosphor-icons/react';
-import { expenseInGroupCurrency, minorToInput, type Transfer } from '@nussnuss/core';
-import { AnimatePresence, motion } from 'motion/react';
-import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { Airplane, Copy, CloudArrowUp, DotsThree, MagnifyingGlass, PencilSimple, ShareNetwork, Tag, Trash } from '@phosphor-icons/react';
+import { CATEGORIES, expenseInGroupCurrency, memberStats, minorToInput, type Transfer } from '@nussnuss/core';
+import { AnimatePresence, motion, useMotionValue, animate } from 'motion/react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExpenseSheet, isPlusError, repeatInput, type Every } from '@/components/expense-sheet';
 import { BarButton, Screen } from '@/components/glass';
 import { CircleSheet, CirclesCard, GroupOptions, NewCircleSheet } from '@/components/group-options';
 import { ShareSheet } from '@/components/group-sheets';
+import { CATEGORY_LOOK, CategoryTile, CoverTile, FitLine } from '@/components/identity';
+import { useContextMenu } from '@/components/menu';
 import { usePaywall } from '@/components/paywall';
 import { PullToRefresh } from '@/components/pull';
 import { Rolling } from '@/components/rolling';
 import { SettlePlan } from '@/components/settle';
 import { useToast } from '@/components/toast';
-import { Empty, Segmented } from '@/components/ui';
+import { Button, Empty, Segmented } from '@/components/ui';
 import { api, ApiError, newId, type Circle, type Expense, type ExpenseInput, type GroupDetail } from '@/lib/api';
-import { spring } from '@/lib/feel';
+import { haptic, spring } from '@/lib/feel';
 import { dayKey, dayLabel, money } from '@/lib/format';
+import { catKey } from '@/lib/i18n';
 import { useLiveVersion } from '@/lib/live';
 import { useSession } from '@/lib/session';
 import { play } from '@/lib/sound';
 import { cacheGroup, cachedGroup, flush, isOffline, submit, usePending, withPending } from '@/lib/sync';
+import { timeEnd, timeStart } from '@/lib/timing';
 
-const CAT_ICON: Record<string, ComponentType<{ size?: number; weight?: 'regular' | 'fill' }>> = {
-  food: Coffee,
-  groceries: Basket,
-  transport: Car,
-  stay: House,
-  fun: Sparkle,
-  bills: Receipt,
-  shopping: ShoppingBag,
-  other: Tag,
-};
+/** Colours for the who-paid bar, in member order (cover tones, so they work in light and dark). */
+const BAR_TONES = ['violet', 'saffron', 'mint', 'coral', 'sky', 'rose', 'slate'] as const;
 
 function BalanceHero({ g, pending }: { g: GroupDetail; pending: number }) {
   const { t, prefs } = useSession();
   const mine = g.balances[g.me] ?? 0;
   const label = mine > 0 ? t('youAreOwed') : mine < 0 ? t('youOwe') : t('allSettled');
-  const tone = mine > 0 ? 'text-success' : mine < 0 ? 'text-danger' : 'text-text';
+  // Getting money back is good news (green); owing is plain text, never red.
+  const tone = mine > 0 ? 'text-success' : 'text-text';
+  const core = { currency: g.currency, members: g.members, expenses: g.expenses, payments: [] };
+  const paid = g.members.map((m, i) => ({ m, i, v: memberStats(core, m.id).paid })).filter((x) => x.v > 0);
+  const names = g.members.map((m) => (m.isMe ? t('you') : m.name)).join(prefs.lang === 'ar' ? '، ' : ', ');
   return (
     <section className="flex flex-col gap-1 px-1 pb-2" aria-label={label} data-vt="group-card">
-      <span className="t-subhead font-medium text-text-2">{label}</span>
-      <Rolling text={money(Math.abs(mine), g.currency, prefs.lang)} className={`t-amount-hero ${tone}`} testId="my-balance" />
+      <span className="flex items-center gap-2 t-footnote text-text-2">
+        <CoverTile cover={g.cover} emoji={g.emoji} size={28} testId="group-cover" />
+        <span className="truncate">
+          {names} · {g.currency}
+        </span>
+      </span>
+      <span className="mt-1 t-subhead font-medium text-text-2">{label}</span>
+      <div className="min-w-0">
+        <FitLine className={`t-amount-hero ${tone}`} min={22}>
+          <Rolling text={money(Math.abs(mine), g.currency, prefs.lang)} testId="my-balance" />
+        </FitLine>
+      </div>
+      {paid.length > 1 ? (
+        <div className="mt-1 flex flex-col gap-1.5" data-testid="who-paid">
+          <div className="flex h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden dir="ltr">
+            {paid.map(({ m, i, v }) => (
+              <span key={m.id} style={{ flexGrow: v, background: `var(--nn-cover-${BAR_TONES[i % BAR_TONES.length]}-fg)` }} className="h-full" />
+            ))}
+          </div>
+          <span className="flex flex-wrap gap-x-3 t-footnote text-text-2">
+            {paid.map(({ m, i, v }) => (
+              <span key={m.id} className="inline-flex items-center gap-1 num whitespace-nowrap">
+                <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: `var(--nn-cover-${BAR_TONES[i % BAR_TONES.length]}-fg)` }} />
+                {m.isMe ? t('youPaid') : m.name} {money(v, g.currency, prefs.lang)}
+              </span>
+            ))}
+          </span>
+        </div>
+      ) : null}
       <span className="flex flex-wrap items-center gap-2 t-footnote text-text-2">
         <span className="num" data-testid="group-total">
           {t('total')} · {money(g.total, g.currency, prefs.lang)}
@@ -58,8 +85,194 @@ function BalanceHero({ g, pending }: { g: GroupDetail; pending: number }) {
   );
 }
 
+/** Only one row shows its actions at a time. */
+let closeOpenRow: (() => void) | null = null;
+const ACTION_W = 76;
+
+/**
+ * An expense row. Swipe it towards the start to show Duplicate and Delete; press and hold (or right-click)
+ * for a menu with a preview; tap its tile to change the category in one go; tap it to open it.
+ */
+function ExpenseRow({
+  e,
+  g,
+  first,
+  n,
+  onOpen,
+  onDuplicate,
+  onDelete,
+  onCategory,
+}: {
+  e: Expense;
+  g: GroupDetail;
+  first: boolean;
+  n: number;
+  onOpen: (e: Expense) => void;
+  onDuplicate: (e: Expense) => void;
+  onDelete: (e: Expense) => void;
+  onCategory: (e: Expense, c: string) => void;
+}) {
+  const { t, prefs } = useSession();
+  const rtl = prefs.lang === 'ar';
+  const x = useMotionValue(0);
+  const dragged = useRef(false);
+  const [openRow, setOpenRow] = useState(false);
+  const width = ACTION_W * 2;
+  const shut = useCallback(() => {
+    animate(x, 0, spring);
+    setOpenRow(false);
+  }, [x]);
+  const name = (id: string) => {
+    const m = g.members.find((m2) => m2.id === id);
+    return m?.isMe ? t('you') : (m?.name ?? '?');
+  };
+  const shareCount = e.items.filter((i) => i.value > 0).length;
+  const amount = money(expenseInGroupCurrency(e, g.currency), g.currency, prefs.lang);
+  const menu = useContextMenu(
+    () => [
+      { label: t('edit'), icon: <PencilSimple size={18} />, run: () => onOpen(e), testId: 'menu-edit' },
+      { label: t('duplicate'), icon: <Copy size={18} />, run: () => onDuplicate(e), testId: 'menu-duplicate' },
+      { label: t('changeCategory'), icon: <Tag size={18} />, run: () => setTimeout(() => tile.current && cats.show(tile.current), 50), testId: 'menu-category' },
+      { label: t('delete'), icon: <Trash size={18} />, danger: true, run: () => onDelete(e), testId: 'menu-delete' },
+    ],
+    () => (
+      <div className="flex items-center gap-3">
+        <CategoryTile category={e.category} size={44} />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate t-headline text-text">{e.title}</span>
+          <span className="truncate t-footnote text-text-2">{t('paidByName', { name: name(e.paidBy) })}</span>
+        </span>
+        <span className="t-headline num whitespace-nowrap text-text">{amount}</span>
+      </div>
+    ),
+  );
+  const tile = useRef<HTMLButtonElement>(null);
+  const cats = useContextMenu(() =>
+    CATEGORIES.map((c) => {
+      const L = CATEGORY_LOOK[c];
+      return { label: t(catKey(c)), icon: <L.icon size={18} weight={c === e.category ? 'fill' : 'regular'} />, run: () => c !== e.category && onCategory(e, c), testId: `pick-cat-${c}` };
+    }),
+  );
+  const { swallow, ...hold } = menu.bind;
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: first ? 8 : -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ ...spring, delay: first ? Math.min(n * 0.03, 0.12) : 0 }}
+      className="relative overflow-hidden"
+    >
+      {/* The actions behind the row, revealed by swiping. */}
+      <div className="absolute inset-y-0 end-0 flex" style={{ width }} aria-hidden={!openRow}>
+        <button
+          type="button"
+          tabIndex={openRow ? 0 : -1}
+          onClick={() => {
+            shut();
+            onDuplicate(e);
+          }}
+          className="focus-ring flex flex-1 flex-col items-center justify-center gap-1 bg-accent t-caption font-semibold text-on-accent"
+          data-testid="swipe-duplicate"
+        >
+          <Copy size={20} />
+          {t('duplicate')}
+        </button>
+        <button
+          type="button"
+          tabIndex={openRow ? 0 : -1}
+          onClick={() => {
+            shut();
+            onDelete(e);
+          }}
+          className="focus-ring flex flex-1 flex-col items-center justify-center gap-1 bg-danger t-caption font-semibold text-white"
+          data-testid="swipe-delete"
+        >
+          <Trash size={20} />
+          {t('delete')}
+        </button>
+      </div>
+      <motion.div
+        drag="x"
+        dragDirectionLock
+        dragConstraints={rtl ? { left: 0, right: width } : { left: -width, right: 0 }}
+        dragElastic={0.12}
+        style={{ x }}
+        onDragStart={() => {
+          dragged.current = true;
+          if (closeOpenRow && closeOpenRow !== shut) closeOpenRow();
+        }}
+        onDragEnd={(_, info) => {
+          const far = rtl ? info.offset.x > width / 3 : info.offset.x < -width / 3;
+          if (far) {
+            animate(x, rtl ? width : -width, spring);
+            setOpenRow(true);
+            closeOpenRow = shut;
+            haptic('selection');
+          } else shut();
+          setTimeout(() => (dragged.current = false), 0);
+        }}
+        className="relative flex items-center gap-3 bg-surface px-4 py-3"
+        data-testid="expense-row-wrap"
+        data-open={openRow ? 'true' : undefined}
+      >
+        <button
+          ref={tile}
+          type="button"
+          aria-label={`${t('categoryFor', { title: e.title })}: ${t(catKey(e.category))}`}
+          onClick={(ev) => {
+            if (dragged.current) return;
+            cats.show(ev.currentTarget);
+          }}
+          className="focus-ring shrink-0 rounded-row"
+          data-testid="category-tile"
+        >
+          <CategoryTile category={e.category} size={44} />
+        </button>
+        <button
+          type="button"
+          {...hold}
+          onClick={() => {
+            if (swallow() || dragged.current) return;
+            if (openRow) return shut();
+            onOpen(e);
+          }}
+          className="focus-ring flex min-w-0 flex-1 scroll-mt-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar)+3rem)] items-center gap-3 text-start"
+          data-testid="expense-row"
+        >
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="line-clamp-2 t-headline text-text">{e.title}</span>
+            <span className="truncate t-footnote text-text-2">
+              {t('paidByName', { name: name(e.paidBy) })} · {shareCount === g.members.length ? t('everyone') : t('forN', { n: shareCount })}
+            </span>
+          </span>
+          <span className="shrink-0 t-headline text-text num whitespace-nowrap">{amount}</span>
+        </button>
+      </motion.div>
+      {menu.menu}
+      {cats.menu}
+    </motion.li>
+  );
+}
+
 /** One continuous list with day headings: the balance first and large, then everything that happened. */
-function ExpenseList({ g, onOpen, q = '' }: { g: GroupDetail; onOpen: (e: Expense) => void; q?: string }) {
+function ExpenseList({
+  g,
+  onOpen,
+  onAdd,
+  onDuplicate,
+  onDelete,
+  onCategory,
+  q = '',
+}: {
+  g: GroupDetail;
+  onOpen: (e: Expense) => void;
+  onAdd: () => void;
+  onDuplicate: (e: Expense) => void;
+  onDelete: (e: Expense) => void;
+  onCategory: (e: Expense, c: string) => void;
+  q?: string;
+}) {
   const { t, prefs } = useSession();
   const lang = prefs.lang;
   // The first time the list appears its rows arrive one after another (30 ms apart, within 400 ms).
@@ -67,16 +280,12 @@ function ExpenseList({ g, onOpen, q = '' }: { g: GroupDetail; onOpen: (e: Expens
   useEffect(() => {
     first.current = false;
   }, []);
-  const name = (id: string) => {
-    const m = g.members.find((x) => x.id === id);
-    return m?.isMe ? t('you') : (m?.name ?? '?');
-  };
   const shown = useMemo(() => {
     const k = q.trim().toLocaleLowerCase();
     if (!k) return g.expenses;
     return g.expenses.filter((e) => {
       const who = g.members.find((m) => m.id === e.paidBy)?.name ?? '';
-      const amount = money(expenseInGroupCurrency(e, g.currency), g.currency, lang).toLocaleLowerCase();
+      const amount = money(expenseInGroupCurrency(e, g.currency), g.currency, lang).replace(/ /g, ' ').toLocaleLowerCase();
       return e.title.toLocaleLowerCase().includes(k) || who.toLocaleLowerCase().includes(k) || amount.includes(k) || minorToInput(e.amount, e.currency).includes(k);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,7 +301,14 @@ function ExpenseList({ g, onOpen, q = '' }: { g: GroupDetail; onOpen: (e: Expens
     return out;
   }, [shown, lang, t]);
 
-  if (!g.expenses.length) return <Empty icon={<Receipt size={36} />} title={t('noExpensesTitle')} body={t('noExpensesBody')} />;
+  if (!g.expenses.length)
+    return (
+      <Empty title={t('noExpensesTitle')} body={t('noExpensesBody')}>
+        <Button block onClick={onAdd} data-testid="empty-add">
+          {t('addFirst')}
+        </Button>
+      </Empty>
+    );
   if (!shown.length) return <p className="py-8 text-center t-subhead text-text-2">{t('noResults', { q: q.trim() })}</p>;
   let row = 0;
   // overflow-clip, not hidden: hidden would make the list its own scroll box and break the sticky day headings.
@@ -101,36 +317,11 @@ function ExpenseList({ g, onOpen, q = '' }: { g: GroupDetail; onOpen: (e: Expens
       {days.map((d) => (
         <section key={d.key}>
           <h2 className="sticky top-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar))] z-10 bg-surface/95 px-4 pb-1 pt-3 t-footnote font-semibold text-text-2 backdrop-blur">{d.label}</h2>
-          <ul>
+          <ul className="divide-y divide-separator/60">
             <AnimatePresence>
-              {d.items.map((e) => {
-                const Icon = CAT_ICON[e.category] ?? Tag;
-                const shareCount = e.items.filter((i) => i.value > 0).length;
-                const n = row++;
-                return (
-                  <motion.li
-                    key={e.id}
-                    layout
-                    initial={{ opacity: 0, y: first.current ? 8 : -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ ...spring, delay: first.current ? Math.min(n * 0.03, 0.12) : 0 }}
-                  >
-                    <button type="button" onClick={() => onOpen(e)} className="focus-ring flex w-full scroll-mt-[calc(env(safe-area-inset-top,0px)+var(--nn-layout-top-bar)+3rem)] items-center gap-3 px-4 py-3 text-start active:bg-surface-2" data-testid="expense-row">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-row bg-accent-soft text-on-accent-soft" aria-hidden>
-                        <Icon size={22} />
-                      </span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate t-headline text-text">{e.title}</span>
-                        <span className="truncate t-footnote text-text-2">
-                          {t('paidByName', { name: name(e.paidBy) })} · {shareCount === g.members.length ? t('everyone') : t('forN', { n: shareCount })}
-                        </span>
-                      </span>
-                      <span className="t-headline text-text num">{money(expenseInGroupCurrency(e, g.currency), g.currency, lang)}</span>
-                    </button>
-                  </motion.li>
-                );
-              })}
+              {d.items.map((e) => (
+                <ExpenseRow key={e.id} e={e} g={g} first={first.current} n={row++} onOpen={onOpen} onDuplicate={onDuplicate} onDelete={onDelete} onCategory={onCategory} />
+              ))}
             </AnimatePresence>
           </ul>
         </section>
@@ -172,8 +363,9 @@ const nextPeriod = (every: 'week' | 'month') => {
   return d.toISOString();
 };
 
-export default function GroupPage() {
+function GroupScreen() {
   const { id } = useParams<{ id: string }>();
+  const params = useSearchParams();
   const { ready, me, t, prefs, refreshPlan } = useSession();
   const router = useRouter();
   const toast = useToast();
@@ -181,8 +373,8 @@ export default function GroupPage() {
   const [g, setG] = useState<GroupDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
-  const [tab, setTab] = useState<'expenses' | 'settle'>('expenses');
-  const [sheet, setSheet] = useState<{ open: boolean; editing: Expense | null }>({ open: false, editing: null });
+  const [tab, setTab] = useState<'expenses' | 'settle'>(params.get('settle') === '1' ? 'settle' : 'expenses');
+  const [sheet, setSheet] = useState<{ open: boolean; editing: Expense | null; every?: Every }>({ open: false, editing: null });
   const [panel, setPanel] = useState<null | 'share' | 'options' | 'new-circle' | { circle: Circle }>(null);
   const [q, setQ] = useState('');
   const pending = usePending(id);
@@ -216,6 +408,19 @@ export default function GroupPage() {
     flush().finally(load);
   }, [ready, me, id, load, router]);
 
+  // Links from Home: ?add=1 opens the add sheet, ?invite=1 the invite sheet, ?settle=1 Settle up.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!g || opened.current) return;
+    opened.current = true;
+    if (params.get('add') === '1') {
+      timeStart('add_expense');
+      setSheet({ open: true, editing: null });
+    } else if (params.get('invite') === '1') setPanel('share');
+    if (params.get('settle') === '1') timeStart('settle');
+    if ([...params.keys()].length) router.replace(`/g/${id}`, { scroll: false });
+  }, [g, params, router, id]);
+
   useLiveVersion(g ? id : null, version.current, () => load());
 
   // Back online, or back on a page the browser kept in memory: send what waited, then show the server's copy.
@@ -236,6 +441,11 @@ export default function GroupPage() {
     if (queued) toast(t('savedOffline'));
   };
 
+  const openAdd = (every?: Every) => {
+    timeStart('add_expense');
+    setSheet({ open: true, editing: null, every });
+  };
+
   const save = async (input: ExpenseInput, every: Every) => {
     if (!g) return;
     try {
@@ -246,6 +456,7 @@ export default function GroupPage() {
       apply(r.detail);
       setSheet({ open: false, editing: null });
       play('tap', prefs.sounds);
+      if (!editing) timeEnd('add_expense', true);
       if (every !== 'none' && !editing) {
         try {
           apply(await api.addRecurring(g.id, { title: input.title, amount: input.amount, paidBy: input.paidBy, mode: input.mode, items: input.items, category: input.category, every, startAt: nextPeriod(every) }));
@@ -260,7 +471,8 @@ export default function GroupPage() {
     }
   };
 
-  const repeat = async (e: Expense) => {
+  /** Repeat (hold +) and Duplicate (swipe or menu): the same bill again, today, with Undo. */
+  const again = async (e: Expense, word: 'repeated' | 'duplicated') => {
     if (!g) return;
     const input = repeatInput(e);
     setSheet({ open: false, editing: null });
@@ -268,7 +480,7 @@ export default function GroupPage() {
       const r = await submit({ kind: 'add', groupId: g.id, input, title: input.title }, g);
       apply(r.detail);
       play('tap', prefs.sounds);
-      toast(r.queued ? t('savedOffline') : t('repeated'), {
+      toast(r.queued ? t('savedOffline') : t(word), {
         label: t('undo'),
         run: () =>
           submit({ kind: 'delete', groupId: g.id, expenseId: input.id, title: input.title }, r.detail)
@@ -286,7 +498,21 @@ export default function GroupPage() {
     try {
       const r = await submit({ kind: 'delete', groupId: g.id, expenseId: e.id, title: e.title }, g);
       apply(r.detail);
+      haptic('warning');
       toast(r.queued ? t('savedOffline') : t('deleted'), r.queued ? undefined : { label: t('undo'), run: () => api.restoreExpense(e.id).then(apply).catch(() => toast(t('error'))) });
+    } catch {
+      toast(t('error'));
+    }
+  };
+
+  const recategorize = async (e: Expense, category: string) => {
+    if (!g) return;
+    const input: ExpenseInput = { title: e.title, amount: e.amount, currency: e.currency, rate: e.rate, paidBy: e.paidBy, mode: e.mode, items: e.items, category, spentAt: e.spentAt };
+    try {
+      const r = await submit({ kind: 'update', groupId: g.id, expenseId: e.id, input, title: e.title }, g);
+      apply(r.detail);
+      haptic('success');
+      toast(r.queued ? t('savedOffline') : t('categoryChanged'));
     } catch {
       toast(t('error'));
     }
@@ -298,6 +524,7 @@ export default function GroupPage() {
     try {
       const r = await submit({ kind: 'pay', groupId: g.id, payment: { id: pid, ...tr }, title: t('markPaid') }, g);
       apply(r.detail);
+      timeEnd('settle', true);
       if (r.detail.transfers.length === 0) play('chime', prefs.sounds);
       toast(r.queued ? t('savedOffline') : t('paidRecorded'), r.queued ? undefined : { label: t('undo'), run: () => api.unpay(pid).then(apply).catch(() => toast(t('error'))) }, { done: !r.queued });
     } catch {
@@ -331,15 +558,15 @@ export default function GroupPage() {
   const last = g.expenses[0];
   return (
     <Screen
-      title={`${g.emoji} ${g.name}`}
+      title={g.name}
       back="/"
       testId="group"
-      onAdd={() => setSheet({ open: true, editing: null })}
-      onAddHold={last ? () => repeat(last) : undefined}
+      onAdd={() => openAdd()}
+      onAddHold={last ? () => again(last, 'repeated') : undefined}
       addLabel={t('addExpense')}
       actions={
         <>
-          <BarButton label={t('share')} onClick={() => setPanel('share')} testId="share">
+          <BarButton label={t('inviteFriends')} onClick={() => setPanel('share')} testId="share">
             <ShareNetwork size={22} />
           </BarButton>
           <BarButton label={t('groupMore')} onClick={() => setPanel('options')} testId="group-more">
@@ -355,6 +582,7 @@ export default function GroupPage() {
         value={tab}
         onChange={(v) => {
           setTab(v);
+          if (v === 'settle') timeStart('settle');
           // A new tab starts at its top, like switching tabs on iOS.
           if (window.scrollY > 0) window.scrollTo({ top: 0 });
         }}
@@ -365,7 +593,7 @@ export default function GroupPage() {
         ]}
       />
       {tab === 'expenses' && g.expenses.length >= 5 ? (
-        <label className="flex h-11 items-center gap-2 rounded-full bg-surface px-4 text-text-2 ring-1 ring-separator focus-within:outline focus-within:outline-3 focus-within:outline-[var(--nn-focus)]">
+        <label className="flex h-11 items-center gap-2 rounded-full bg-surface px-4 text-text-2 ring-1 ring-edge focus-within:ring-2 focus-within:ring-accent">
           <MagnifyingGlass size={18} aria-hidden />
           <input
             type="search"
@@ -379,17 +607,30 @@ export default function GroupPage() {
           />
         </label>
       ) : null}
-      {tab === 'expenses' ? <ExpenseList g={g} q={q} onOpen={(e) => setSheet({ open: true, editing: e })} /> : <SettlePlan group={g} onPay={pay} />}
+      {tab === 'expenses' ? (
+        <ExpenseList
+          g={g}
+          q={q}
+          onOpen={(e) => setSheet({ open: true, editing: e })}
+          onAdd={() => openAdd()}
+          onDuplicate={(e) => again(e, 'duplicated')}
+          onDelete={remove}
+          onCategory={recategorize}
+        />
+      ) : (
+        <SettlePlan group={g} onPay={pay} />
+      )}
       <PullToRefresh onRefresh={() => flush(undefined, apply).finally(load)} />
       <ExpenseSheet
         open={sheet.open}
         editing={sheet.editing}
+        startEvery={sheet.every}
         onClose={() => setSheet({ open: false, editing: null })}
         group={g}
         lastPayer={lastPayer}
         onSave={save}
         onDelete={remove}
-        onRepeat={repeat}
+        onRepeat={(e) => again(e, 'repeated')}
       />
       <ShareSheet open={panel === 'share'} onClose={() => setPanel(null)} group={g} />
       <GroupOptions
@@ -402,6 +643,10 @@ export default function GroupPage() {
         }}
         onOpenCircle={(c) => setPanel({ circle: c })}
         onNewCircle={() => setPanel('new-circle')}
+        onAddRepeating={() => {
+          setPanel(null);
+          openAdd('month');
+        }}
       />
       <NewCircleSheet
         open={panel === 'new-circle'}
@@ -415,5 +660,13 @@ export default function GroupPage() {
       />
       <CircleSheet circle={panel && typeof panel === 'object' ? panel.circle : null} g={g} onClose={() => setPanel(null)} onChange={apply} />
     </Screen>
+  );
+}
+
+export default function GroupPage() {
+  return (
+    <Suspense>
+      <GroupScreen />
+    </Suspense>
   );
 }

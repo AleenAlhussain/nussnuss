@@ -3,7 +3,7 @@
 import { expenseInGroupCurrency } from '@nussnuss/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Coin } from '@/components/coin';
+import { CoverTile } from '@/components/identity';
 import { groupHasPlus } from '@/components/expense-sheet';
 import { Button } from '@/components/ui';
 import { api, type GroupDetail } from '@/lib/api';
@@ -40,11 +40,9 @@ export default function PrintGroup() {
         <Button onClick={() => window.print()}>{t('print')}</Button>
       </div>
       <header className="flex items-center gap-4">
-        <Coin size={44} />
+        <CoverTile cover={g.cover} emoji={g.emoji} size={52} />
         <div>
-          <h1 className="t-title-1">
-            {g.emoji} {g.name}
-          </h1>
+          <h1 className="t-title-1">{g.name}</h1>
           <p className="t-subhead text-text-2 print:text-black">
             {t('total')} · {money(g.total, g.currency, lang)} · {t('members', { n: g.members.length })}
           </p>

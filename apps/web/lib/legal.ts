@@ -9,7 +9,7 @@ export interface LegalDoc {
   sections: { h: string; p: string[] }[];
 }
 
-const UPDATED = '2026-10-25';
+const UPDATED = '2026-10-26';
 
 export const privacy: Record<'en' | 'ar', LegalDoc> = {
   en: {
@@ -21,6 +21,7 @@ export const privacy: Record<'en' | 'ar', LegalDoc> = {
         h: 'What we keep',
         p: [
           'The name you choose, your language, and the groups you make or join: their names, the people in them, the expenses (title, amount, currency, who paid, how it was split, the date) and payments marked as paid.',
+          'If you choose one: a profile photo (kept small, 256 × 256), or an emoji, and a colour. Friends in your groups see it next to your name.',
           'If you add them: ways friends can pay you (such as an IBAN or a payment link), a passkey, or a link to your Apple or Google sign-in. From Apple or Google we keep the account identifier and, if they share it, your email address.',
           'A recovery code is stored only as a scrambled fingerprint (a hash), so nobody can read it back.',
           'For each signed-in device: a short device name (for example “Safari on iPhone”) and when it was last used.',
@@ -39,6 +40,7 @@ export const privacy: Record<'en' | 'ar', LegalDoc> = {
           'Reminders: if a group turns on weekly reminders, the app sends a notification to people who owe money. Push notifications use Apple’s and Google’s notification services, which receive a device token.',
           'Live exchange rates are looked up by currency only; nothing about you is sent.',
           'Crash reports, when the server operator turns them on, contain only the error message and where in the code it happened. Long secrets and email addresses are removed before they are stored.',
+          'Task timings, when the server operator turns them on: how long adding an expense, splitting unevenly, settling up, inviting or finding your balance took, and whether it finished. They carry the app and its version, and nothing about you, your device or your groups.',
         ],
       },
       {
@@ -71,6 +73,7 @@ export const privacy: Record<'en' | 'ar', LegalDoc> = {
         h: 'ما نحتفظ به',
         p: [
           'الاسم الذي تختاره، ولغتك، والمجموعات التي تنشئها أو تنضم إليها: أسماؤها، والأشخاص فيها، والمصاريف (الوصف، المبلغ، العملة، مين دفع، طريقة التقسيم، التاريخ) والدفعات المسجّلة.',
+          'إذا اخترت: صورة شخصية (صغيرة، ٢٥٦ × ٢٥٦) أو إيموجي، ولونًا. يراها أصحابك في مجموعاتك بجانب اسمك.',
           'إذا أضفتها: طرق استلامك للفلوس (مثل IBAN أو رابط دفع)، أو مفتاح مرور، أو ربط حسابك في Apple أو Google. من Apple أو Google نحتفظ بمعرّف الحساب، وبريدك الإلكتروني إن شاركوه.',
           'رمز الاستعادة يُحفظ كبصمة مشفّرة فقط (hash)، فلا يمكن لأحد قراءته.',
           'لكل جهاز مسجّل: اسم مختصر للجهاز (مثل "Safari على iPhone") ووقت آخر استخدام.',
@@ -89,6 +92,7 @@ export const privacy: Record<'en' | 'ar', LegalDoc> = {
           'التذكير: إذا فعّلت المجموعة التذكير الأسبوعي، يرسل التطبيق إشعارًا لمن عليهم فلوس. الإشعارات تمر عبر خدمات Apple وGoogle، وتستلم رمزًا خاصًا بالجهاز.',
           'أسعار الصرف المباشرة تُطلب بالعملة فقط؛ لا يُرسل شيء عنك.',
           'تقارير الأعطال، إذا فعّلها مشغّل الخادم، تحتوي فقط على رسالة الخطأ ومكانه في الكود. تُحذف الرموز الطويلة والبريد الإلكتروني قبل الحفظ.',
+          'أوقات المهام، إذا فعّلها مشغّل الخادم: كم استغرقت إضافة مصروف، أو التقسيم غير المتساوي، أو التسوية، أو الدعوة، أو معرفة رصيدك، وهل اكتملت. تحمل اسم التطبيق وإصداره فقط، ولا شيء عنك أو عن جهازك أو مجموعاتك.',
         ],
       },
       {
