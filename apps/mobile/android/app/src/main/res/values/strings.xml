@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NussNuss</string>
+    <!-- The home-screen widget (the same words as lib/l10n: widgetName, widgetDescription). -->
+    <string name="widget_name">Your balance</string>
+    <string name="widget_description">Where you stand across all your groups.</string>
+    <!-- Shown until the app has opened once (overallEven). -->
+    <string name="widget_empty">You’re all even</string>
+    <!-- Long-press shortcuts on the app icon (addExpense, tabActivity). -->
+    <string name="shortcut_add">Add expense</string>
+    <string name="shortcut_activity">Activity</string>
 </resources>

@@ -327,6 +327,267 @@ class CoverTile extends StatelessWidget {
   }
 }
 
+/// The colour of the [i]th member in bars (who paid, each share): the cover tones in order, so
+/// neighbours always differ and the colours work in light and dark (the web does the same).
+String memberTone(int i) => coverTones[i % coverTones.length];
+
+/// The tone of each category, so a list of expenses can be scanned by shape and colour.
+const categoryTones = <String, String>{
+  'food': 'coral',
+  'groceries': 'mint',
+  'transport': 'sky',
+  'stay': 'violet',
+  'fun': 'rose',
+  'bills': 'slate',
+  'shopping': 'saffron',
+  'other': 'slate',
+};
+
+/// The drawn icon for each category (one family with the covers).
+IconData categoryIconOf(String c) => switch (c) {
+  'food' => Icons.restaurant_rounded,
+  'groceries' => Icons.shopping_basket_rounded,
+  'transport' => Icons.directions_car_rounded,
+  'stay' => Icons.bed_rounded,
+  'fun' => Icons.local_activity_rounded,
+  'bills' => Icons.receipt_long_rounded,
+  'shopping' => Icons.shopping_bag_rounded,
+  _ => Icons.sell_rounded,
+};
+
+/// A category: its icon on a soft tile in its tone.
+class CategoryTile extends StatelessWidget {
+  const CategoryTile({super.key, required this.category, this.size = 40});
+  final String category;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final nn = NNTheme.of(context);
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
+    final c = covers[categoryTones[category] ?? 'slate']!;
+    return ExcludeSemantics(
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: c.bg,
+          borderRadius: BorderRadius.circular(size * 0.3),
+        ),
+        child: Icon(categoryIconOf(category), size: size * 0.5, color: c.fg),
+      ),
+    );
+  }
+}
+
+/// How much of a round is paid, as a ring with "2/4" inside (money circles). Full turns green.
+class ProgressRing extends StatelessWidget {
+  const ProgressRing({
+    super.key,
+    required this.value,
+    required this.total,
+    this.size = 40,
+  });
+  final int value;
+  final int total;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    final part = total <= 0 ? 0.0 : (value / total).clamp(0.0, 1.0);
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: size,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: part),
+          duration: reduceMotion(context)
+              ? Duration.zero
+              : NNMotion.standardDuration,
+          curve: Curves.easeOutCubic,
+          builder: (context, t, _) => CustomPaint(
+            painter: _RingPainter(
+              t,
+              track: p.surface2,
+              color: part >= 1 ? p.success : p.accent,
+            ),
+            child: Center(
+              child: Text(
+                '$value/$total',
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(
+                  fontSize: size * 0.28,
+                  fontWeight: FontWeight.w700,
+                  color: p.text,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter(this.t, {required this.track, required this.color});
+  final double t;
+  final Color track;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 4.0;
+    final rect = (Offset.zero & size).deflate(stroke / 2 + 1);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, 0, math.pi * 2, false, paint..color = track);
+    if (t > 0) {
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        math.pi * 2 * t,
+        false,
+        paint..color = color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.t != t || old.color != color || old.track != track;
+}
+
+/// Picks a group's cover: the 16 drawn icons in a grid, then the seven tones.
+class CoverPicker extends StatelessWidget {
+  const CoverPicker({super.key, required this.value, required this.onChanged});
+  final Cover value;
+  final ValueChanged<Cover> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.s;
+    final nn = NNTheme.of(context);
+    final p = nn.palette;
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
+    final tone = covers[value.tone] ?? covers['violet']!;
+    final cell = touchTarget(context);
+    return Column(
+      key: const ValueKey('cover-picker'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final icon in coverIcons)
+              Pressable(
+                key: ValueKey('cover-$icon'),
+                onTap: () => onChanged(Cover(icon, value.tone)),
+                selected: value.icon == icon,
+                semanticLabel: s.raw('icon_$icon'),
+                excludeChildSemantics: true,
+                haptic: Haptic.selection,
+                child: AnimatedContainer(
+                  duration: NNMotion.fade,
+                  width: cell,
+                  height: cell,
+                  decoration: ShapeDecoration(
+                    color: value.icon == icon ? tone.bg : p.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(NNRadius.control),
+                      side: BorderSide(
+                        color: value.icon == icon ? p.accent : p.edge,
+                        width: value.icon == icon ? 2 : 1,
+                      ),
+                    ),
+                  ),
+                  child: Icon(
+                    coverIconData[icon],
+                    size: 22,
+                    color: value.icon == icon ? tone.fg : p.text2,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: NNSpace.sm),
+        ToneRow(
+          value: value.tone,
+          onChanged: (t) => onChanged(Cover(value.icon, t)),
+          keyPrefix: 'cover-tone',
+        ),
+      ],
+    );
+  }
+}
+
+/// The seven tones as round swatches.
+class ToneRow extends StatelessWidget {
+  const ToneRow({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.keyPrefix = 'tone',
+  });
+  final String value;
+  final ValueChanged<String> onChanged;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.s;
+    final nn = NNTheme.of(context);
+    final p = nn.palette;
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
+    final cell = touchTarget(context);
+    return Wrap(
+      spacing: NNSpace.xs,
+      runSpacing: NNSpace.xs,
+      children: [
+        for (final t in coverTones)
+          Pressable(
+            key: ValueKey('$keyPrefix-$t'),
+            onTap: () => onChanged(t),
+            selected: value == t,
+            semanticLabel: s.raw('tone_$t'),
+            excludeChildSemantics: true,
+            haptic: Haptic.selection,
+            child: AnimatedContainer(
+              duration: NNMotion.fade,
+              width: cell,
+              height: cell,
+              padding: const EdgeInsets.all(4),
+              decoration: ShapeDecoration(
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: value == t
+                        ? p.accent
+                        : p.accent.withValues(alpha: 0),
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: DecoratedBox(
+                decoration: ShapeDecoration(
+                  shape: CircleBorder(side: BorderSide(color: p.edge)),
+                  color: covers[t]!.fg,
+                ),
+                child: value == t
+                    ? Icon(Icons.check_rounded, size: 18, color: covers[t]!.bg)
+                    : null,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// An amount on one line. When it doesn't fit it shrinks, but never below body size; only then
 /// does it take a second line.
 class AmountText extends StatelessWidget {
@@ -374,6 +635,45 @@ class AmountText extends StatelessWidget {
           maxLines: 2,
           textAlign: textAlign,
         );
+      },
+    );
+  }
+}
+
+/// One centred line that shrinks to fit, never below [min] points; past that it is cut with an
+/// ellipsis. For short labels in a fixed width (the people strip on Home).
+class FitLine extends StatelessWidget {
+  const FitLine(this.text, {super.key, required this.style, this.min = 11});
+  final String text;
+  final TextStyle style;
+  final double min;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final size = style.fontSize ?? NNType.body.fontSize!;
+        Text line(double fontSize) => Text(
+          text,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: style.copyWith(fontSize: fontSize),
+        );
+        if (!c.hasBoundedWidth) return line(size);
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final width = tp.width;
+        tp.dispose();
+        if (width <= c.maxWidth) return line(size);
+        // Shrink in proportion, down to the floor; then the ellipsis takes over.
+        final fit = size * c.maxWidth / width;
+        return line(math.max(math.min(size, min), fit));
       },
     );
   }
@@ -521,10 +821,14 @@ class EmptyState extends StatelessWidget {
     required this.title,
     required this.body,
     this.art,
+    this.action,
   });
   final String title;
   final String body;
   final Widget? art;
+
+  /// The one thing to do next (a button).
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -542,12 +846,15 @@ class EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
             style: NNType.title3.copyWith(color: p.text),
           ),
-          const SizedBox(height: NNSpace.xs),
-          Text(
-            body,
-            textAlign: TextAlign.center,
-            style: NNType.callout.copyWith(color: p.text2),
-          ),
+          if (body.isNotEmpty) ...[
+            const SizedBox(height: NNSpace.xs),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: NNType.callout.copyWith(color: p.text2),
+            ),
+          ],
+          if (action != null) ...[const SizedBox(height: NNSpace.lg), action!],
         ],
       ),
     );

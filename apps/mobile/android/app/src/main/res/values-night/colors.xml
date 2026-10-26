@@ -2,4 +2,9 @@
 <resources>
     <!-- Violet night (tokens: color.dark.bg). -->
     <color name="launch_bg">#0D0A1C</color>
+    <!-- The widget at night (tokens: color.dark surface, text, text2, accent). -->
+    <color name="widget_bg">#18132E</color>
+    <color name="widget_text">#F4F2FA</color>
+    <color name="widget_text2">#B4ADD0</color>
+    <color name="widget_accent">#9B8BFF</color>
 </resources>

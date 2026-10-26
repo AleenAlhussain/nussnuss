@@ -7,6 +7,7 @@ import '../core/money.dart';
 import '../core/split.dart';
 import '../data/api.dart';
 import '../data/models.dart';
+import '../data/native.dart';
 import '../data/services.dart';
 import '../data/session.dart';
 import '../design/glass.dart';
@@ -16,6 +17,7 @@ import '../design/tokens.g.dart';
 import '../design/widgets.dart';
 import '../format.dart';
 import 'expense_sheet.dart';
+import 'group_sheets.dart' show showCoverSheet;
 import 'paywall.dart';
 import 'pickers.dart';
 import 'summary_card.dart';
@@ -56,6 +58,27 @@ class _OptionsState extends State<_Options> {
   late GroupDetail g = widget.group;
   String? _error;
   bool _busy = false;
+
+  /// This trip's balance is on the Lock Screen (iPhone; kept on this device).
+  bool _live = false;
+
+  @override
+  void initState() {
+    super.initState();
+    liveTrips(SessionScope.read(context).store).then((all) {
+      if (mounted && all.contains(g.id)) setState(() => _live = true);
+    });
+  }
+
+  Future<void> _setLive(bool on) async {
+    final session = SessionScope.read(context);
+    setState(() => _live = on);
+    try {
+      await setLiveTrip(session.store, g, session.s, on: on);
+    } on Object {
+      // The Lock Screen is a nicety: the switch still says what was asked.
+    }
+  }
 
   void _take(GroupDetail d) {
     setState(() => g = d);
@@ -137,6 +160,49 @@ class _OptionsState extends State<_Options> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // The group itself: how it looks and what it is called.
+        Pressable(
+          key: const ValueKey('cover-and-name'),
+          onTap: () async {
+            final d = await showCoverSheet(context, g);
+            if (d != null && mounted) _take(d);
+          },
+          semanticLabel: '${s.coverAndName}, ${g.name}',
+          excludeChildSemantics: true,
+          scale: 0.98,
+          child: NNCard(
+            child: Row(
+              children: [
+                CoverTile(cover: g.cover, size: 44),
+                const SizedBox(width: NNSpace.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        g.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: NNType.headline.copyWith(color: p.text),
+                      ),
+                      Text(
+                        s.coverAndName,
+                        style: NNType.footnote.copyWith(color: p.text2),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Directionality.of(context) == TextDirection.rtl
+                      ? Icons.chevron_left_rounded
+                      : Icons.chevron_right_rounded,
+                  color: p.text3,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: NNSpace.md),
         // Trip Pass.
         NNCard(
           child: g.tripPass
@@ -197,6 +263,18 @@ class _OptionsState extends State<_Options> {
           locked: !plus,
           onChanged: _busy ? null : _reminders,
         ),
+        // On an iPhone, a trip can sit on the Lock Screen while it is on.
+        if (onIos && isTripGroup(g.cover)) ...[
+          const SizedBox(height: NNSpace.xs),
+          _SwitchRow(
+            key: const ValueKey('live-activity'),
+            label: s.liveActivity,
+            hint: s.liveActivityHint,
+            value: _live,
+            locked: false,
+            onChanged: _setLive,
+          ),
+        ],
         SectionLabel(s.recurringTitle),
         if (g.recurring.isEmpty)
           Padding(
@@ -481,9 +559,16 @@ class _Spending extends StatelessWidget {
     ], g.currency);
     final paid = [
       for (final m in g.members)
-        (name: m.isMe ? s.you : m.name, amount: memberStats(g.core, m.id).paid),
+        (
+          name: m.isMe ? s.you : m.name,
+          amount: memberStats(g.core, m.id).paid,
+          member: m,
+        ),
     ]..sort((a, b) => b.amount.compareTo(a.amount));
-    Widget bars(List<({String label, int amount})> rows, Color color) {
+    Widget bars(
+      List<({String label, int amount, Widget lead})> rows,
+      Color color,
+    ) {
       final top = rows.isEmpty ? 1 : rows.first.amount.clamp(1, 1 << 52);
       return Column(
         children: [
@@ -496,6 +581,8 @@ class _Spending extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        r.lead,
+                        const SizedBox(width: NNSpace.xs),
                         Expanded(
                           child: Text(
                             r.label,
@@ -545,7 +632,15 @@ class _Spending extends StatelessWidget {
           ),
           bars([
             for (final c in cats)
-              (label: s.raw('cat_${c.category}'), amount: c.amount),
+              (
+                label: s.raw('cat_${c.category}'),
+                amount: c.amount,
+                lead: CategoryTile(
+                  key: ValueKey('spending-cat-${c.category}'),
+                  category: c.category,
+                  size: 28,
+                ),
+              ),
           ], p.accent),
           const SizedBox(height: NNSpace.sm),
           Text(
@@ -557,7 +652,16 @@ class _Spending extends StatelessWidget {
           ),
           bars([
             for (final x in paid)
-              if (x.amount > 0) (label: x.name, amount: x.amount),
+              if (x.amount > 0)
+                (
+                  label: x.name,
+                  amount: x.amount,
+                  lead: Avatar(
+                    name: x.member.name,
+                    look: x.member.avatar,
+                    size: 28,
+                  ),
+                ),
           ], p.highlight),
         ],
       ),
@@ -637,7 +741,16 @@ class _CircleCardState extends State<CircleCard> {
           children: [
             Row(
               children: [
-                Icon(Icons.donut_small_rounded, color: p.accent),
+                // How much of this round is in: paid / everyone but the receiver.
+                if (r != null)
+                  ProgressRing(
+                    key: ValueKey('circle-ring-${c.id}'),
+                    value: r.paid.length,
+                    total: c.turns.length - 1,
+                    size: 44,
+                  )
+                else
+                  Icon(Icons.donut_small_rounded, color: p.accent),
                 const SizedBox(width: NNSpace.sm),
                 Expanded(
                   child: Text(
@@ -802,8 +915,49 @@ class _CircleBodyState extends State<_CircleBody> {
           style: NNType.callout.copyWith(color: p.text2),
         ),
         for (final r in c.rounds) ...[
-          SectionLabel(
-            '${s.fill(s.circleRound, {'n': r.round + 1})} · ${r.receiver == g.me ? s.circleYouGet : s.fill(s.circleGets, {'name': g.nameOf(r.receiver)})} · ${s.fill(s.circleDue, {'date': _day(context, _fromIso(r.dueOn))})}',
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              start: NNSpace.xxs,
+              top: NNSpace.md,
+              bottom: NNSpace.xs,
+            ),
+            child: Row(
+              children: [
+                ProgressRing(
+                  key: ValueKey('round-ring-${r.round}'),
+                  value: r.paid.length,
+                  total: c.turns.length - 1,
+                  size: 36,
+                ),
+                const SizedBox(width: NNSpace.sm),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      [
+                        s.fill(s.circleRound, {'n': r.round + 1}),
+                        r.receiver == g.me
+                            ? s.circleYouGet
+                            : s.fill(s.circleGets, {
+                                'name': g.nameOf(r.receiver),
+                              }),
+                        s.fill(s.circleDue, {
+                          'date': _day(context, _fromIso(r.dueOn)),
+                        }),
+                        s.fill(s.circlePaidN, {
+                          'paid': r.paid.length,
+                          'total': c.turns.length - 1,
+                        }),
+                      ].join(' · '),
+                      style: NNType.footnote.copyWith(
+                        color: p.text2,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           NNCard(
             padding: const EdgeInsets.symmetric(

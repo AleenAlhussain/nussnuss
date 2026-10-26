@@ -24,6 +24,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Long-press shortcuts on the icon: Add expense and Activity (nussnuss://add, /activity). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <!-- Invite links open the app (App Links). The host comes from APP_LINK_HOST at build
                  time; the web serves /.well-known/assetlinks.json for it. -->
             <meta-data android:name="flutter_deeplinking_enabled" android:value="true" />
@@ -35,6 +39,18 @@
                 <data android:scheme="https" android:host="${appLinkHost}" android:pathPrefix="/j/" />
             </intent-filter>
         </activity>
+        <!-- The home-screen balance widget. -->
+        <receiver
+            android:name=".NussNussWidget"
+            android:exported="false"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nussnuss_widget_info" />
+        </receiver>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

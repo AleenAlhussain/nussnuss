@@ -39,6 +39,27 @@
 	<string>NussNuss tilts the light on its coin as you move your phone. Nothing is recorded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>NussNuss reads a receipt from a photo you choose so you can split it by item. The photo stays on your phone.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>app.nussnuss.add</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Add expense</string>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeAdd</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>app.nussnuss.activity</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Activity</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>clock.arrow.circlepath</string>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

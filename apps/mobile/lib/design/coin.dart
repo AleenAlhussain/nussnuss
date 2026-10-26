@@ -281,3 +281,43 @@ class _SettledMomentState extends State<SettledMoment>
     );
   }
 }
+
+/// The two halves drifted apart: the art of an empty screen (nothing split yet). The saffron half
+/// sits a little lower and turned, as if it had just come off.
+class DriftedCoin extends StatelessWidget {
+  const DriftedCoin({super.key, this.size = 88});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = size * 0.22;
+    return ExcludeSemantics(
+      child: SizedBox(
+        key: const ValueKey('drifted-coin'),
+        width: size + gap,
+        height: size * 1.12,
+        child: Directionality(
+          // A picture, not text: the halves stay left and right in Arabic too.
+          textDirection: TextDirection.ltr,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                top: 0,
+                child: CoinHalf(left: true, size: size),
+              ),
+              Positioned(
+                left: gap,
+                top: size * 0.1,
+                child: Transform.rotate(
+                  angle: 0.14,
+                  child: CoinHalf(left: false, size: size),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

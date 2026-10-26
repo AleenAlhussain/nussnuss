@@ -110,6 +110,10 @@ class _ExpenseFormState extends State<ExpenseForm> {
   String? _category;
   late String _paidBy = g.me;
   SplitChoice _mode = SplitChoice.equal;
+
+  /// What "Unequally" goes back to: the last uneven way picked (shares to begin with).
+  SplitChoice _lastUneven = SplitChoice.shares;
+  late final Session _session = SessionScope.read(context);
   late Set<String> _included = _ids.toSet();
   late Map<String, int> _shares = {for (final id in _ids) id: 1};
   late final Map<String, TextEditingController> _exact = {
@@ -137,6 +141,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
   @override
   void initState() {
     super.initState();
+    _session; // Kept for dispose, where the tree can no longer be read.
     final e = widget.editing;
     if (e != null) {
       _fill(e);
@@ -159,7 +164,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
           (title: e.title, category: e.category),
       ],
       hour: suggestionClock().hour,
-      emoji: g.emoji,
+      // The cover's icon says what kind of group it is (groups from before covers: the emoji).
+      emoji: g.cover.icon,
       label: (k) => s.raw('sug_$k'),
     );
   }
@@ -173,6 +179,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
     _category = e.category;
     _paidBy = _ids.contains(e.paidBy) ? e.paidBy : g.me;
     _mode = SplitChoice.values.byName(e.mode.name);
+    if (_mode != SplitChoice.equal) _lastUneven = _mode;
     _rate.text = e.currency == g.currency ? '' : _rateText(e.rate);
     _included = e.mode != SplitMode.equal
         ? _ids.toSet()
@@ -201,6 +208,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
 
   @override
   void dispose() {
+    // Closed without saving: an uneven split that was started is not measured.
+    _session.timings.cancel('uneven_split');
     _title
       ..removeListener(_onTitle)
       ..dispose();
@@ -236,7 +245,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
   }
 
   /// Same as the web: a category the person picked; else that of a recent expense with the same
-  /// title; else that of the matching suggestion (Lunch → food, Taxi → transport); else other.
+  /// title; else that of the matching suggestion (Lunch → food, Taxi → transport); else the words
+  /// in the title ("Fuel" is transport, "عشاء" is food); else other.
   String get _cat {
     final picked = _category;
     if (picked != null) return picked;
@@ -247,7 +257,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
     for (final x in _suggestions ?? const <Suggestion>[]) {
       if (_suggestionLabel(x).toLowerCase() == k) return x.category;
     }
-    return 'other';
+    return categoryFromTitle(_shownTitle) ?? 'other';
   }
 
   ({List<SplitItem> items, int rest})? get _itemized {
@@ -402,6 +412,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
           }
         }
       }
+      // uneven_split: from choosing Unequally to Save.
+      if (_mode != SplitChoice.equal) session.timings.finish('uneven_split');
       session.click();
       haptic(Haptic.success);
       if (mounted) {
@@ -659,15 +671,52 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ],
         ),
         SectionLabel(s.split),
-        Segmented<SplitChoice>(
-          values: SplitChoice.values,
-          selected: _mode,
-          label: (m) => s.raw('mode_${m.name}'),
-          onChanged: _pickMode,
+        // Two choices first; the ways to split unevenly only once someone wants one.
+        Segmented<String>(
+          key: const ValueKey('split-how'),
+          values: const ['equal', 'unequal'],
+          selected: _mode == SplitChoice.equal ? 'equal' : 'unequal',
+          label: (v) => v == 'equal' ? s.splitEqually : s.splitUnequally,
+          onChanged: (v) =>
+              _pickMode(v == 'equal' ? SplitChoice.equal : _lastUneven),
         ),
+        if (_mode != SplitChoice.equal) ...[
+          SectionLabel(s.splitHow),
+          Segmented<SplitChoice>(
+            key: const ValueKey('split-mode'),
+            values: const [
+              SplitChoice.shares,
+              SplitChoice.exact,
+              SplitChoice.percent,
+              SplitChoice.items,
+            ],
+            selected: _mode,
+            label: (m) => s.raw('mode_${m.name}'),
+            onChanged: _pickMode,
+          ),
+        ],
         const SizedBox(height: NNSpace.sm),
         _ShareBar(members: g.members, owed: owed, total: total),
+        _ShareLegend(
+          members: g.members,
+          owed: owed,
+          currency: _currency,
+          lang: s.lang,
+          you: s.you,
+        ),
         const SizedBox(height: NNSpace.sm),
+        if (_mode == SplitChoice.shares) ...[
+          _DragShares(
+            members: g.members,
+            shares: _shares,
+            owed: owed,
+            currency: _currency,
+            onAdd: (id) => setState(
+              () => _shares[id] = ((_shares[id] ?? 0) + 1).clamp(0, 99),
+            ),
+          ),
+          const SizedBox(height: NNSpace.sm),
+        ],
         if (_mode == SplitChoice.items) ..._itemRows(),
         NNCard(
           padding: const EdgeInsets.symmetric(
@@ -894,15 +943,19 @@ class _ExpenseFormState extends State<ExpenseForm> {
     ];
   }
 
-  /// Items is part of Plus, like on the web.
+  /// Items is part of Plus, like on the web. Leaving Equally starts the uneven_split timing.
   Future<void> _pickMode(SplitChoice m) async {
     final session = SessionScope.read(context);
     if (m == SplitChoice.items && !session.hasPlus(g)) {
       final ok = await showPaywall(context, group: g);
       if (!mounted || !ok) return;
     }
+    if (m != SplitChoice.equal && _mode == SplitChoice.equal) {
+      session.timings.start('uneven_split');
+    }
     setState(() {
       _mode = m;
+      if (m != SplitChoice.equal) _lastUneven = m;
       if (m == SplitChoice.items && _items.isEmpty) _items.add(_Item(_ids));
     });
   }
@@ -1004,8 +1057,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _StepButton(
+            key: ValueKey('less-share-${m.id}'),
             icon: Icons.remove_rounded,
-            label: '$name −',
+            label: s.fill(s.lessShare, {'name': name}),
             onTap: (_shares[m.id] ?? 0) > 0
                 ? () => setState(() => _shares[m.id] = (_shares[m.id] ?? 0) - 1)
                 : null,
@@ -1023,8 +1077,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
             ),
           ),
           _StepButton(
+            key: ValueKey('more-share-${m.id}'),
             icon: Icons.add_rounded,
-            label: '$name +',
+            label: s.fill(s.moreShare, {'name': name}),
             onTap: (_shares[m.id] ?? 0) < 99
                 ? () => setState(() => _shares[m.id] = (_shares[m.id] ?? 0) + 1)
                 : null,
@@ -1085,7 +1140,13 @@ class _ExpenseFormState extends State<ExpenseForm> {
 
     if (_mode != SplitChoice.equal) {
       return Semantics(
-        label: share.isEmpty ? name : '$name, $share',
+        label: _mode == SplitChoice.shares
+            ? s.fill(s.sharesOf, {
+                'name': name,
+                'n': _shares[m.id] ?? 0,
+                'amount': share.isEmpty ? money(0, _currency, s.lang) : share,
+              })
+            : (share.isEmpty ? name : '$name, $share'),
         child: row,
       );
     }
@@ -1166,6 +1227,7 @@ class _DetailsRow extends StatelessWidget {
 
 class _StepButton extends StatelessWidget {
   const _StepButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
@@ -1218,15 +1280,12 @@ class _ShareBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final nn = NNTheme.of(context);
     final p = nn.palette;
-    // Each person's share in the colour of their avatar (never red: a share is not a debt).
+    // Each person's share in their own colour (never red: a share is not a debt).
     final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
     final parts = [
       for (var i = 0; i < members.length; i++)
         if ((owed[members[i].id] ?? 0) > 0)
-          (
-            flex: owed[members[i].id]!,
-            color: (covers[members[i].avatar.tone] ?? covers['violet']!).fg,
-          ),
+          (flex: owed[members[i].id]!, color: covers[memberTone(i)]!.fg),
     ];
     return ExcludeSemantics(
       child: ClipRRect(
@@ -1250,6 +1309,320 @@ class _ShareBar extends StatelessWidget {
                     ],
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Under the share bar: each person's colour, name and share.
+class _ShareLegend extends StatelessWidget {
+  const _ShareLegend({
+    required this.members,
+    required this.owed,
+    required this.currency,
+    required this.lang,
+    required this.you,
+  });
+  final List<Member> members;
+  final Map<String, int> owed;
+  final String currency;
+  final String lang;
+  final String you;
+
+  @override
+  Widget build(BuildContext context) {
+    final nn = NNTheme.of(context);
+    final p = nn.palette;
+    final covers = nn.isDark ? NNCovers.dark : NNCovers.light;
+    final shown = [
+      for (final (i, m) in members.indexed)
+        if ((owed[m.id] ?? 0) > 0) (i: i, m: m),
+    ];
+    if (shown.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: NNSpace.xs),
+      child: ExcludeSemantics(
+        // The people rows below say the same to screen readers.
+        child: Wrap(
+          key: const ValueKey('split-legend'),
+          spacing: NNSpace.sm,
+          runSpacing: NNSpace.xxs,
+          children: [
+            for (final (:i, :m) in shown)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: ShapeDecoration(
+                      shape: const CircleBorder(),
+                      color: covers[memberTone(i)]!.fg,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      '${m.isMe ? you : m.name} ${money(owed[m.id]!, currency, lang)}',
+                      style: NNType.caption.copyWith(
+                        color: p.text2,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Drag to split: pick up "+1 share" and drop it on someone, and their share grows (a light tick
+/// as it passes over someone, a firm one when it lands). The − and + buttons in the list below do
+/// the same without dragging, for anyone who can't or would rather not.
+class _DragShares extends StatefulWidget {
+  const _DragShares({
+    required this.members,
+    required this.shares,
+    required this.owed,
+    required this.currency,
+    required this.onAdd,
+  });
+  final List<Member> members;
+  final Map<String, int> shares;
+  final Map<String, int> owed;
+  final String currency;
+  final ValueChanged<String> onAdd;
+
+  @override
+  State<_DragShares> createState() => _DragSharesState();
+}
+
+class _DragSharesState extends State<_DragShares> {
+  String? _over;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.s;
+    final p = NNTheme.of(context).palette;
+    Widget token({bool lifted = false}) => Container(
+      constraints: BoxConstraints(minHeight: touchTarget(context)),
+      padding: const EdgeInsets.symmetric(horizontal: NNSpace.md),
+      decoration: ShapeDecoration(
+        shape: const StadiumBorder(),
+        color: p.accent,
+        shadows: lifted
+            ? const [
+                BoxShadow(
+                  color: Color(0x40000000),
+                  blurRadius: 14,
+                  offset: Offset(0, 6),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.back_hand_outlined, size: 18, color: p.onAccent),
+          const SizedBox(width: 6),
+          Text(
+            s.addShare,
+            style: NNType.subhead.copyWith(
+              color: p.onAccent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+    return NNCard(
+      key: const ValueKey('drag-shares'),
+      padding: const EdgeInsets.all(NNSpace.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(s.dragHint, style: NNType.footnote.copyWith(color: p.text2)),
+          const SizedBox(height: NNSpace.xs),
+          Wrap(
+            spacing: NNSpace.xs,
+            runSpacing: NNSpace.xs,
+            children: [
+              for (final m in widget.members)
+                DragTarget<String>(
+                  key: ValueKey('share-drop-${m.id}'),
+                  onWillAcceptWithDetails: (_) {
+                    if (_over != m.id) {
+                      haptic(Haptic.selection);
+                      setState(() => _over = m.id);
+                    }
+                    return true;
+                  },
+                  onLeave: (_) {
+                    if (_over == m.id) setState(() => _over = null);
+                  },
+                  onAcceptWithDetails: (_) {
+                    haptic(Haptic.success);
+                    setState(() => _over = null);
+                    widget.onAdd(m.id);
+                  },
+                  builder: (context, _, _) => _ShareTarget(
+                    member: m,
+                    name: m.isMe ? s.you : m.name,
+                    count: widget.shares[m.id] ?? 0,
+                    amount: (widget.owed[m.id] ?? 0) > 0
+                        ? money(widget.owed[m.id]!, widget.currency, s.lang)
+                        : '–',
+                    over: _over == m.id,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: NNSpace.sm),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            // Dragging is one way of several; screen readers use the buttons below.
+            child: ExcludeSemantics(
+              child: Draggable<String>(
+                key: const ValueKey('share-token'),
+                data: 'share',
+                onDragStarted: () => haptic(Haptic.light),
+                onDragEnd: (_) {
+                  if (_over != null && mounted) setState(() => _over = null);
+                },
+                // It lands where the finger lifts; the "+1" floats just above the finger so it
+                // stays in sight.
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                feedback: Material(
+                  type: MaterialType.transparency,
+                  child: Directionality(
+                    textDirection: Directionality.of(context),
+                    child: FractionalTranslation(
+                      translation: const Offset(-0.5, -1.8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: ShapeDecoration(
+                          shape: const StadiumBorder(),
+                          color: p.accent,
+                          shadows: const [
+                            BoxShadow(
+                              color: Color(0x40000000),
+                              blurRadius: 14,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          '+1',
+                          style: NNType.footnote.copyWith(
+                            color: p.onAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                childWhenDragging: Opacity(opacity: 0.5, child: token()),
+                child: token(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A person to drop a share on: their avatar with ×n, their name and their share.
+class _ShareTarget extends StatelessWidget {
+  const _ShareTarget({
+    required this.member,
+    required this.name,
+    required this.count,
+    required this.amount,
+    required this.over,
+  });
+  final Member member;
+  final String name;
+  final int count;
+  final String amount;
+  final bool over;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return ExcludeSemantics(
+      child: AnimatedContainer(
+        duration: NNMotion.fade,
+        width: 84,
+        padding: const EdgeInsets.symmetric(
+          vertical: NNSpace.xs,
+          horizontal: 4,
+        ),
+        decoration: ShapeDecoration(
+          color: over ? p.accentSoft : p.surface2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(NNRadius.row),
+            side: BorderSide(
+              color: over ? p.accent : p.accent.withValues(alpha: 0),
+              width: 2,
+            ),
+          ),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Avatar(name: member.name, look: member.avatar, size: 40),
+                PositionedDirectional(
+                  bottom: -4,
+                  end: -10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: ShapeDecoration(
+                      shape: const StadiumBorder(),
+                      color: p.accent,
+                    ),
+                    child: Text(
+                      '×$count',
+                      key: ValueKey('share-badge-${member.id}'),
+                      textScaler: TextScaler.noScaling,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: p.onAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: NNType.caption.copyWith(
+                color: p.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            FitLine(
+              amount,
+              style: NNType.caption.copyWith(
+                color: p.text2,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -3,3 +3,7 @@
 "NSCameraUsageDescription" = "يستخدم نص نص الكاميرا لقراءة الفاتورة حتى تقسمها بالبنود. الصورة تبقى على جوالك.";
 "NSPhotoLibraryUsageDescription" = "يقرأ نص نص الفاتورة من صورة تختارها حتى تقسمها بالبنود. الصورة تبقى على جوالك.";
 "NSMotionUsageDescription" = "يحرّك نص نص الضوء على العملة مع حركة جوالك. لا يُسجَّل أي شيء.";
+
+/* Home Screen quick actions: the English title is the key. */
+"Add expense" = "أضف مصروف";
+"Activity" = "النشاط";

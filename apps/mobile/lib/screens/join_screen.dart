@@ -23,7 +23,8 @@ class JoinScreen extends StatefulWidget {
 }
 
 class _JoinScreenState extends State<JoinScreen> {
-  ({Map<String, dynamic> group, List<Member> members})? _preview;
+  ({Map<String, dynamic> group, List<Member> members, Who? invitedBy})?
+  _preview;
   bool _bad = false;
   String? _pick;
   final _name = TextEditingController();
@@ -144,18 +145,46 @@ class _JoinScreenState extends State<JoinScreen> {
               size: 88,
             ),
           ),
-          const SizedBox(height: NNSpace.sm),
-          Text(
-            s.joinTitle,
-            textAlign: TextAlign.center,
-            style: NNType.subhead.copyWith(color: p.text2),
-          ),
+          const SizedBox(height: NNSpace.md),
           Semantics(
             header: true,
             child: Text(
-              preview.group['name'] as String? ?? '',
+              s.fill(s.joinGroupX, {
+                'name': preview.group['name'] as String? ?? '',
+              }),
+              key: const ValueKey('join-title'),
               textAlign: TextAlign.center,
               style: NNType.title1.copyWith(color: p.text),
+            ),
+          ),
+          const SizedBox(height: NNSpace.xs),
+          // "Sara invited you · 3 people · AED", with Sara's avatar.
+          MergeSemantics(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              children: [
+                if (preview.invitedBy != null)
+                  Avatar(
+                    name: preview.invitedBy!.name,
+                    look: preview.invitedBy!.avatar,
+                    size: 24,
+                  ),
+                Text(
+                  [
+                    if (preview.invitedBy != null)
+                      s.fill(s.invitedYou, {'name': preview.invitedBy!.name}),
+                    s.fill(s.joinMeta, {
+                      'n': preview.members.length,
+                      'currency': preview.group['currency'] as String? ?? '',
+                    }),
+                  ].join(' · '),
+                  key: const ValueKey('join-meta'),
+                  textAlign: TextAlign.center,
+                  style: NNType.subhead.copyWith(color: p.text2),
+                ),
+              ],
             ),
           ),
           SectionLabel(s.joinWho),
@@ -167,7 +196,8 @@ class _JoinScreenState extends State<JoinScreen> {
                   _Choice(
                     key: ValueKey('who-${m.id}'),
                     label: m.name,
-                    note: m.claimed ? s.joinTaken : null,
+                    avatar: Avatar(name: m.name, look: m.avatar, size: 32),
+                    note: m.claimed ? s.alreadyJoined : null,
                     selected: _pick == m.id,
                     onTap: m.claimed
                         ? null
@@ -175,7 +205,7 @@ class _JoinScreenState extends State<JoinScreen> {
                   ),
                 _Choice(
                   key: const ValueKey('who-new'),
-                  label: s.joinNew,
+                  label: s.someoneElse,
                   selected: _pick == 'new',
                   onTap: () => setState(() => _pick = 'new'),
                 ),
@@ -241,9 +271,11 @@ class _Choice extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.note,
+    this.avatar,
   });
   final String label;
   final String? note;
+  final Widget? avatar;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -260,7 +292,8 @@ class _Choice extends StatelessWidget {
       child: Opacity(
         opacity: onTap == null ? 0.5 : 1,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
+          // 44 pt rows (48 on Android), so a long list of names still fits.
+          constraints: BoxConstraints(minHeight: touchTarget(context)),
           child: Row(
             children: [
               Icon(
@@ -270,6 +303,10 @@ class _Choice extends StatelessWidget {
                 color: selected ? p.accent : p.text3,
               ),
               const SizedBox(width: NNSpace.sm),
+              if (avatar != null) ...[
+                avatar!,
+                const SizedBox(width: NNSpace.sm),
+              ],
               Expanded(
                 child: Text(label, style: NNType.body.copyWith(color: p.text)),
               ),

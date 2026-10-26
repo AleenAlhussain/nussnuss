@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/accessibility.dart';
+import 'data/native.dart';
 import 'data/session.dart';
 import 'design/coin.dart';
 import 'design/page.dart';
@@ -75,6 +76,11 @@ class _NussNussAppState extends State<NussNussApp> with WidgetsBindingObserver {
   /// A link tapped while the app is open (Universal Links on iOS, App Links on Android).
   @override
   Future<bool> didPushRouteInformation(RouteInformation info) async {
+    // A shortcut link (nussnuss://add) that reached Flutter: Home acts on it.
+    if (info.uri.scheme == 'nussnuss') {
+      shortcutAction.value = info.uri.host;
+      return true;
+    }
     final token = inviteToken(info.uri);
     if (token == null) return false;
     widget.session.openInvite(token);

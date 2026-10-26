@@ -28,10 +28,10 @@ IconData categoryIcon(String c) => switch (c) {
   'groceries' => Icons.shopping_basket_rounded,
   'transport' => Icons.directions_car_rounded,
   'stay' => Icons.bed_rounded,
-  'fun' => Icons.celebration_rounded,
+  'fun' => Icons.local_activity_rounded,
   'bills' => Icons.receipt_long_rounded,
   'shopping' => Icons.shopping_bag_rounded,
-  _ => Icons.more_horiz_rounded,
+  _ => Icons.sell_rounded,
 };
 
 /// "Sara pays Omar", "Sara pays you" or "You pay Omar": never "You pays".

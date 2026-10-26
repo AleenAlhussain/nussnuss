@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/api.dart';
 import '../data/models.dart';
+import '../data/native.dart';
 import '../data/session.dart';
 import '../design/glass.dart';
 import '../design/page.dart';
@@ -57,7 +58,28 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    shortcutAction.addListener(_onShortcut);
+    // A shortcut that opened the app before Home was there.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onShortcut());
+  }
+
+  /// The app icon's shortcuts and Siri: Add expense (as the +) or Activity.
+  void _onShortcut() {
+    final action = shortcutAction.value;
+    if (action == null || !mounted) return;
+    shortcutAction.value = null;
+    if (action == 'add') {
+      unawaited(_addExpense(Rect.zero));
+    } else if (action == 'activity') {
+      _show(1);
+    }
+  }
+
+  @override
   void dispose() {
+    shortcutAction.removeListener(_onShortcut);
     for (final d in _deep) {
       d.dispose();
     }

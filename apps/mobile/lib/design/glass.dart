@@ -359,10 +359,19 @@ class Pressable extends StatefulWidget {
     this.excludeChildSemantics = false,
     this.onLongPress,
     this.longPressLabel,
+    this.longPressHaptic = Haptic.success,
+    this.actions,
   });
 
   final Widget child;
   final VoidCallback? onTap;
+
+  /// What a long press plays: success for a shortcut that just happened (repeat the last
+  /// expense), medium for a menu.
+  final Haptic longPressHaptic;
+
+  /// More screen-reader actions (Duplicate, Delete): what swiping or a menu offers, without either.
+  final Map<CustomSemanticsAction, VoidCallback>? actions;
 
   /// A shortcut, never the only way: screen readers get it as a named action ([longPressLabel]).
   final VoidCallback? onLongPress;
@@ -417,8 +426,14 @@ class _PressableState extends State<Pressable>
       checked: widget.checked,
       label: widget.semanticLabel,
       excludeSemantics: widget.excludeChildSemantics,
-      customSemanticsActions: long != null && widget.longPressLabel != null
-          ? {CustomSemanticsAction(label: widget.longPressLabel!): long}
+      customSemanticsActions:
+          (long != null && widget.longPressLabel != null) ||
+              widget.actions != null
+          ? {
+              if (long != null && widget.longPressLabel != null)
+                CustomSemanticsAction(label: widget.longPressLabel!): long,
+              ...?widget.actions,
+            }
           : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -429,7 +444,7 @@ class _PressableState extends State<Pressable>
             ? null
             : () {
                 _up();
-                haptic(Haptic.success);
+                haptic(widget.longPressHaptic);
                 long();
               },
         onTap: _enabled

@@ -120,7 +120,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       Center(
                         child: AnimatedBuilder(
                           animation: _coin,
-                          builder: (_, _) => Coin(size: 120, join: _coin.value),
+                          builder: (_, _) => Coin(size: 96, join: _coin.value),
                         ),
                       ),
                       const SizedBox(height: NNSpace.xl),
@@ -138,7 +138,22 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         textAlign: TextAlign.center,
                         style: NNType.callout.copyWith(color: p.text2),
                       ),
-                      const SizedBox(height: NNSpace.xxl),
+                      const SizedBox(height: NNSpace.xl),
+                      // What it does, in three short cards.
+                      for (final (i, c) in [
+                        (Icons.touch_app_rounded, s.welcome1T, s.welcome1B),
+                        (Icons.swap_horiz_rounded, s.welcome2T, s.welcome2B),
+                        (Icons.link_rounded, s.welcome3T, s.welcome3B),
+                      ].indexed) ...[
+                        if (i > 0) const SizedBox(height: NNSpace.xs),
+                        _Card(
+                          key: ValueKey('welcome-card-${i + 1}'),
+                          icon: c.$1,
+                          title: c.$2,
+                          body: c.$3,
+                        ),
+                      ],
+                      const SizedBox(height: NNSpace.xl),
                       AnimatedSize(
                         duration: reduceMotion(context)
                             ? Duration.zero
@@ -183,6 +198,54 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One thing NussNuss does: an icon, a short title and a line.
+class _Card extends StatelessWidget {
+  const _Card({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+  final IconData icon;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NNTheme.of(context).palette;
+    return MergeSemantics(
+      child: NNCard(
+        padding: const EdgeInsets.all(NNSpace.sm),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: p.accentSoft,
+                borderRadius: BorderRadius.circular(NNRadius.control),
+              ),
+              child: Icon(icon, color: p.onAccentSoft, size: 22),
+            ),
+            const SizedBox(width: NNSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: NNType.headline.copyWith(color: p.text)),
+                  const SizedBox(height: 2),
+                  Text(body, style: NNType.footnote.copyWith(color: p.text2)),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">نص نص</string>
+    <string name="widget_name">رصيدك</string>
+    <string name="widget_description">وضعك في كل مجموعاتك.</string>
+    <string name="widget_empty">حساباتك كلها مسوّاة</string>
+    <string name="shortcut_add">أضف مصروف</string>
+    <string name="shortcut_activity">النشاط</string>
 </resources>

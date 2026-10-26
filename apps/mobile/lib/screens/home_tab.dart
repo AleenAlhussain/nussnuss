@@ -6,9 +6,11 @@ import '../core/extras.dart';
 import '../core/types.dart';
 import '../data/api.dart';
 import '../data/models.dart';
+import '../data/native.dart';
 import '../data/session.dart';
 import '../design/coin.dart';
 import '../design/glass.dart';
+import '../design/menu.dart';
 import '../design/motion.dart';
 import '../design/page.dart';
 import '../design/theme.dart';
@@ -127,6 +129,7 @@ class _HomeTabState extends State<HomeTab> {
     final session = SessionScope.read(context);
     try {
       final o = await session.repo.overview();
+      unawaited(updateHomeWidget(o, session.s));
       if (!mounted) return;
       setState(() => _overview = o);
       session.unread.value = o.unread;
@@ -304,9 +307,11 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Future<void> _inviteNext(NextStep n) async {
+  Future<void> _inviteNext(NextStep n) => _invite(n.group.id);
+
+  Future<void> _invite(String groupId) async {
     try {
-      final g = await _detail(n.group.id);
+      final g = await _detail(groupId);
       if (mounted) await showShareSheet(context, g);
     } on ApiException catch (e) {
       if (mounted) {
@@ -446,8 +451,66 @@ class _HomeTabState extends State<HomeTab> {
         if (remember) _remember();
         _openGroup(g.id, origin: origin);
       },
+      onMenu: () => _groupMenu(g),
     ),
   );
+
+  /// Press and hold a group: Open, Add expense, Invite friends.
+  Future<void> _groupMenu(GroupSummary g) {
+    final s = context.s;
+    return showNNMenu(
+      context,
+      preview: Row(
+        children: [
+          CoverTile(cover: g.cover),
+          const SizedBox(width: NNSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  g.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: NNType.headline.copyWith(
+                    color: NNTheme.of(context).palette.text,
+                  ),
+                ),
+                Text(
+                  lastLine(g, s),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NNType.footnote.copyWith(
+                    color: NNTheme.of(context).palette.text2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      items: [
+        NNMenuItem(
+          id: 'open',
+          label: s.fill(s.bodyCanOpen, {'name': g.name}),
+          icon: Icons.open_in_full_rounded,
+          onTap: () => _openGroup(g.id),
+        ),
+        NNMenuItem(
+          id: 'add',
+          label: s.addExpense,
+          icon: Icons.add_rounded,
+          onTap: () => _openGroup(g.id, add: true),
+        ),
+        NNMenuItem(
+          id: 'invite',
+          label: s.inviteFriends,
+          icon: Icons.person_add_alt_1_rounded,
+          onTap: () => _invite(g.id),
+        ),
+      ],
+    );
+  }
 
   Widget _bellButton() {
     final s = context.s;
@@ -577,22 +640,21 @@ class _HomeTabState extends State<HomeTab> {
           SliverToBoxAdapter(child: SkeletonRows(label: s.loading))
         else if (groups != null && groups.isEmpty)
           SliverToBoxAdapter(
-            child: Column(
-              children: [
-                EmptyState(
-                  title: s.noGroupsTitle,
-                  body: s.noGroupsBody,
-                  art: const Coin(size: 88),
+            // The coin's halves drifted apart: nothing split yet. One line, one button.
+            child: EmptyState(
+              key: const ValueKey('home-empty'),
+              title: s.noGroupsTitle,
+              body: s.noGroupsBody,
+              art: const DriftedCoin(),
+              action: Builder(
+                builder: (ctx) => NNButton(
+                  key: const ValueKey('start-group'),
+                  label: s.startGroup,
+                  icon: Icons.add_rounded,
+                  expand: false,
+                  onTap: () => _startGroup(originOf(ctx)),
                 ),
-                Builder(
-                  builder: (ctx) => NNButton(
-                    key: const ValueKey('start-group'),
-                    label: s.startGroup,
-                    icon: Icons.add_rounded,
-                    onTap: () => _startGroup(originOf(ctx)),
-                  ),
-                ),
-              ],
+              ),
             ),
           )
         else if (groups != null && searching)
@@ -1118,11 +1180,16 @@ class _PeopleStrip extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final x in people)
+          for (var i = 0; i < people.length; i++) ...[
+            // Air between neighbours, so two amounts never read as one line.
+            if (i > 0) const SizedBox(width: NNSpace.xs),
             Builder(
-              builder: (ctx) =>
-                  _PersonChip(person: x, onTap: () => onOpen(x, originOf(ctx))),
+              builder: (ctx) => _PersonChip(
+                person: people[i],
+                onTap: () => onOpen(people[i], originOf(ctx)),
+              ),
             ),
+          ],
         ],
       ),
     );
@@ -1153,15 +1220,15 @@ class _PersonChip extends StatelessWidget {
         : s.fill(signed > 0 ? s.owesYouX : s.youOweX, {
             'amount': amountsLine(person.balances, s),
           });
-    final width = MediaQuery.textScalerOf(context).scale(72).clamp(72.0, 120.0);
     return Pressable(
       key: ValueKey('person-${person.key}'),
       onTap: onTap,
       semanticLabel: '${person.name}, $words',
       excludeChildSemantics: true,
       scale: 0.96,
+      // A fixed width, as on the web: names and amounts centred and cut to one line.
       child: SizedBox(
-        width: width,
+        width: 84,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: NNSpace.xxs),
           child: Column(
@@ -1177,20 +1244,20 @@ class _PersonChip extends StatelessWidget {
                 person.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: NNType.footnote.copyWith(
                   color: p.text,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  amount,
-                  style: NNType.caption.copyWith(
-                    color: signed > 0 ? p.success : p.text2,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+              FitLine(
+                amount,
+                key: ValueKey('person-amount-${person.key}'),
+                min: 11,
+                style: NNType.caption.copyWith(
+                  color: signed > 0 ? p.success : p.text2,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -1203,8 +1270,11 @@ class _PersonChip extends StatelessWidget {
 
 /// A group on Home: its cover, its name, what last happened, and where you stand in words.
 class _GroupRow extends StatelessWidget {
-  const _GroupRow({required this.g, required this.onTap});
+  const _GroupRow({required this.g, required this.onTap, this.onMenu});
   final GroupSummary g;
+
+  /// Press and hold: the group's menu.
+  final VoidCallback? onMenu;
 
   /// Gets the row's rectangle on screen, so the group can grow out of it.
   final ValueChanged<Rect?> onTap;
@@ -1220,6 +1290,11 @@ class _GroupRow extends StatelessWidget {
     return Pressable(
       key: ValueKey('group-${g.id}'),
       onTap: () => onTap(originOf(context)),
+      onLongPress: onMenu,
+      longPressLabel: onMenu == null
+          ? null
+          : s.fill(s.rowActions, {'title': g.name}),
+      longPressHaptic: Haptic.medium,
       semanticLabel: [g.name, line, '$label $amount'.trim()].join(', '),
       excludeChildSemantics: true,
       scale: 0.98,

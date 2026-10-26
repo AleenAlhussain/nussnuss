@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/extras.dart';
 import '../data/api.dart';
@@ -103,9 +104,16 @@ class _HaveCodeState extends State<_HaveCode> {
 
 /// Shows a code once, large and easy to copy, with what to do with it.
 class _CodeBody extends StatefulWidget {
-  const _CodeBody({required this.make, required this.explain});
+  const _CodeBody({
+    required this.make,
+    required this.explain,
+    this.passwords = false,
+  });
   final Future<({String code, DateTime? expiresAt})> Function() make;
   final String explain;
+
+  /// The recovery code: offer to keep it in the phone's passwords (iCloud Keychain, Google).
+  final bool passwords;
 
   @override
   State<_CodeBody> createState() => _CodeBodyState();
@@ -114,6 +122,39 @@ class _CodeBody extends StatefulWidget {
 class _CodeBodyState extends State<_CodeBody> {
   ({String code, DateTime? expiresAt})? _r;
   String? _error;
+
+  // Hidden fields the system's password manager can save: your name and the code.
+  final _user = TextEditingController();
+  final _pass = TextEditingController();
+  final _passFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _user.dispose();
+    _pass.dispose();
+    _passFocus.dispose();
+    super.dispose();
+  }
+
+  /// Hands the name and the code to the system as a login it can save. Only the system knows
+  /// whether it was saved, so the toast only says it was offered.
+  Future<void> _offerToPasswords(String code) async {
+    final session = SessionScope.read(context);
+    _user.text = session.me?.name ?? '';
+    _pass.text = code;
+    _passFocus.requestFocus();
+    await WidgetsBinding.instance.endOfFrame;
+    TextInput.finishAutofillContext(shouldSave: true);
+    _passFocus.unfocus();
+    haptic(Haptic.success);
+    if (mounted) {
+      showToast(
+        context,
+        session.s.passwordsOffered,
+        key: const ValueKey('passwords-toast'),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -190,6 +231,58 @@ class _CodeBodyState extends State<_CodeBody> {
                   showToast(context, s.codeCopied);
                 },
         ),
+        if (widget.passwords) ...[
+          const SizedBox(height: NNSpace.xs),
+          NNButton(
+            key: const ValueKey('save-passwords'),
+            label: s.saveToPasswords,
+            icon: Icons.key_rounded,
+            kind: ButtonKind.tinted,
+            onTap: r == null ? null : () => _offerToPasswords(r.code),
+          ),
+          // Not shown and not read out: only there for the password manager to pick up.
+          ExcludeSemantics(
+            child: AutofillGroup(
+              // Closing the sheet must not offer to save on its own.
+              onDisposeAction: AutofillContextAction.cancel,
+              child: SizedBox(
+                height: 1,
+                child: OverflowBox(
+                  minHeight: 0,
+                  maxHeight: 80,
+                  alignment: Alignment.topCenter,
+                  child: Opacity(
+                    opacity: 0,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('passwords-user'),
+                            controller: _user,
+                            autofillHints: const [AutofillHints.username],
+                            keyboardType: TextInputType.none,
+                            enableInteractiveSelection: false,
+                          ),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('passwords-code'),
+                            controller: _pass,
+                            focusNode: _passFocus,
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.password],
+                            keyboardType: TextInputType.none,
+                            enableInteractiveSelection: false,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -202,6 +295,7 @@ Future<void> showRecoveryCodeSheet(BuildContext context) {
     key: const ValueKey('recovery-sheet'),
     title: session.s.recoveryCode,
     builder: (_) => _CodeBody(
+      passwords: true,
       explain: session.s.recoveryShow,
       make: () async =>
           (code: await session.api.makeRecoveryCode(), expiresAt: null),

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon: add an expense (as Home's +) or open Activity. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="add"
+        android:shortcutLongLabel="@string/shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_add">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="nussnuss://add"
+            android:targetClass="app.nussnuss.nussnuss.MainActivity"
+            android:targetPackage="app.nussnuss.nussnuss" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="activity"
+        android:shortcutLongLabel="@string/shortcut_activity"
+        android:shortcutShortLabel="@string/shortcut_activity">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="nussnuss://activity"
+            android:targetClass="app.nussnuss.nussnuss.MainActivity"
+            android:targetPackage="app.nussnuss.nussnuss" />
+    </shortcut>
+</shortcuts>

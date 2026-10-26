@@ -324,11 +324,13 @@ class Api {
       GroupSummary.fromJson(_map(g)),
   ];
 
+  /// [cover] is 'icon:tone'; [emoji] is still sent for apps from before covers.
   Future<GroupDetail> createGroup({
     required String name,
     required String emoji,
     required String currency,
     required List<String> members,
+    String? cover,
   }) async => _detail(
     await _call(
       'POST',
@@ -336,6 +338,7 @@ class Api {
       body: {
         'name': name,
         'emoji': emoji,
+        'cover': ?cover,
         'currency': currency,
         'members': members,
       },
@@ -467,13 +470,14 @@ class Api {
     return (token: token, path: d['path'] as String? ?? '/j/$token');
   }
 
-  Future<({Map<String, dynamic> group, List<Member> members})> preview(
-    String token,
-  ) async {
+  /// What an invite link opens: the group, its names, and who sent the link (newer servers).
+  Future<({Map<String, dynamic> group, List<Member> members, Who? invitedBy})>
+  preview(String token) async {
     final d = _map(await _call('GET', '/invites/$token', auth: false));
     return (
       group: _map(d['group']),
       members: [for (final m in _list(d['members'])) Member.fromJson(m)],
+      invitedBy: Who.fromJson(d['invitedBy']),
     );
   }
 

@@ -1,11 +1,14 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nussnuss/app.dart';
 import 'package:nussnuss/core/identity.dart';
 import 'package:nussnuss/core/suggest.dart';
 import 'package:nussnuss/data/api.dart';
+import 'package:nussnuss/data/native.dart';
 import 'package:nussnuss/data/services.dart';
 import 'package:nussnuss/data/session.dart';
 import 'package:nussnuss/design/glass.dart';
@@ -26,6 +29,65 @@ class TestApp {
   final QuietDevice device;
 }
 
+/// A store with prices, as the App Store or Google Play would give them.
+class FakeStore implements Store {
+  final _purchases = StreamController<StorePurchase>.broadcast();
+  int restored = 0;
+
+  static const _all = [
+    StoreProduct(id: Products.plusYearly, price: 'AED 79.99'),
+    StoreProduct(id: Products.plusMonthly, price: 'AED 9.99'),
+    StoreProduct(id: Products.tripPass, price: 'AED 14.99'),
+    StoreProduct(id: Products.lookNight, price: 'AED 3.99'),
+    StoreProduct(id: Products.lookSaffron, price: 'AED 3.99'),
+  ];
+
+  @override
+  Future<List<StoreProduct>> products(Set<String> ids) async => [
+    for (final p in _all)
+      if (ids.contains(p.id)) p,
+  ];
+
+  @override
+  Future<void> buy(StoreProduct product, {required bool subscription}) async {}
+
+  @override
+  Future<void> restore() async => restored++;
+
+  @override
+  Stream<StorePurchase> get purchases => _purchases.stream;
+
+  @override
+  Future<void> finish(StorePurchase purchase) async {}
+}
+
+/// Records what the app sends to the home-screen widget and the Lock Screen, for this test.
+List<MethodCall> recordWidgetCalls(WidgetTester tester) {
+  const channel = MethodChannel('nussnuss/widget');
+  final calls = <MethodCall>[];
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(channel, (call) async {
+    calls.add(call);
+    return null;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  return calls;
+}
+
+/// Presses and holds [f] once it is on screen.
+Future<void> holdIt(WidgetTester tester, Finder f) async {
+  await bringIntoView(tester, f);
+  await tester.longPress(f);
+  await tester.pumpAndSettle();
+}
+
+/// Swipes the row [f] from the end toward the start (to the left in English).
+Future<void> swipeOpen(WidgetTester tester, Finder f) async {
+  await bringIntoView(tester, f);
+  await tester.drag(f, const Offset(-240, 0));
+  await tester.pumpAndSettle();
+}
+
 /// Starts the app. The launch intro is off unless [intro]; without [settle] it returns right after
 /// the first frame, for tests that step through time themselves.
 Future<TestApp> pumpApp(
@@ -34,6 +96,7 @@ Future<TestApp> pumpApp(
   FakeServer? server,
   bool intro = false,
   bool settle = true,
+  Store? purchases,
 }) async {
   tester.view.physicalSize = const Size(1170, 2532); // iPhone 15 at 3x
   tester.view.devicePixelRatio = 3;
@@ -47,6 +110,7 @@ Future<TestApp> pumpApp(
     api: Api(baseUrl: 'http://api.test', transport: fake.call),
     store: MemoryStore(store),
     device: device,
+    purchases: purchases,
   );
   launchIntroEnabled = intro;
   await tester.pumpWidget(NussNussApp(session: session));
@@ -59,6 +123,13 @@ Finder byKey(String k) => find.byKey(ValueKey(k));
 Future<void> tapKey(WidgetTester tester, String k) => tapIt(tester, byKey(k));
 
 Future<void> tapIt(WidgetTester tester, Finder f) async {
+  await bringIntoView(tester, f);
+  await tester.tap(f);
+  await tester.pumpAndSettle();
+}
+
+/// Builds [f], scrolls it on screen and checks nothing floats over it.
+Future<void> bringIntoView(WidgetTester tester, Finder f) async {
   await reveal(tester, f);
   await tester.ensureVisible(f);
   await tester.pumpAndSettle();
@@ -69,8 +140,6 @@ Future<void> tapIt(WidgetTester tester, Finder f) async {
     await tester.pumpAndSettle();
   }
   expect(_reachable(tester, f), isTrue, reason: 'nothing covers $f');
-  await tester.tap(f);
-  await tester.pumpAndSettle();
 }
 
 /// Whether a tap at the centre of [f] lands on it (not on a bar floating over it).
@@ -314,10 +383,12 @@ void main() {
     await startWithGroup(tester, friends: const ['Sara']);
     await tapKey(tester, 'add');
     await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-unequal');
     await tapKey(tester, 'seg-SplitChoice.items');
     expect(byKey('paywall'), findsOneWidget);
     await tapIt(tester, byKey('sheet-close').last);
-    // Still split equally: nothing changed without Plus.
+    // Still by shares: nothing changed without Plus.
+    expect(byKey('drag-shares'), findsOneWidget);
     expect(byKey('add-item'), findsNothing);
     await tapKey(tester, 'sheet-close');
     await leave(tester);
@@ -332,6 +403,7 @@ void main() {
     await tapKey(tester, 'add');
     await typeAmount(tester, '110');
     await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-unequal');
     await tapKey(tester, 'seg-SplitChoice.items');
     final g = app.server.groupNamed('Salalah trip');
     final sara = g.members[1]['id']! as String;
@@ -375,6 +447,7 @@ void main() {
     ].join('\n');
     await tapKey(tester, 'add');
     await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-unequal');
     await tapKey(tester, 'seg-SplitChoice.items');
     await tapKey(tester, 'scan-receipt');
     expect(byKey('scan-sheet'), findsOneWidget);
@@ -413,6 +486,7 @@ void main() {
     app.device.receiptText = 'a blurry photo';
     await tapKey(tester, 'add');
     await tapKey(tester, 'details');
+    await tapKey(tester, 'seg-unequal');
     await tapKey(tester, 'seg-SplitChoice.items');
     await tapKey(tester, 'scan-receipt');
     await tapKey(tester, 'scan-library');
@@ -499,22 +573,58 @@ void main() {
     await tapIt(tester, byKey('sheet-close').last);
     expect(find.text('Family circle'), findsOneWidget);
     expect(find.textContaining('You get the pot'), findsOneWidget);
+    // How much of this round is paid, as a ring on the card.
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is ProgressRing &&
+            (w.key as ValueKey<String>?)?.value.startsWith('circle-ring-') ==
+                true,
+      ),
+      findsOneWidget,
+    );
     await leave(tester);
     semantics.dispose();
   });
 
-  testWidgets('new group templates fill the name and emoji', (tester) async {
-    await pumpApp(tester);
+  testWidgets('new group templates fill the name and the cover', (
+    tester,
+  ) async {
+    final app = await pumpApp(tester);
     await tapKey(tester, 'start');
     await tester.enterText(byKey('name'), 'Huda');
     await tapKey(tester, 'start');
+    String name() =>
+        tester.widget<TextField>(byKey('group-name')).controller!.text;
     await tapKey(tester, 'tpl-iftar');
-    expect(find.text('Ramadan iftars'), findsOneWidget);
+    expect(name(), 'Ramadan iftars');
+    expect(byKey('new-cover-moon:violet'), findsOneWidget);
     await tapKey(tester, 'tpl-flat');
-    expect(find.text('Our flat'), findsOneWidget);
+    expect(name(), 'Our flat');
+    expect(byKey('new-cover-home:violet'), findsOneWidget);
+    // A typed name stays when another template is picked; the cover still follows it.
     await tester.enterText(byKey('group-name'), 'Villa 9');
     await tapKey(tester, 'tpl-office');
-    expect(find.text('Villa 9'), findsOneWidget);
+    expect(name(), 'Villa 9');
+    expect(byKey('new-cover-work:slate'), findsOneWidget);
+
+    // Or any of the covers by hand: an icon, then a tone. The preview shows the name.
+    await tapKey(tester, 'cover-music');
+    await tapKey(tester, 'cover-tone-mint');
+    expect(byKey('new-cover-music:mint'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: byKey('new-group-sheet'),
+        matching: find.text('Villa 9', findRichText: true),
+      ),
+      findsWidgets,
+    );
+    await tester.enterText(byKey('person-name'), 'Mona');
+    await tapKey(tester, 'add-person');
+    await tapKey(tester, 'create-group');
+    final g = app.server.groupNamed('Villa 9');
+    expect(g.cover, 'music:mint');
+    expect(g.emoji, '🎵');
     await leave(tester);
   });
 
@@ -1307,6 +1417,657 @@ void main() {
     expect(server.groupNamed('Salalah trip').recurring, hasLength(1));
     expect(byKey('no-repeating'), findsNothing);
     await tapIt(tester, byKey('sheet-close').last);
+    await leave(tester);
+  });
+
+  testWidgets('an expense row: swipe for Duplicate (with Undo) and Delete, '
+      'which are also screen-reader actions', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await addExpense(tester, '120', 'Chalet');
+    final g = app.server.groupNamed('Salalah trip');
+    final id = g.expenses.single['id']! as String;
+
+    // Nobody has to swipe: the row has the same actions for screen readers.
+    final actions = [
+      for (final a
+          in tester
+                  .getSemantics(byKey('expense-$id'))
+                  .getSemanticsData()
+                  .customSemanticsActionIds ??
+              const <int>[])
+        CustomSemanticsAction.getAction(a)!.label,
+    ];
+    expect(
+      actions,
+      containsAll(<String>['Duplicate', 'Change category', 'Delete']),
+    );
+
+    // Swiped toward the start, Duplicate and Delete show behind the row.
+    await swipeOpen(tester, byKey('expense-$id'));
+    expect(byKey('swipe-close'), findsOneWidget);
+    await tapKey(tester, 'swipe-duplicate');
+    expect(find.text('Duplicated'), findsOneWidget);
+    expect(g.expenses, hasLength(2));
+    expect(find.text('Chalet'), findsNWidgets(2));
+    expect(balance(tester), 'AED 160.00');
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(g.expenses, hasLength(1));
+    expect(find.text('Chalet'), findsOneWidget);
+    expect(balance(tester), 'AED 80.00');
+
+    // A tap on an open row closes it.
+    await swipeOpen(tester, byKey('expense-$id'));
+    await tester.tap(byKey('swipe-close'));
+    await tester.pumpAndSettle();
+    expect(byKey('swipe-close'), findsNothing);
+    expect(byKey('expense-sheet'), findsNothing);
+
+    await swipeOpen(tester, byKey('expense-$id'));
+    await tapKey(tester, 'swipe-delete');
+    expect(find.text('Expense deleted'), findsOneWidget);
+    expect(g.expenses, isEmpty);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(g.expenses, hasLength(1));
+    expect(find.text('Chalet'), findsOneWidget);
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('an expense row: hold it for the menu; the category changes from '
+      'the menu or the tile, and nothing else does', (tester) async {
+    final played = recordHaptics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await addExpense(tester, '120', 'Chalet');
+    final g = app.server.groupNamed('Salalah trip');
+    final id = g.expenses.single['id']! as String;
+
+    played.clear();
+    await holdIt(tester, byKey('expense-$id'));
+    expect(byKey('context-menu'), findsOneWidget);
+    expect(played, [Haptic.medium]);
+    expect(
+      find.descendant(of: byKey('menu-preview'), matching: find.text('Chalet')),
+      findsOneWidget,
+    );
+    for (final k in ['edit', 'duplicate', 'category', 'delete']) {
+      expect(byKey('menu-$k'), findsOneWidget);
+    }
+    await meetsStandards(tester);
+
+    await tapKey(tester, 'menu-category');
+    expect(byKey('context-menu'), findsNothing);
+    expect(byKey('category-sheet'), findsOneWidget);
+    await tapKey(tester, 'pick-cat-fun');
+    expect(find.text('Category changed'), findsOneWidget);
+    expect(g.expenses.single['category'], 'fun');
+    expect(g.expenses.single['amount'], 12000);
+    expect(g.expenses.single['title'], 'Chalet');
+    expect(byKey('cat-$id-fun'), findsOneWidget);
+
+    // The tile on the row opens the same choice.
+    await tapKey(tester, 'cat-tile-$id');
+    expect(byKey('category-sheet'), findsOneWidget);
+    await tapKey(tester, 'pick-cat-bills');
+    expect(g.expenses.single['category'], 'bills');
+    expect(g.expenses, hasLength(1));
+
+    // Duplicate from the menu, with Undo.
+    await holdIt(tester, byKey('expense-$id'));
+    await tapKey(tester, 'menu-duplicate');
+    expect(find.text('Duplicated'), findsOneWidget);
+    expect(g.expenses, hasLength(2));
+    expect(g.expenses.last['category'], 'bills');
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(g.expenses, hasLength(1));
+
+    // Edit opens the expense; tapping outside the menu does nothing.
+    await holdIt(tester, byKey('expense-$id'));
+    await tapKey(tester, 'menu-edit');
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await tapKey(tester, 'sheet-close');
+    await holdIt(tester, byKey('expense-$id'));
+    await tester.tapAt(const Offset(12, 120));
+    await tester.pumpAndSettle();
+    expect(byKey('context-menu'), findsNothing);
+    expect(g.expenses, hasLength(1));
+    await leave(tester);
+  });
+
+  testWidgets('split unequally: drag a share onto someone, or use − and +, '
+      'with a legend under the bar', (tester) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    final g = app.server.groupNamed('Salalah trip');
+    final me = g.members[0]['id']! as String;
+    final sara = g.members[1]['id']! as String;
+    await tapKey(tester, 'add');
+    await typeAmount(tester, '90');
+    await tester.enterText(byKey('title'), 'Dinner');
+    await tapKey(tester, 'details');
+    // Two choices first; the ways to split unevenly only after Unequally.
+    expect(byKey('split-mode'), findsNothing);
+    await tapKey(tester, 'seg-unequal');
+    expect(byKey('split-mode'), findsOneWidget);
+    expect(byKey('split-legend'), findsOneWidget);
+    expect(tester.widget<Text>(byKey('share-badge-$sara')).data, '×1');
+
+    final played = recordHaptics();
+    await bringIntoView(tester, byKey('share-token'));
+    await bringIntoView(tester, byKey('share-drop-$sara'));
+    final drag = await tester.startGesture(
+      tester.getCenter(byKey('share-token')),
+    );
+    await tester.pump();
+    await drag.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await drag.moveTo(tester.getCenter(byKey('share-drop-$sara')));
+    await tester.pump();
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(byKey('share-badge-$sara')).data, '×2');
+    expect(tester.widget<Text>(byKey('share-count-$sara')).data, '2');
+    expect(played, containsAllInOrder([Haptic.selection, Haptic.success]));
+
+    // The same with the buttons: one less for Sara, one more for me.
+    await tapKey(tester, 'less-share-$sara');
+    await tapKey(tester, 'less-share-$sara');
+    await tapKey(tester, 'more-share-$sara');
+    await tapKey(tester, 'more-share-$me');
+    expect(tester.widget<Text>(byKey('share-count-$me')).data, '2');
+    expect(tester.widget<Text>(byKey('share-count-$sara')).data, '1');
+    await tapKey(tester, 'save-expense');
+    // 90 in shares of 2 and 1: Sara's 30 is what she owes me.
+    expect(balance(tester), 'AED 30.00');
+    // uneven_split ran from choosing Unequally to Save.
+    expect([
+      for (final t in app.server.timings) t['job'],
+    ], contains('uneven_split'));
+    await leave(tester);
+  });
+
+  testWidgets('the invite sheet: what friends will see, a QR code, the short '
+      'link with Copy, and who has joined', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    final g = app.server.groupNamed('Salalah trip');
+    await tapKey(tester, 'share');
+    expect(byKey('share-sheet'), findsOneWidget);
+    Finder inPreview(String text) =>
+        find.descendant(of: byKey('invite-preview'), matching: find.text(text));
+    expect(inPreview('Salalah trip'), findsOneWidget);
+    expect(inPreview('2 people · AED'), findsOneWidget);
+    expect(byKey('invite-qr'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Scan to join, http.*/j/inv')),
+      findsOneWidget,
+    );
+    final link = tester.widget<Text>(byKey('invite-link')).data!;
+    expect(link, contains('/j/'));
+    expect(link, isNot(startsWith('http')));
+    for (final m in g.members) {
+      expect(byKey('invite-member-${m['id']}'), findsOneWidget);
+    }
+    expect(find.text('Joined'), findsOneWidget);
+    expect(find.text('Not joined yet'), findsOneWidget);
+    await meetsStandards(tester);
+
+    await tapKey(tester, 'copy-link');
+    expect(app.device.copied.last, endsWith(link));
+    await tester.pump(const Duration(seconds: 3));
+    await tapKey(tester, 'whatsapp');
+    expect(app.device.opened.last.host, 'wa.me');
+    expect(app.device.opened.last.queryParameters['text'], contains(link));
+    // invite ran from opening the sheet to the link going out.
+    expect([for (final t in app.server.timings) t['job']], contains('invite'));
+    await tapKey(tester, 'sheet-close');
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('the join screen: the cover, who invited you, and the names to '
+      'pick from', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final server = FakeServer();
+    final host = await pumpApp(tester, server: server);
+    await startWithGroup(tester);
+    final g = server.groupNamed('Salalah trip');
+    final token = await host.session.api.invite(g.id);
+    await leave(tester);
+
+    final guest = await pumpApp(tester, server: server);
+    guest.session.openInvite(token);
+    await tester.pumpAndSettle();
+    expect(byKey('join-screen'), findsOneWidget);
+    expect(tester.widget<Text>(byKey('join-title')).data, 'Join Salalah trip');
+    expect(
+      tester.widget<Text>(byKey('join-meta')).data,
+      'Talal invited you · 3 people · AED',
+    );
+    // Talal is in already, so his name says so and can't be picked.
+    final talal = g.members[0]['id']! as String;
+    final sara = g.members[1]['id']! as String;
+    expect(
+      find.descendant(
+        of: byKey('who-$talal'),
+        matching: find.text('Already joined'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.getSize(byKey('who-$sara')).height, greaterThanOrEqualTo(44));
+    expect(
+      find.descendant(
+        of: byKey('who-new'),
+        matching: find.text('I’m someone else'),
+      ),
+      findsOneWidget,
+    );
+    await meetsStandards(tester);
+    await tapKey(tester, 'who-$sara');
+    await tapKey(tester, 'join');
+    expect(byKey('group'), findsOneWidget);
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('empty states: the coin in two halves, one line and one button', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await pumpApp(tester);
+    await tapKey(tester, 'start');
+    await tester.enterText(byKey('name'), 'Huda');
+    await tapKey(tester, 'start');
+    // Not ready for a group yet: Home says how to start one.
+    await tapKey(tester, 'sheet-close');
+    expect(byKey('home-empty'), findsOneWidget);
+    expect(find.text('Start your first group'), findsOneWidget);
+    expect(
+      find.descendant(of: byKey('home-empty'), matching: byKey('drifted-coin')),
+      findsOneWidget,
+    );
+    await meetsStandards(tester);
+    await tapKey(tester, 'start-group');
+    expect(byKey('new-group-sheet'), findsOneWidget);
+    await tester.enterText(byKey('group-name'), 'Our flat');
+    await tester.enterText(byKey('person-name'), 'Mona');
+    await tapKey(tester, 'add-person');
+    await tapKey(tester, 'create-group');
+
+    // A new group: nothing spent yet, and the first expense is one tap away.
+    expect(byKey('group-empty'), findsOneWidget);
+    expect(find.text('Nothing spent yet'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: byKey('group-empty'),
+        matching: byKey('drifted-coin'),
+      ),
+      findsOneWidget,
+    );
+    await meetsStandards(tester);
+    await tapKey(tester, 'add-first');
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await tapKey(tester, 'sheet-close');
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('settle up: the swipe hint shows on the first visit only, and '
+      'screen readers always get it', (tester) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    await addExpense(tester, '50', 'Dinner');
+    await tapKey(tester, 'seg-_Tab.settle');
+    expect(byKey('swipe-hint'), findsOneWidget);
+    expect(
+      (app.session.store as MemoryStore).values['nn:swipeHintSeen'],
+      isNotNull,
+    );
+    Finder spoken() => find.byWidgetPredicate(
+      (w) =>
+          w is Semantics && w.properties.hint == 'Swipe right to mark as paid',
+    );
+    expect(spoken(), findsOneWidget);
+
+    // The next time the group opens, the words are gone; the screen reader's hint stays.
+    final g = app.server.groupNamed('Salalah trip');
+    await goBack(tester);
+    await tapKey(tester, 'group-${g.id}');
+    await tapKey(tester, 'seg-_Tab.settle');
+    expect(byKey('swipe-hint'), findsNothing);
+    expect(spoken(), findsOneWidget);
+    await leave(tester);
+
+    // A phone that has seen it before never shows it.
+    final again = await pumpApp(
+      tester,
+      store: {...(app.session.store as MemoryStore).values},
+      server: app.server,
+    );
+    expect(again.session.me, isNotNull);
+    await tapKey(tester, 'group-${g.id}');
+    await tapKey(tester, 'seg-_Tab.settle');
+    expect(byKey('swipe-hint'), findsNothing);
+    await leave(tester);
+  });
+
+  testWidgets('welcome: three cards say what NussNuss does, above the name', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    for (final (i, title) in [
+      (1, 'Add an expense in three taps'),
+      (2, 'Settle with fewer payments'),
+      (3, 'Friends join from a link'),
+    ]) {
+      expect(
+        find.descendant(
+          of: byKey('welcome-card-$i'),
+          matching: find.text(title),
+        ),
+        findsOneWidget,
+      );
+    }
+    await tapKey(tester, 'start');
+    expect(
+      tester.getRect(byKey('welcome-card-3')).bottom,
+      lessThan(tester.getRect(byKey('name')).top),
+    );
+    await leave(tester);
+  });
+
+  testWidgets('Plus: what it adds, the plans side by side with the store '
+      'price, Restore, and where billing happens', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final store = FakeStore();
+    final app = await pumpApp(tester, purchases: store);
+    await startWithGroup(tester);
+    await goBack(tester);
+    await tapKey(tester, 'tab-2');
+    await tapKey(tester, 'plan');
+    expect(byKey('paywall'), findsOneWidget);
+    expect(byKey('plus-free'), findsOneWidget);
+    for (final i in [1, 2, 3]) {
+      expect(byKey('plus-benefit-$i'), findsOneWidget);
+    }
+    expect(find.text('Bills that add themselves'), findsOneWidget);
+    expect(find.text('Split a receipt by item'), findsOneWidget);
+
+    // Yearly and monthly side by side, each with the store's price.
+    final yearly = tester.getRect(byKey('plan-${Products.plusYearly}'));
+    final monthly = tester.getRect(byKey('plan-${Products.plusMonthly}'));
+    expect(yearly.top, monthly.top);
+    expect(yearly.right, lessThan(monthly.left));
+    String price(String id) => tester
+        .widget<Text>(
+          find.descendant(of: byKey('plan-$id'), matching: byKey('plan-price')),
+        )
+        .data!;
+    expect(price(Products.plusYearly), startsWith('AED 79.99'));
+    expect(price(Products.plusMonthly), startsWith('AED 9.99'));
+    expect(byKey('store-soon'), findsNothing);
+    expect(tester.widget<NNButton>(byKey('buy')).label, 'Start Plus');
+    expect(tester.widget<NNButton>(byKey('buy')).onTap, isNotNull);
+    await bringIntoView(tester, byKey('billed-by'));
+    expect(byKey('paywall-privacy'), findsOneWidget);
+    await meetsStandards(tester);
+
+    await tapKey(tester, 'paywall-terms');
+    expect(app.device.opened.last.path, '/terms');
+    await tapKey(tester, 'restore');
+    expect(store.restored, 1);
+    await tapIt(tester, byKey('sheet-close').last);
+    await leave(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('the recovery code: Save to Passwords hands it to the password '
+      'manager and says so, without saying it was saved', (tester) async {
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    await tapKey(tester, 'tab-2');
+    await tapKey(tester, 'recovery');
+    final code = tester.widget<SelectableText>(byKey('shown-code')).data!;
+    tester.testTextInput.log.clear();
+    await tapKey(tester, 'save-passwords');
+    expect(
+      [
+        for (final c in tester.testTextInput.log)
+          if (c.method == 'TextInput.finishAutofillContext') c.arguments,
+      ],
+      [true],
+    );
+    // The name and the code are what the password manager is offered.
+    TextField field(String k) => tester.widget<TextField>(byKey(k));
+    expect(field('passwords-user').controller!.text, 'Talal');
+    expect(field('passwords-user').autofillHints, [AutofillHints.username]);
+    expect(field('passwords-code').controller!.text, code);
+    expect(field('passwords-code').autofillHints, [AutofillHints.password]);
+    expect(byKey('passwords-toast'), findsOneWidget);
+    expect(find.text('Saved to your passwords'), findsNothing);
+    await tapKey(tester, 'sheet-close');
+    await leave(tester);
+  });
+
+  testWidgets('group options: the cover and the name, changed together', (
+    tester,
+  ) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    final g = app.server.groupNamed('Salalah trip');
+    await tapKey(tester, 'more');
+    await tapKey(tester, 'cover-and-name');
+    expect(byKey('cover-sheet'), findsOneWidget);
+    expect(byKey('edit-cover-plane:sky'), findsOneWidget);
+    await tester.enterText(byKey('edit-group-name'), 'Salalah 2026');
+    await tapKey(tester, 'cover-beach');
+    await tapKey(tester, 'cover-tone-saffron');
+    expect(byKey('edit-cover-beach:saffron'), findsOneWidget);
+    await tapKey(tester, 'save-cover');
+    expect(byKey('cover-sheet'), findsNothing);
+    expect(g.name, 'Salalah 2026');
+    expect(g.cover, 'beach:saffron');
+    expect(app.server.calls, contains('PATCH /groups/${g.id}'));
+    expect(
+      find.descendant(
+        of: byKey('group-options'),
+        matching: find.text('Salalah 2026'),
+      ),
+      findsOneWidget,
+    );
+
+    // An empty name is not saved.
+    await tapKey(tester, 'cover-and-name');
+    await tester.enterText(byKey('edit-group-name'), '  ');
+    await tapKey(tester, 'save-cover');
+    expect(byKey('cover-sheet'), findsOneWidget);
+    expect(find.text('Give the group a name.'), findsOneWidget);
+    expect(g.name, 'Salalah 2026');
+    await tapIt(tester, byKey('sheet-close').last);
+    await tapIt(tester, byKey('sheet-close').last);
+    expect(find.text('Salalah 2026'), findsWidgets);
+    await leave(tester);
+  });
+
+  testWidgets('Home: hold a group for Open, Add expense and Invite friends', (
+    tester,
+  ) async {
+    final played = recordHaptics();
+    final app = await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    final g = app.server.groupNamed('Salalah trip');
+
+    played.clear();
+    await holdIt(tester, byKey('group-${g.id}'));
+    expect(byKey('context-menu'), findsOneWidget);
+    expect(played, [Haptic.medium]);
+    expect(
+      find.descendant(
+        of: byKey('menu-preview'),
+        matching: find.text('Salalah trip'),
+      ),
+      findsOneWidget,
+    );
+    await tapKey(tester, 'menu-add');
+    expect(byKey('group'), findsOneWidget);
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await tapKey(tester, 'sheet-close');
+    await goBack(tester);
+
+    await holdIt(tester, byKey('group-${g.id}'));
+    await tapKey(tester, 'menu-invite');
+    expect(byKey('share-sheet'), findsOneWidget);
+    await tapKey(tester, 'sheet-close');
+
+    await holdIt(tester, byKey('group-${g.id}'));
+    await tapKey(tester, 'menu-open');
+    expect(byKey('group'), findsOneWidget);
+    expect(byKey('expense-sheet'), findsNothing);
+    await leave(tester);
+  });
+
+  testWidgets('the group balance: who paid, as a bar with a legend', (
+    tester,
+  ) async {
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    final sara = app.server.groupNamed('Salalah trip').members[1]['id']!;
+    await addExpense(tester, '60', 'Fuel');
+    expect(byKey('who-paid'), findsNothing);
+    await tapKey(tester, 'add');
+    await typeAmount(tester, '40');
+    await tester.enterText(byKey('title'), 'Lunch');
+    await tapKey(tester, 'details');
+    await tapKey(tester, 'payer-$sara');
+    await tapKey(tester, 'save-expense');
+    expect(byKey('who-paid'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: byKey('who-paid'),
+        matching: find.text('You paid AED 60.00'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: byKey('who-paid'),
+        matching: find.text('Sara AED 40.00'),
+      ),
+      findsOneWidget,
+    );
+    await leave(tester);
+  });
+
+  testWidgets('the home-screen widget gets the balance after each overview', (
+    tester,
+  ) async {
+    final calls = recordWidgetCalls(tester);
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await addExpense(tester, '120', 'Chalet');
+    await goBack(tester);
+    final updates = [
+      for (final c in calls)
+        if (c.method == 'update') c.arguments,
+    ];
+    expect(updates, isNotEmpty);
+    expect(updates.last, {
+      'title': 'Your balance',
+      'amount': 'AED 80.00',
+      'sub': 'You get back',
+    });
+    // Nothing goes on the Lock Screen unless asked for.
+    expect(calls.where((c) => c.method == 'startTrip'), isEmpty);
+    await leave(tester);
+  });
+
+  testWidgets('iPhone: a trip on the Lock Screen, from a switch in group '
+      'options, follows the balance and goes once settled', (tester) async {
+    final calls = recordWidgetCalls(tester);
+    final app = await pumpApp(tester);
+    await startWithGroup(tester, friends: const ['Sara']);
+    final g = app.server.groupNamed('Salalah trip');
+    final store = (app.session.store as MemoryStore).values;
+    Finder toggle() => find.descendant(
+      of: byKey('live-activity'),
+      matching: find.byType(Switch),
+    );
+    // The last call about the trip (Home's widget update can come after it).
+    MethodCall trip() => calls.lastWhere((c) => c.method != 'update');
+
+    await tapKey(tester, 'more');
+    expect(tester.widget<Switch>(toggle()).value, isFalse);
+    await tapIt(tester, toggle());
+    expect(trip().method, 'startTrip');
+    expect(trip().arguments, {
+      'groupId': g.id,
+      'title': 'Salalah trip',
+      'amount': 'AED 0.00',
+      'sub': 'All settled',
+    });
+    expect(store['nn:liveTrips'], contains(g.id));
+    await tapIt(tester, byKey('sheet-close').last);
+
+    // The balance changes: the trip follows.
+    await addExpense(tester, '50', 'Dinner');
+    final update = calls.lastWhere((c) => c.method == 'updateTrip');
+    expect(update.arguments, {
+      'groupId': g.id,
+      'title': 'Salalah trip',
+      'amount': 'AED 25.00',
+      'sub': 'You get back',
+    });
+
+    // Settled: it goes, and the switch is off.
+    await tapKey(tester, 'seg-_Tab.settle');
+    await tapIt(tester, byKey('mark-paid').first);
+    expect(trip().method, 'endTrip');
+    expect(trip().arguments, {'groupId': g.id});
+    expect(store['nn:liveTrips'], isNot(contains(g.id)));
+    await tapKey(tester, 'more');
+    expect(tester.widget<Switch>(toggle()).value, isFalse);
+    await tapIt(tester, byKey('sheet-close').last);
+    await leave(tester);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  testWidgets('Android: no Lock Screen switch', (tester) async {
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await tapKey(tester, 'more');
+    expect(byKey('group-options'), findsOneWidget);
+    expect(byKey('live-activity'), findsNothing);
+    await tapIt(tester, byKey('sheet-close').last);
+    await leave(tester);
+  });
+
+  testWidgets('app icon shortcuts: Add expense is the +, Activity opens its '
+      'tab', (tester) async {
+    await pumpApp(tester);
+    await startWithGroup(tester);
+    await goBack(tester);
+    shortcutAction.value = 'activity';
+    await tester.pumpAndSettle();
+    expect(byKey('activity'), findsOneWidget);
+    expect(shortcutAction.value, isNull);
+
+    shortcutAction.value = 'add';
+    await tester.pumpAndSettle();
+    expect(byKey('group'), findsOneWidget);
+    expect(byKey('expense-sheet'), findsOneWidget);
+    await tapKey(tester, 'sheet-close');
+
+    // The same from a link (Android's shortcuts open nussnuss://activity).
+    await tester.binding.handlePushRoute('nussnuss://activity');
+    await tester.pumpAndSettle();
+    expect(byKey('activity'), findsOneWidget);
     await leave(tester);
   });
 

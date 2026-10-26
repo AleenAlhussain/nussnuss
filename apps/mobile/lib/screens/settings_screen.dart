@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../data/api.dart';
 import '../data/models.dart';
+import '../data/native.dart';
 import '../data/services.dart';
 import '../data/session.dart';
 import '../design/glass.dart';
@@ -55,13 +57,15 @@ class _YouScreenState extends State<YouScreen> {
   }
 
   Future<void> _loadOverview() async {
-    final repo = SessionScope.read(context).repo;
+    final session = SessionScope.read(context);
+    final repo = session.repo;
     if (_overview == null) {
       final cached = await repo.cachedOverview();
       if (mounted && cached != null) setState(() => _overview ??= cached);
     }
     try {
       final o = await repo.overview();
+      unawaited(updateHomeWidget(o, session.s));
       if (mounted) setState(() => _overview = o);
     } on ApiException {
       // The copy on this device (if any) stays.
