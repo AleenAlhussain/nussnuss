@@ -1995,7 +1995,8 @@ void main() {
     final app = await pumpApp(tester);
     await startWithGroup(tester, friends: const ['Sara']);
     final g = app.server.groupNamed('Salalah trip');
-    final store = (app.session.store as MemoryStore).values;
+    // A fresh read each time: `values` is a copy taken when it is called.
+    Map<String, String> store() => (app.session.store as MemoryStore).values;
     Finder toggle() => find.descendant(
       of: byKey('live-activity'),
       matching: find.byType(Switch),
@@ -2013,7 +2014,7 @@ void main() {
       'amount': 'AED 0.00',
       'sub': 'All settled',
     });
-    expect(store['nn:liveTrips'], contains(g.id));
+    expect(store()['nn:liveTrips'], contains(g.id));
     await tapIt(tester, byKey('sheet-close').last);
 
     // The balance changes: the trip follows.
@@ -2031,7 +2032,7 @@ void main() {
     await tapIt(tester, byKey('mark-paid').first);
     expect(trip().method, 'endTrip');
     expect(trip().arguments, {'groupId': g.id});
-    expect(store['nn:liveTrips'], isNot(contains(g.id)));
+    expect(store()['nn:liveTrips'], isNot(contains(g.id)));
     await tapKey(tester, 'more');
     expect(tester.widget<Switch>(toggle()).value, isFalse);
     await tapIt(tester, byKey('sheet-close').last);
