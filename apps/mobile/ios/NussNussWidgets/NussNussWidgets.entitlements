@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Shared with the app, which writes the balance the widget shows. Needs the App Group on both
+	     App IDs (app.nussnuss.nussnuss and app.nussnuss.nussnuss.widgets) before a signed build. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.nussnuss.shared</string>
+	</array>
+</dict>
+</plist>

@@ -14,6 +14,8 @@ Everything below is built and tested but stays switched off until the owner adds
 | Invite links open the app | – | `APPLE_APP_ID` (team id.bundle id), `ANDROID_CERT_SHA256` (Play app signing certificate), `APP_LINK_HOST` (domain, for the Android and iOS builds) | Server `.env`, CI env |
 | Push for reminders | A Firebase project (Android) and an APNs key (iPhone) | `FCM_SERVICE_ACCOUNT`, `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC` | Server `.env` (the apps still need Firebase Messaging added; until then reminders arrive in the in-app inbox) |
 | Crash reports | – | `CRASH_REPORTS=log` | Server `.env` |
+| Task timings (usability measures) | – | `TIMINGS=log`, then `node scripts/timings-report.mjs < api.log` | Server `.env` |
+| iPhone widget and trip Live Activity | The App Group `group.app.nussnuss.shared` on both App IDs (`app.nussnuss.nussnuss` and `app.nussnuss.nussnuss.widgets`), and a provisioning profile for the widget extension | Nothing else: the `NussNussWidgets` extension is in the Xcode project and builds in the `ios` job | Apple Developer › Identifiers |
 | Payment partner | A licensed partner and an agreement | See `docs/payments-partner.md` | – |
 
 Never set `ALLOW_DEV_PURCHASES=true` or build with `NEXT_PUBLIC_DEV_PURCHASES=true` / `DEV_PURCHASES=true` for anything real people use: they unlock Plus without paying.

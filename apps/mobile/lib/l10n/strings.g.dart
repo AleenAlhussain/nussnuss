@@ -485,6 +485,10 @@ class NNStrings {
   String get saveToPasswords => _m['saveToPasswords']!;
   String get savedToPasswords => _m['savedToPasswords']!;
   String get passwordsOffered => _m['passwordsOffered']!;
+  String get liveActivity => _m['liveActivity']!;
+  String get liveActivityHint => _m['liveActivityHint']!;
+  String get widgetName => _m['widgetName']!;
+  String get widgetDescription => _m['widgetDescription']!;
   String get categoryFor => _m['categoryFor']!;
   String get waitingHome => _m['waitingHome']!;
   String get bodyCanOpen => _m['bodyCanOpen']!;
@@ -959,6 +963,10 @@ const _en = <String, String>{
   'saveToPasswords': 'Save to Passwords',
   'savedToPasswords': 'Saved to your passwords',
   'passwordsOffered': 'Your browser offered to save it. Tap Save there.',
+  'liveActivity': 'Show on the Lock Screen',
+  'liveActivityHint': 'Your balance in this group on the Lock Screen and in the Dynamic Island while the trip is on.',
+  'widgetName': 'Your balance',
+  'widgetDescription': 'Where you stand across all your groups.',
   'categoryFor': 'Category for {title}',
   'waitingHome': '{n} waiting to sync. They’ll go up when you’re online.',
   'bodyCanOpen': 'Open {name}',
@@ -1433,6 +1441,10 @@ const _ar = <String, String>{
   'saveToPasswords': 'احفظ في كلمات المرور',
   'savedToPasswords': 'انحفظ في كلمات المرور',
   'passwordsOffered': 'عرض المتصفح حفظه. اضغط حفظ هناك.',
+  'liveActivity': 'اعرضها على شاشة القفل',
+  'liveActivityHint': 'رصيدك في هذه المجموعة على شاشة القفل وفي الجزيرة الديناميكية طول الرحلة.',
+  'widgetName': 'رصيدك',
+  'widgetDescription': 'وضعك في كل مجموعاتك.',
   'categoryFor': 'تصنيف {title}',
   'waitingHome': '{n} بانتظار المزامنة. بتنرفع لما ترجع متصل.',
   'bodyCanOpen': 'افتح {name}',

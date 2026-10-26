@@ -9,5 +9,11 @@
 	<array>
 		<string>applinks:$(APP_LINK_HOST)</string>
 	</array>
+	<!-- Shared with the home-screen widget and the trip Live Activity (NussNussWidgets), which read the
+	     balance the app writes. Needs the App Group on the App ID before a signed build. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.nussnuss.shared</string>
+	</array>
 </dict>
 </plist>
